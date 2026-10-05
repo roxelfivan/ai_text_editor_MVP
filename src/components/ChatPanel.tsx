@@ -170,9 +170,6 @@ export function ChatPanel() {
           signal: abortRef.current.signal,
           onDelta: (delta) => {
             acc += delta;
-            // #region agent log
-            fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'65ca51'},body:JSON.stringify({sessionId:'65ca51',location:'ChatPanel.tsx:handleSend.onDelta',message:'delta',data:{accLen:acc.length,deltaLen:delta.length,tail:acc.slice(-160),openFences:(acc.match(/```/g)||[]).length,lastIsOpenFence:/```[^\n]*\n[\s\S]*$/.test(acc)&&!/```\s*$/.test(acc)},runId:'initial',hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
             updateLastAssistant(currentDocumentId, acc);
           },
         }

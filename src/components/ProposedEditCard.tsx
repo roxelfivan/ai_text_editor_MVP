@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useStore } from '@/store/useStore';
 import type { ProposedEdit } from '@/types';
 import { lineDiff, splitDiff } from '@/utils/diff';
-import { applyEdit } from '@/utils/proposedEdit';
+import { applyEdit, applyEditAtCaret, findEditAnchor } from '@/utils/proposedEdit';
 import { ResizeHandle } from '@/components/ResizeHandle';
 import {
   useDragResize,
@@ -76,6 +76,11 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
   const sizeKey = `${messageId}:${edit.id}`;
   const storedSize = useStore((s) => s.layout.previewSizes[sizeKey]);
   const setPreviewSize = useStore((s) => s.setPreviewSize);
+  // Editor focus + caret state for the doc this card is anchored against.
+  // Used to decide whether Force-apply can run (requires focus + a known
+  // caret). Subscribing to a per-doc record keeps re-renders scoped to
+  // the doc in question, not every keystroke in any doc.
+  const editorState = useStore((s) => s.editorFocus[docId]);
 
   const [status, setStatus] = useState<CardStatus>({ kind: 'idle' });
   // When the parent marks this card as committed (the user clicked "Send
@@ -104,22 +109,36 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
     storedSize ?? { w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT }
   );
 
-  // Anchor lookup + multiple-match detection.
+  // Anchor lookup + multiple-match detection. We use a shared helper that
+  // also drives `applyEdit` so the disabled-state and Apply click are
+  // always looking for the same span.
   const anchorInfo = useMemo(() => {
     if (!content) return { found: false, idx: -1, multiple: false };
-    const idx = content.indexOf(edit.original);
-    if (idx === -1) return { found: false, idx: -1, multiple: false };
-    const next = content.indexOf(edit.original, idx + 1);
-    return { found: true, idx, multiple: next !== -1 };
+    const anchor = findEditAnchor(content, edit.original);
+    if (!anchor) return { found: false, idx: -1, multiple: false };
+
+    // To detect multiple matches cheaply, run the same lookup starting
+    // one character past the first hit and see if anything else surfaces.
+    const second = findEditAnchor(
+      content.slice(anchor.idx + anchor.length),
+      edit.original
+    );
+    return {
+      found: true,
+      idx: anchor.idx,
+      multiple: second !== null,
+    };
   }, [content, edit.original]);
 
   // Diff lines between anchor and replacement, for the preview. Context
   // lines are kept so the split view can render surrounding text on both
-  // sides; the unified view still hides them.
-  const flatDiff = useMemo(() => {
-    if (!anchorInfo.found) return [];
-    return lineDiff(edit.original, edit.replacement);
-  }, [anchorInfo.found, edit.original, edit.replacement]);
+  // sides; the unified view still hides them. We always compute the diff
+  // (even when the anchor is missing) so the card can still render the
+  // AI's original vs replacement as a standalone red/green comparison.
+  const flatDiff = useMemo(
+    () => lineDiff(edit.original, edit.replacement),
+    [edit.original, edit.replacement]
+  );
   const unifiedLines = useMemo(
     () => flatDiff.filter((l) => l.kind !== 'context'),
     [flatDiff]
@@ -175,6 +194,29 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
     setStatus({ kind: 'applied' });
   };
 
+  // Force-apply: drop the AI's `replacement` at the user's caret, or
+  // replace the user's selection if a range is selected. Used when the
+  // AI's `original` quote can't be matched in the current document.
+  // The user is responsible for choosing the location.
+  const handleForceApply = () => {
+    if (!doc) return;
+    if (!editorState?.focused) return;
+    // Bail if the user has switched documents since this card mounted.
+    const liveDocId = useStore.getState().currentDocumentId;
+    if (liveDocId !== docId) return;
+    const r = applyEditAtCaret(
+      doc.content,
+      edit.replacement,
+      {
+        selectionStart: editorState.selectionStart,
+        selectionEnd: editorState.selectionEnd,
+      }
+    );
+    if (!r.ok) return;
+    useStore.getState().updateDocumentContent(doc.id, r.next);
+    setStatus({ kind: 'applied' });
+  };
+
   const handleReject = () => {
     // Plain Reject — hide right now, no chat message.
     setStatus({ kind: 'rejected' });
@@ -202,6 +244,22 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
   };
 
   const disabled = !anchorInfo.found || status.kind === 'applied';
+
+  // Force-apply is the only path that can succeed when the AI quote is
+  // not anchored in the document. It is gated on:
+  //   1. The anchor missing (otherwise normal Apply should be used).
+  //   2. The editor for this doc currently having focus.
+  //   3. A known caret position (selectionStart >= 0).
+  //   4. The card not already applied.
+  // The doc-switch guard is checked inside `handleForceApply` (it reads
+  // `currentDocumentId` from the store at click time) so we don't have
+  // to subscribe here.
+  const canForceApply =
+    !anchorInfo.found &&
+    status.kind !== 'applied' &&
+    editorState?.focused === true &&
+    typeof editorState.selectionStart === 'number' &&
+    editorState.selectionStart >= 0;
 
   const size = storedSize ?? { w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT };
   const isSized = !!storedSize;
@@ -261,11 +319,24 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
       </div>
 
       <div className="pe-diff flex-1 min-h-0">
-        {!anchorInfo.found ? (
-          <div className="text-xs text-gray-500 dark:text-gray-400 italic">
-            (original text not present in current document)
+        {!anchorInfo.found && (
+          <div
+            className="mb-2 py-1.5 px-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-[11px] leading-snug text-amber-800 dark:text-amber-200"
+            role="status"
+          >
+            <div className="font-semibold mb-0.5">
+              Potential mismatch detected
+            </div>
+            <div>
+              The AI&rsquo;s original quote doesn&rsquo;t appear in the
+              current document &mdash; it may have been edited since this
+              reply was generated, or the AI quoted a different wording.
+              Normal Apply is unavailable; click in the editor, then use
+              <span className="font-semibold"> Force-apply</span>.
+            </div>
           </div>
-        ) : flatDiff.length === 0 || (viewMode === 'unified' && unifiedLines.length === 0) ? (
+        )}
+        {flatDiff.length === 0 || (viewMode === 'unified' && unifiedLines.length === 0) ? (
           <div className="text-xs text-gray-500 dark:text-gray-400 italic">
             (no textual change)
           </div>
@@ -290,6 +361,11 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
                 {line.text || ' '}
               </div>
             ))}
+          </div>
+        )}
+        {!anchorInfo.found && (
+          <div className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 italic">
+            Not anchored to current text &mdash; applying uses Force-apply.
           </div>
         )}
       </div>
@@ -318,6 +394,19 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
           }
         >
           Apply
+        </button>
+        <button
+          type="button"
+          className="text-xs px-2 py-1 rounded border border-amber-500 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={handleForceApply}
+          disabled={!canForceApply}
+          title={
+            canForceApply
+              ? 'Insert the proposed text at your caret (or replace your selection)'
+              : 'Click in the document to enable Force-apply'
+          }
+        >
+          Force-apply&hellip;
         </button>
       </div>
 
@@ -374,11 +463,17 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
       {status.kind === 'applied' && (
         <div className="pe-status applied">Applied to document.</div>
       )}
-      {!anchorInfo.found && (
-        <div className="pe-status error">
-          The original text was not found in the current document. It may have
-          been edited since this reply was generated.
-        </div>
+      {!anchorInfo.found && edit.original && (
+        <details className="pe-status text-[11px] opacity-90 mt-1">
+          <summary className="cursor-pointer select-none">
+            Show what the AI was looking for
+          </summary>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-black/10 p-2 text-[11px] leading-snug dark:bg-white/10">
+            {edit.original.length > 800
+              ? edit.original.slice(0, 800) + '\n…(truncated)'
+              : edit.original}
+          </pre>
+        </details>
       )}
 
       {/* 8 resize handles */}

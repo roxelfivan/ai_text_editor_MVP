@@ -62,6 +62,17 @@ function makeDoc(title: string, content = ''): DocumentRecord {
   return { id: uuid(), title, content, createdAt: now, updatedAt: now };
 }
 
+export interface EditorFocusState {
+  /** Whether the editor textarea currently has focus for this doc. */
+  focused: boolean;
+  /**
+   * Current textarea caret / selection range for this doc. Both fields
+   * are -1 until the user has clicked/typed in the editor at least once.
+   */
+  selectionStart: number;
+  selectionEnd: number;
+}
+
 export interface StoreState {
   // Documents
   documents: DocumentRecord[];
@@ -106,6 +117,13 @@ export interface StoreState {
     previewSizes: Record<string, { w: number; h: number }>;
   };
 
+  /**
+   * Per-document editor focus + caret state. Updated by `Editor.tsx` on
+   * focus / blur / select / keyup so the ProposedEditCard can decide
+   * whether the Force-apply path is available. Not persisted.
+   */
+  editorFocus: Record<string, EditorFocusState>;
+
   // Actions
   createDocument: (title?: string) => string;
   renameDocument: (id: string, title: string) => void;
@@ -141,6 +159,10 @@ export interface StoreState {
   setPreviewSize: (
     key: string,
     patch: Partial<{ w: number; h: number }>
+  ) => void;
+  setEditorFocus: (
+    documentId: string,
+    info: { focused: boolean; selectionStart: number; selectionEnd: number }
   ) => void;
 }
 
@@ -193,6 +215,7 @@ export const useStore = create<StoreState>()(
         chatWidth: 384,
         previewSizes: {},
       },
+      editorFocus: {},
 
       createDocument: (title) => {
         const doc = makeDoc(title?.trim() || 'Untitled');
@@ -336,6 +359,17 @@ export const useStore = create<StoreState>()(
             previewSizes: {
               ...s.layout.previewSizes,
               [key]: { ...s.layout.previewSizes[key], ...patch },
+            },
+          },
+        })),
+      setEditorFocus: (documentId, info) =>
+        set((s) => ({
+          editorFocus: {
+            ...s.editorFocus,
+            [documentId]: {
+              focused: info.focused,
+              selectionStart: info.selectionStart,
+              selectionEnd: info.selectionEnd,
             },
           },
         })),

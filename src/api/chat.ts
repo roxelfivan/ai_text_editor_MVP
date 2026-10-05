@@ -157,8 +157,15 @@ export function buildRequestMessages(
         `}\n` +
         '```\n\n' +
         `Rules:\n` +
-        `- The "original" value must appear verbatim in the document, ` +
-        `including whitespace and newlines.\n` +
+        `- The "original" value MUST be a byte-for-byte copy of a substring ` +
+        `in the document above, including every space, newline, dash, and ` +
+        `punctuation mark. If the document says "Section 1. Background", ` +
+        `the original must start with exactly that text, not a paraphrase. ` +
+        `If you cannot find an exact substring, do not emit a ` +
+        `proposed-edit block for that change.\n` +
+        `- Before emitting each fence, locate the target text in the ` +
+        `document and copy the exact characters between two known anchors. ` +
+        `Treat the document as authoritative — do not invent or reformat.\n` +
         `- Multiple changes in a single reply are allowed; emit one fence ` +
         `per change.\n` +
         `- Keep "original" as short as possible while still uniquely ` +

@@ -14,6 +14,7 @@ export function Editor() {
   const setViewMode = useStore((s) => s.setViewMode);
   const updateContent = useStore((s) => s.updateDocumentContent);
   const saveRevision = useStore((s) => s.saveRevision);
+  const setEditorFocus = useStore((s) => s.setEditorFocus);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
@@ -39,6 +40,43 @@ export function Editor() {
     window.addEventListener('mvp:get-selection', handler);
     return () => window.removeEventListener('mvp:get-selection', handler);
   }, []);
+
+  // When the document changes (or the editor unmounts), report blur for
+  // the previous doc so cards don't think Force-apply is still enabled
+  // when the user has switched documents.
+  useEffect(() => {
+    const prevDocId = doc?.id;
+    return () => {
+      if (prevDocId) {
+        setEditorFocus(prevDocId, {
+          focused: false,
+          selectionStart: -1,
+          selectionEnd: -1,
+        });
+      }
+    };
+  }, [doc?.id, setEditorFocus]);
+
+  // Push focus + caret state to the store whenever the textarea fires
+  // any of the relevant DOM events. Cards subscribe to `editorFocus` and
+  // re-render with the latest values.
+  const reportCaret = (focused: boolean) => {
+    if (!doc) return;
+    const ta = textareaRef.current;
+    if (!ta) {
+      setEditorFocus(doc.id, {
+        focused,
+        selectionStart: -1,
+        selectionEnd: -1,
+      });
+      return;
+    }
+    setEditorFocus(doc.id, {
+      focused,
+      selectionStart: ta.selectionStart ?? -1,
+      selectionEnd: ta.selectionEnd ?? -1,
+    });
+  };
 
   if (!doc) {
     return (
@@ -96,6 +134,11 @@ export function Editor() {
             ref={textareaRef}
             value={doc.content}
             onChange={(e) => updateContent(doc.id, e.target.value)}
+            onFocus={() => reportCaret(true)}
+            onBlur={() => reportCaret(false)}
+            onSelect={() => reportCaret(true)}
+            onKeyUp={() => reportCaret(true)}
+            onClick={() => reportCaret(true)}
             className={`flex-1 p-4 outline-none resize-none font-mono text-sm bg-white dark:bg-gray-950 ${
               showPreview ? 'border-r border-gray-200 dark:border-gray-800' : ''
             }`}
