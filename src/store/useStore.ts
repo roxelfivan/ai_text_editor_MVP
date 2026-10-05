@@ -82,6 +82,16 @@ export interface StoreState {
   // Whether the chat panel is open.
   chatOpen: boolean;
 
+  // Whether the sidebar is collapsed (hidden but still toggleable via anchor).
+  sidebarCollapsed: boolean;
+
+  // Whether the chat panel is collapsed (hidden but still toggleable via anchor).
+  // chatCollapsed is a separate flag from chatOpen so we can keep the
+  // "floating reopen" behaviour distinct from the deliberate "I want to
+  // hide this for the rest of the session" collapse. By default we treat
+  // chatOpen === !chatCollapsed, but the user can collapse while open.
+  chatCollapsed: boolean;
+
   // Whether to include the current selection with each chat message.
   includeSelection: boolean;
 
@@ -117,6 +127,8 @@ export interface StoreState {
 
   setViewMode: (mode: StoreState['viewMode']) => void;
   setChatOpen: (open: boolean) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  setChatCollapsed: (collapsed: boolean) => void;
   setIncludeSelection: (v: boolean) => void;
   toggleTheme: () => void;
   setApi: (patch: Partial<ApiConfig>) => void;
@@ -171,6 +183,8 @@ export const useStore = create<StoreState>()(
       prompts: seedPrompts,
       viewMode: 'split',
       chatOpen: true,
+      sidebarCollapsed: false,
+      chatCollapsed: false,
       includeSelection: true,
       theme: 'light',
       api: defaultApiConfig,
@@ -301,6 +315,8 @@ export const useStore = create<StoreState>()(
 
       setViewMode: (viewMode) => set({ viewMode }),
       setChatOpen: (chatOpen) => set({ chatOpen }),
+      setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      setChatCollapsed: (chatCollapsed) => set({ chatCollapsed }),
       setIncludeSelection: (includeSelection) => set({ includeSelection }),
       toggleTheme: () =>
         set((s) => {
@@ -335,6 +351,8 @@ export const useStore = create<StoreState>()(
         prompts: s.prompts,
         viewMode: s.viewMode,
         chatOpen: s.chatOpen,
+        sidebarCollapsed: s.sidebarCollapsed,
+        chatCollapsed: s.chatCollapsed,
         includeSelection: s.includeSelection,
         theme: s.theme,
         api: s.api,

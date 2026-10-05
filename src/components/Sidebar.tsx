@@ -16,16 +16,20 @@ const useSidebarWidth = () => {
 };
 
 export function Sidebar() {
+  // IMPORTANT: all hooks (useState, useRef, useDragResize, useStore
+  // selectors) must be called before any conditional return so React's
+  // Rules of Hooks are satisfied on every render. The early-return
+  // below intentionally lives AFTER every hook.
   const documents = useStore((s) => s.documents);
   const currentId = useStore((s) => s.currentDocumentId);
   const createDocument = useStore((s) => s.createDocument);
   const renameDocument = useStore((s) => s.renameDocument);
   const deleteDocument = useStore((s) => s.deleteDocument);
   const setCurrentDocument = useStore((s) => s.setCurrentDocument);
+  const sidebarCollapsed = useStore((s) => s.sidebarCollapsed);
   const width = useSidebarWidth();
   const setLayout = useStore((s) => s.setLayout);
   const containerRef = useRef<HTMLDivElement>(null);
-
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
 
@@ -41,6 +45,12 @@ export function Sidebar() {
       setLayout({ sidebarWidth: next });
     },
   });
+
+  // When the sidebar is collapsed, render nothing so the editor and
+  // chat panels can take the full width. The edge-anchor toggle (rendered
+  // by App.tsx) is responsible for bringing it back. This return is
+  // intentionally AFTER every hook above.
+  if (sidebarCollapsed) return null;
 
   return (
     <div ref={containerRef} className="relative shrink-0" style={{ width }}>

@@ -27,6 +27,7 @@ const useChatWidth = () => {
 export function ChatPanel() {
   const chatOpen = useStore((s) => s.chatOpen);
   const setChatOpen = useStore((s) => s.setChatOpen);
+  const chatCollapsed = useStore((s) => s.chatCollapsed);
   const currentDocumentId = useStore((s) => s.currentDocumentId);
   const chats = useStore((s) => s.chats);
   const appendMessage = useStore((s) => s.appendMessage);
@@ -121,16 +122,13 @@ export function ChatPanel() {
     },
   });
 
-  if (!chatOpen) {
-    return (
-      <button
-        className="absolute right-3 top-3 z-10 text-xs px-2 py-1 rounded bg-blue-600 text-white shadow"
-        onClick={() => setChatOpen(true)}
-        title="Open chat"
-      >
-        Chat
-      </button>
-    );
+  if (!chatOpen || chatCollapsed) {
+    // When the panel is closed (topbar Chat toggle) or explicitly
+    // collapsed (edge-anchor), render nothing. The edge-anchor button
+    // rendered by App.tsx is responsible for bringing it back. We
+    // deliberately do not render the old top-right "Chat" floating
+    // button — it would clash with the edge-anchor strip.
+    return null;
   }
 
   const handleSend = async () => {

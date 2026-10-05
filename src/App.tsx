@@ -6,6 +6,7 @@ import { ChatPanel } from '@/components/ChatPanel';
 import { PromptLibrary } from '@/components/PromptLibrary';
 import { RevisionHistory } from '@/components/RevisionHistory';
 import { SettingsModal } from '@/components/SettingsModal';
+import { EdgeAnchor } from '@/components/EdgeAnchor';
 
 function Topbar({
   onOpenSettings,
@@ -18,8 +19,6 @@ function Topbar({
 }) {
   const theme = useStore((s) => s.theme);
   const toggleTheme = useStore((s) => s.toggleTheme);
-  const chatOpen = useStore((s) => s.chatOpen);
-  const setChatOpen = useStore((s) => s.setChatOpen);
   const doc = useCurrentDocument();
   const api = useStore((s) => s.api);
 
@@ -48,17 +47,6 @@ function Topbar({
         Prompts
       </button>
       <button
-        className={`text-xs px-2 py-1 rounded border ${
-          chatOpen
-            ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-            : 'border-gray-300 dark:border-gray-700'
-        } hover:bg-gray-100 dark:hover:bg-gray-800`}
-        onClick={() => setChatOpen(!chatOpen)}
-        title="Toggle chat"
-      >
-        Chat
-      </button>
-      <button
         className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
         onClick={toggleTheme}
         title="Toggle theme"
@@ -84,6 +72,11 @@ export default function App() {
 
   const theme = useStore((s) => s.theme);
   const api = useStore((s) => s.api);
+  const sidebarCollapsed = useStore((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useStore((s) => s.setSidebarCollapsed);
+  const chatCollapsed = useStore((s) => s.chatCollapsed);
+  const setChatCollapsed = useStore((s) => s.setChatCollapsed);
+  const setChatOpen = useStore((s) => s.setChatOpen);
 
   // Apply theme class on first load.
   useEffect(() => {
@@ -99,7 +92,9 @@ export default function App() {
     }
   }, [api.apiKey]);
 
-  // Hotkey: ⌘/Ctrl + . opens settings; ⌘/Ctrl + , opens prompts; ⌘/Ctrl + h opens history.
+  // Hotkey: ⌘/Ctrl + . opens settings; ⌘/Ctrl + , opens prompts;
+  // ⌘/Ctrl + h opens history; ⌘/Ctrl + b toggles the sidebar;
+  // ⌘/Ctrl + Shift + c toggles the chat panel.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -112,11 +107,21 @@ export default function App() {
       } else if (e.key.toLowerCase() === 'h') {
         e.preventDefault();
         setRevisionsOpen(true);
+      } else if (e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setSidebarCollapsed(!useStore.getState().sidebarCollapsed);
+      } else if (e.shiftKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        const next = !useStore.getState().chatCollapsed;
+        setChatCollapsed(next);
+        // When the user explicitly un-collapses via shortcut, also make
+        // sure the legacy open flag is set so the panel renders.
+        if (!next) setChatOpen(true);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [setChatCollapsed, setChatOpen, setSidebarCollapsed]);
 
   return (
     <div className="h-full flex flex-col">
@@ -129,6 +134,27 @@ export default function App() {
         <Sidebar />
         <Editor />
         <ChatPanel />
+        {/* Edge-anchor toggles: a single always-visible chevron strip on
+            each side acts as both the hide and the show button. The
+            chevron direction reflects the current state. */}
+        <EdgeAnchor
+          side="left"
+          collapsed={sidebarCollapsed}
+          label={sidebarCollapsed ? 'Show sidebar (⌘/Ctrl + B)' : 'Hide sidebar (⌘/Ctrl + B)'}
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
+        <EdgeAnchor
+          side="right"
+          collapsed={chatCollapsed}
+          label={chatCollapsed ? 'Show chat (⌘/Ctrl + Shift + C)' : 'Hide chat (⌘/Ctrl + Shift + C)'}
+          onClick={() => {
+            const next = !chatCollapsed;
+            setChatCollapsed(next);
+            // When un-collapsing, also make sure the legacy open flag
+            // is set so the panel renders.
+            if (!next) setChatOpen(true);
+          }}
+        />
       </div>
 
       <SettingsModal
