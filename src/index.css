@@ -1,0 +1,150 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  @apply bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
+}
+
+/* Simple scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-gray-700 rounded;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Markdown preview tweaks */
+.prose-md h1 {
+  @apply text-2xl font-semibold mt-4 mb-2;
+}
+.prose-md h2 {
+  @apply text-xl font-semibold mt-3 mb-2;
+}
+.prose-md h3 {
+  @apply text-lg font-semibold mt-3 mb-1;
+}
+.prose-md p {
+  @apply my-2 leading-relaxed;
+}
+.prose-md ul {
+  @apply list-disc pl-6 my-2;
+}
+.prose-md ol {
+  @apply list-decimal pl-6 my-2;
+}
+.prose-md code {
+  @apply bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5 font-mono text-sm;
+}
+.prose-md pre {
+  @apply bg-gray-100 dark:bg-gray-800 rounded p-3 overflow-x-auto text-sm;
+}
+.prose-md pre code {
+  @apply bg-transparent p-0;
+}
+.prose-md blockquote {
+  @apply border-l-4 border-gray-300 dark:border-gray-700 pl-3 italic my-2;
+}
+.prose-md a {
+  @apply text-blue-600 dark:text-blue-400 underline;
+}
+.prose-md table {
+  @apply border-collapse my-2;
+}
+.prose-md th,
+.prose-md td {
+  @apply border border-gray-300 dark:border-gray-700 px-2 py-1;
+}
+
+/* Diff viewer */
+.diff-add {
+  @apply bg-green-100 dark:bg-green-900/40;
+}
+.diff-remove {
+  @apply bg-red-100 dark:bg-red-900/40 line-through opacity-80;
+}
+
+/* Proposed edit card (track-changes preview) */
+.proposed-edit-card {
+  @apply mt-2 rounded-md border border-gray-300 dark:border-gray-700
+    bg-white dark:bg-gray-900 overflow-hidden;
+  position: relative;
+}
+.proposed-edit-card .pe-header {
+  @apply px-3 py-2 border-b border-gray-200 dark:border-gray-800
+    bg-gray-50 dark:bg-gray-800/50 flex items-center gap-2;
+}
+.proposed-edit-card .pe-summary {
+  @apply text-xs text-gray-700 dark:text-gray-300 flex-1 truncate;
+}
+.proposed-edit-card .pe-id {
+  @apply text-[10px] font-mono uppercase tracking-wide
+    text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded
+    bg-gray-100 dark:bg-gray-800;
+}
+.proposed-edit-card .pe-diff {
+  @apply py-2 font-mono text-xs overflow-y-auto;
+  /* When the card is intrinsically sized (no inline height set), bound it
+     to a comfortable max. When the card has an explicit pixel height set
+     by the resize logic, .pe-diff is the flex child that fills the rest. */
+  max-height: 260px;
+  min-height: 0;
+}
+/* The unified diff view needs its own horizontal padding because its rows
+   are plain text blocks, not the grid cells used by the split view. */
+.proposed-edit-card .pe-diff > .pe-diff-unified {
+  @apply px-3;
+}
+.proposed-edit-card.pe-card-sized .pe-diff {
+  /* Card has an explicit height from the resize store: let the diff fill
+     any remaining space instead of being capped at 260px. */
+  max-height: none;
+  flex: 1 1 auto;
+}
+.proposed-edit-card .pe-actions {
+  @apply px-3 py-2 border-t border-gray-200 dark:border-gray-800
+    flex items-center justify-end gap-2;
+}
+.proposed-edit-card .pe-status {
+  @apply px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-t
+    border-gray-200 dark:border-gray-800;
+}
+.proposed-edit-card .pe-status.error {
+  @apply text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40;
+}
+.proposed-edit-card .pe-status.applied {
+  @apply text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/40;
+}
+.proposed-edit-card .pe-status.rejected {
+  @apply text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50;
+}
+.proposed-edit-card .pe-comment {
+  @apply px-3 py-2 border-t border-gray-200 dark:border-gray-800
+    bg-gray-50 dark:bg-gray-800/30;
+}
+
+/* Resize handles (panel dividers + preview card edges/corners) */
+.resize-handle {
+  background-color: transparent;
+}
+.resize-handle:hover,
+.resize-handle:active {
+  background-color: rgba(59, 130, 246, 0.35); /* blue-500/35 */
+}
+.resize-handle-tl,
+.resize-handle-tr,
+.resize-edit-card-corner {
+  /* corners get a slightly larger hit area already from the inline style;
+     this just ensures they stay on top of the body. */
+}
