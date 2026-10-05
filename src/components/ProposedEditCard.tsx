@@ -200,7 +200,12 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
   // The user is responsible for choosing the location.
   const handleForceApply = () => {
     if (!doc) return;
-    if (!editorState?.focused) return;
+    // NOTE: the focused gate was removed. Clicking this button blurs
+    // the textarea (the button lives in the chat panel, not the editor),
+    // which would cause the button to be disabled before its own `click`
+    // handler can fire. The caret indices stay valid across the blur
+    // because `Editor.reportCaret` reads them from the live DOM before
+    // writing `focused: false`.
     // Bail if the user has switched documents since this card mounted.
     const liveDocId = useStore.getState().currentDocumentId;
     if (liveDocId !== docId) return;
@@ -248,18 +253,23 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
   // Force-apply is the only path that can succeed when the AI quote is
   // not anchored in the document. It is gated on:
   //   1. The anchor missing (otherwise normal Apply should be used).
-  //   2. The editor for this doc currently having focus.
+  //   2. The card not already applied.
   //   3. A known caret position (selectionStart >= 0).
-  //   4. The card not already applied.
   // The doc-switch guard is checked inside `handleForceApply` (it reads
   // `currentDocumentId` from the store at click time) so we don't have
   // to subscribe here.
+  // Note: we deliberately do NOT gate on `editorState.focused`. The act
+  // of clicking this button blurs the textarea (the button is rendered
+  // in the chat panel, not the editor), which would disable the button
+  // via React re-render before its `click` handler can fire. The caret
+  // indices in the store stay valid across the blur because
+  // `Editor.reportCaret` reads them from the live DOM before writing
+  // `focused: false`.
   const canForceApply =
     !anchorInfo.found &&
     status.kind !== 'applied' &&
-    editorState?.focused === true &&
-    typeof editorState.selectionStart === 'number' &&
-    editorState.selectionStart >= 0;
+    typeof editorState?.selectionStart === 'number' &&
+    (editorState?.selectionStart ?? -1) >= 0;
 
   const size = storedSize ?? { w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT };
   const isSized = !!storedSize;

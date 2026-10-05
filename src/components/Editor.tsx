@@ -71,10 +71,12 @@ export function Editor() {
       });
       return;
     }
+    const start = ta.selectionStart ?? -1;
+    const end = ta.selectionEnd ?? -1;
     setEditorFocus(doc.id, {
       focused,
-      selectionStart: ta.selectionStart ?? -1,
-      selectionEnd: ta.selectionEnd ?? -1,
+      selectionStart: start,
+      selectionEnd: end,
     });
   };
 
