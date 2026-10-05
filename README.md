@@ -87,6 +87,47 @@ src/
     └── SettingsModal.tsx
 ```
 
+## Track Changes — Reviewing AI Edits
+
+When the AI proposes changes to your document (e.g., rewording a paragraph, fixing a section, or suggesting a deletion), they appear as **Proposed Edit Cards** embedded directly in the editor pane.
+
+### How it works
+
+1. **Trigger a proposal** — Select text in the editor and ask the AI to "rewrite this" or "shorten this" via the chat panel. The AI's proposed replacement comes back as a structured diff.
+2. **Inline cards appear** — Each proposal renders as a `ProposedEditCard` showing:
+   - The **original text** (red, struck through)
+   - The **proposed new text** (green, highlighted)
+   - A one-line **explanation** of why the AI made that change
+3. **Accept or reject** — Click **Accept** to apply the change to the document, or **Reject** to discard it and keep the original.
+4. **Batch review** — Multiple proposals can coexist. Accept or reject them one by one in order, or jump to the next card using the **Navigate** buttons on each card.
+
+### Hands-on example
+
+```
+1. Open a document with some markdown content.
+2. Highlight a paragraph you want the AI to improve.
+3. In the Chat panel, enable "Send selection" (toggle button).
+4. Type: "Make this more concise" and press ⌘+Enter.
+5. The AI streams back a proposed edit.
+6. Switch back to the editor — a blue-outlined card now floats
+   at the position of your selection.
+7. Read the diff (original → proposed), then click Accept.
+   The document updates instantly.
+```
+
+### Keyboard shortcut
+
+| Key              | Action                              |
+| ---------------- | ----------------------------------- |
+| ⌘ / Ctrl + y    | Accept focused proposal             |
+| ⌘ / Ctrl + n    | Reject focused proposal / next card |
+
+### Under the hood
+
+- `utils/proposedEdit.ts` — parses the AI's diff payload into structured `ProposedEdit` objects (type defined in `types.ts`).
+- `components/ProposedEditCard.tsx` — renders the accept/reject UI with diff highlighting.
+- The store (`useStore.ts`) holds the active proposal queue; accepting/rejecting pops items and applies or discards the patch.
+
 ## Hotkeys
 
 | Key               | Action                |
