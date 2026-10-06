@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useStore, useCurrentDocument } from '@/store/useStore';
+import { PhotoImportButton } from '@/components/PhotoImportButton';
 
 /**
  * Editor: plain textarea (write) + react-markdown preview (preview),
@@ -40,6 +41,54 @@ export function Editor() {
     window.addEventListener('mvp:get-selection', handler);
     return () => window.removeEventListener('mvp:get-selection', handler);
   }, []);
+
+  // Listen for OCR-insert events from the photo import button. Inserts
+  // the text at the current caret position if the textarea has been
+  // interacted with; otherwise appends to the end of the document. The
+  // caret is moved to the end of the inserted text so the user can keep
+  // typing or run AI ops on the imported content.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ text: string }>).detail;
+      const text = detail?.text;
+      if (typeof text !== 'string' || text.length === 0) return;
+      if (!doc) return;
+      const ta = textareaRef.current;
+      const current = doc.content;
+      let newValue: string;
+      let caret: number;
+      const start = ta?.selectionStart ?? -1;
+      const end = ta?.selectionEnd ?? -1;
+      if (start >= 0 && end >= 0) {
+        // Splice at the current caret / selection. If the user has a
+        // selection, replace it with the inserted text.
+        newValue = current.slice(0, start) + text + current.slice(end);
+        caret = start + text.length;
+      } else {
+        // No caret info — append to the end. If the doc doesn't end with
+        // a newline, prepend one so the inserted text starts on a new
+        // line.
+        const sep = current.length > 0 && !current.endsWith('\n') ? '\n' : '';
+        newValue = current + sep + text;
+        caret = newValue.length;
+      }
+      updateContent(doc.id, newValue);
+      // Restore the caret to the end of the inserted text on the next
+      // tick so React has applied the new value to the textarea first.
+      queueMicrotask(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.focus();
+        try {
+          el.setSelectionRange(caret, caret);
+        } catch {
+          /* some browsers throw if the element is not visible */
+        }
+      });
+    };
+    window.addEventListener('mvp:insert-text', handler);
+    return () => window.removeEventListener('mvp:insert-text', handler);
+  }, [doc, updateContent]);
 
   // When the document changes (or the editor unmounts), report blur for
   // the previous doc so cards don't think Force-apply is still enabled
@@ -122,6 +171,7 @@ export function Editor() {
             </button>
           ))}
         </div>
+        <PhotoImportButton />
         <button
           className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
           onClick={() => saveRevision(doc.id)}

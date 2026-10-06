@@ -20,7 +20,11 @@ import {
 const STORAGE_KEY = 'ai-text-editor-mvp';
 
 const DEFAULT_SYSTEM_MESSAGE =
-  'You are a helpful writing assistant. Be concise, specific, and preserve the user\'s voice when revising.';
+  "You are a helpful writing assistant. Be concise, specific, and preserve " +
+  "the user's voice when revising. Unless specified, please provide your " +
+  "output paragraph by paragraph using the Proposed Edit Card: emit one " +
+  "proposed-edit fenced block per paragraph so the user can accept or " +
+  "reject each one independently, all within a single reply message.";
 
 const defaultApiConfig: ApiConfig = {
   apiKey: '',

@@ -1,7 +1,7 @@
 {
   "name": "ai-text-editor-mvp",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "description": "Minimal local-first AI markdown editor (MVP).",
   "scripts": {
@@ -11,7 +11,10 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
+    "@paddleocr/paddleocr-js": "^0.4.2",
     "diff": "^5.2.0",
+    "onnxruntime-web": "^1.30.0",
+    "pdfjs-dist": "^4.6.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
