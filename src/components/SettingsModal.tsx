@@ -1,24 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
+import { PROVIDERS, getProvider } from '@/config/providers';
+import type { ApiProvider } from '@/types';
 
 interface Props {
   open: boolean;
   onClose: () => void;
 }
 
-const PRESET_MODELS = [
-  'MiniMax-M3',
-  'MiniMax-M3-fast',
-  'MiniMax-M2.7',
-  'MiniMax-M2.7-highspeed',
-  'gpt-4o-mini',
-  'gpt-4o',
-];
-
 export function SettingsModal({ open, onClose }: Props) {
   const api = useStore((s) => s.api);
   const setApi = useStore((s) => s.setApi);
 
+  const [provider, setProvider] = useState<ApiProvider>(api.provider);
   const [apiKey, setApiKey] = useState(api.apiKey);
   const [apiEndpoint, setApiEndpoint] = useState(api.apiEndpoint);
   const [model, setModel] = useState(api.model);
@@ -29,6 +23,7 @@ export function SettingsModal({ open, onClose }: Props) {
   // Sync local state when the modal opens.
   useEffect(() => {
     if (open) {
+      setProvider(api.provider);
       setApiKey(api.apiKey);
       setApiEndpoint(api.apiEndpoint);
       setModel(api.model);
@@ -39,8 +34,10 @@ export function SettingsModal({ open, onClose }: Props) {
 
   if (!open) return null;
 
+  const preset = getProvider(provider);
+
   const save = () => {
-    setApi({ apiKey, apiEndpoint, model, systemMessage, temperature });
+    setApi({ provider, apiKey, apiEndpoint, model, systemMessage, temperature });
     onClose();
   };
 
@@ -61,6 +58,33 @@ export function SettingsModal({ open, onClose }: Props) {
         <div className="p-4 space-y-3 text-sm">
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              Provider
+            </label>
+            <select
+              value={provider}
+              onChange={(e) => {
+                const next = e.target.value as ApiProvider;
+                const nextPreset = getProvider(next);
+                setProvider(next);
+                // Smart-swap the endpoint + model to the new provider's
+                // defaults so the user doesn't have to retype them.
+                // The API key is intentionally NOT touched — the user
+                // will type the matching key in the field below.
+                setApiEndpoint(nextPreset.defaultEndpoint);
+                setModel(nextPreset.defaultModel);
+              }}
+              className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {PROVIDERS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
               API key
             </label>
             <div className="flex gap-2">
@@ -68,7 +92,7 @@ export function SettingsModal({ open, onClose }: Props) {
                 type={showKey ? 'text' : 'password'}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-…"
+                placeholder={preset.apiKeyPlaceholder}
                 className="flex-1 px-2 py-1.5 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-blue-500"
                 autoComplete="off"
                 spellCheck={false}
@@ -96,15 +120,11 @@ export function SettingsModal({ open, onClose }: Props) {
             <input
               value={apiEndpoint}
               onChange={(e) => setApiEndpoint(e.target.value)}
-              placeholder="https://api.minimax.io/v1"
+              placeholder={preset.defaultEndpoint}
               className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-blue-500 font-mono text-xs"
               spellCheck={false}
             />
-            <p className="mt-1 text-xs text-gray-500">
-              OpenAI-compatible. A base URL like{' '}
-              <code>https://api.minimax.io/v1</code> is fine —{' '}
-              <code>/chat/completions</code> is appended automatically.
-            </p>
+            <p className="mt-1 text-xs text-gray-500">{preset.helpText}</p>
           </div>
 
           <div>
@@ -120,7 +140,7 @@ export function SettingsModal({ open, onClose }: Props) {
                 spellCheck={false}
               />
               <datalist id="mvp-model-list">
-                {PRESET_MODELS.map((m) => (
+                {preset.modelPresets.map((m) => (
                   <option key={m} value={m} />
                 ))}
               </datalist>

@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_DEFAULT_API_ENDPOINT?: string;
   readonly VITE_DEFAULT_MODEL?: string;
+  readonly VITE_DEFAULT_PROVIDER?: 'minimax' | 'openai';
   readonly VITE_APP_VERSION?: string;
 }
 

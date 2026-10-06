@@ -3,12 +3,14 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuid } from 'uuid';
 import type {
   ApiConfig,
+  ApiProvider,
   ChatMessage,
   DocumentRecord,
   Prompt,
   Revision,
   Theme,
 } from '@/types';
+import { getProvider } from '@/config/providers';
 import {
   clamp,
   MIN_SIDEBAR_WIDTH,
@@ -26,10 +28,20 @@ const DEFAULT_SYSTEM_MESSAGE =
   "proposed-edit fenced block per paragraph so the user can accept or " +
   "reject each one independently, all within a single reply message.";
 
+// Resolve the build-time default provider, then derive endpoint/model
+// defaults from the matching preset. VITE_DEFAULT_PROVIDER lets a
+// hosting environment (e.g. an OpenAI-keyed production deploy) ship
+// with a different default than the in-repo "minimax" default.
+const initialProvider: ApiProvider =
+  import.meta.env.VITE_DEFAULT_PROVIDER === 'openai' ? 'openai' : 'minimax';
+const initialPreset = getProvider(initialProvider);
+
 const defaultApiConfig: ApiConfig = {
+  provider: initialProvider,
   apiKey: '',
-  apiEndpoint: import.meta.env.VITE_DEFAULT_API_ENDPOINT || 'https://api.minimax.io/v1',
-  model: import.meta.env.VITE_DEFAULT_MODEL || 'MiniMax-M2.7',
+  apiEndpoint:
+    import.meta.env.VITE_DEFAULT_API_ENDPOINT || initialPreset.defaultEndpoint,
+  model: import.meta.env.VITE_DEFAULT_MODEL || initialPreset.defaultModel,
   systemMessage: DEFAULT_SYSTEM_MESSAGE,
   temperature: 0.7,
 };
@@ -422,10 +434,17 @@ export const useStore = create<StoreState>()(
             state.layout.chatWidth = clamp(cw, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH);
             repaired = true;
           }
+          // Migration for v0.2.5+: older payloads predate the `provider`
+          // field on ApiConfig. Default to 'minimax' so the existing
+          // endpoint/model keep working unchanged.
+          if (state.api && typeof state.api === 'object' && !('provider' in state.api)) {
+            (state.api as ApiConfig).provider = 'minimax';
+            repaired = true;
+          }
           if (repaired) {
             try {
               // Persist the corrected values so we don't re-run the repair on every load.
-              useStore.setState({ layout: state.layout });
+              useStore.setState({ layout: state.layout, api: state.api });
             } catch {
               /* ignore */
             }
