@@ -8,6 +8,8 @@ import { RevisionHistory } from '@/components/RevisionHistory';
 import { SettingsModal } from '@/components/SettingsModal';
 import { EdgeAnchor } from '@/components/EdgeAnchor';
 
+const APP_VERSION = '0.2.3';
+
 function Topbar({
   onOpenSettings,
   onOpenPrompts,
@@ -25,7 +27,7 @@ function Topbar({
   return (
     <header className="h-12 px-3 flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
       <span className="font-semibold text-sm">📝 AI Text Editor</span>
-      <span className="text-xs text-gray-500">MVP</span>
+      <span className="text-xs text-gray-500">v{APP_VERSION}</span>
       {doc && (
         <span className="ml-2 text-sm text-gray-700 dark:text-gray-300 truncate">
           · {doc.title}
@@ -77,6 +79,8 @@ export default function App() {
   const chatCollapsed = useStore((s) => s.chatCollapsed);
   const setChatCollapsed = useStore((s) => s.setChatCollapsed);
   const setChatOpen = useStore((s) => s.setChatOpen);
+  const topbarCollapsed = useStore((s) => s.topbarCollapsed);
+  const setTopbarCollapsed = useStore((s) => s.setTopbarCollapsed);
 
   // Apply theme class on first load.
   useEffect(() => {
@@ -124,12 +128,14 @@ export default function App() {
   }, [setChatCollapsed, setChatOpen, setSidebarCollapsed]);
 
   return (
-    <div className="h-full flex flex-col">
-      <Topbar
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenPrompts={() => setPromptsOpen(true)}
-        onOpenRevisions={() => setRevisionsOpen(true)}
-      />
+    <div className="h-full flex flex-col relative">
+      {!topbarCollapsed && (
+        <Topbar
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenPrompts={() => setPromptsOpen(true)}
+          onOpenRevisions={() => setRevisionsOpen(true)}
+        />
+      )}
       <div className="flex-1 flex min-h-0 relative">
         <Sidebar />
         <Editor />
@@ -156,6 +162,16 @@ export default function App() {
           }}
         />
       </div>
+      {/* Top-anchor is rendered as a sibling of the Topbar (not inside the
+          content row) so its `absolute top-0` resolves to the very top of
+          the page — the same upper edge of the topbar — regardless of
+          whether the topbar is currently visible. */}
+      <EdgeAnchor
+        side="top"
+        collapsed={topbarCollapsed}
+        label={topbarCollapsed ? 'Show topbar' : 'Hide topbar'}
+        onClick={() => setTopbarCollapsed(!topbarCollapsed)}
+      />
 
       <SettingsModal
         open={settingsOpen}

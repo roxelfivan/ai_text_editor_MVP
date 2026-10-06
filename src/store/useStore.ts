@@ -103,6 +103,9 @@ export interface StoreState {
   // chatOpen === !chatCollapsed, but the user can collapse while open.
   chatCollapsed: boolean;
 
+  // Whether the top bar is collapsed (hidden but still toggleable via anchor).
+  topbarCollapsed: boolean;
+
   // Whether to include the current selection with each chat message.
   includeSelection: boolean;
 
@@ -147,6 +150,7 @@ export interface StoreState {
   setChatOpen: (open: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setChatCollapsed: (collapsed: boolean) => void;
+  setTopbarCollapsed: (collapsed: boolean) => void;
   setIncludeSelection: (v: boolean) => void;
   toggleTheme: () => void;
   setApi: (patch: Partial<ApiConfig>) => void;
@@ -207,6 +211,7 @@ export const useStore = create<StoreState>()(
       chatOpen: true,
       sidebarCollapsed: false,
       chatCollapsed: false,
+      topbarCollapsed: false,
       includeSelection: true,
       theme: 'light',
       api: defaultApiConfig,
@@ -340,6 +345,7 @@ export const useStore = create<StoreState>()(
       setChatOpen: (chatOpen) => set({ chatOpen }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setChatCollapsed: (chatCollapsed) => set({ chatCollapsed }),
+      setTopbarCollapsed: (topbarCollapsed) => set({ topbarCollapsed }),
       setIncludeSelection: (includeSelection) => set({ includeSelection }),
       toggleTheme: () =>
         set((s) => {
@@ -387,6 +393,7 @@ export const useStore = create<StoreState>()(
         chatOpen: s.chatOpen,
         sidebarCollapsed: s.sidebarCollapsed,
         chatCollapsed: s.chatCollapsed,
+        topbarCollapsed: s.topbarCollapsed,
         includeSelection: s.includeSelection,
         theme: s.theme,
         api: s.api,
