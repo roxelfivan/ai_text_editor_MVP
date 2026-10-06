@@ -8,7 +8,10 @@ import { RevisionHistory } from '@/components/RevisionHistory';
 import { SettingsModal } from '@/components/SettingsModal';
 import { EdgeAnchor } from '@/components/EdgeAnchor';
 
-const APP_VERSION = '0.2.3';
+// APP_VERSION is injected at build time from package.json via Vite's
+// `define` config (see vite.config.ts). Keeping the source of truth in
+// package.json means the topbar always matches the published version.
+const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.0.0';
 
 function Topbar({
   onOpenSettings,

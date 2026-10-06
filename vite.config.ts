@@ -2,6 +2,17 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import type { Plugin, Connect } from 'vite';
 import { fileURLToPath, URL } from 'url';
+import { readFileSync } from 'fs';
+import { dirname, resolve } from 'path';
+
+// Read the single source of truth for the app version. The value is
+// injected as a build-time constant so the UI header can render it
+// without a runtime fetch or env-var step. Bump the version in
+// package.json and it propagates here automatically.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkgPath = resolve(__dirname, 'package.json');
+const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
+const APP_VERSION = pkg.version;
 
 // COOP/COEP headers are required so the browser exposes SharedArrayBuffer
 // to the page. onnxruntime-web (PaddleOCR's runtime) needs SAB for the
@@ -47,6 +58,13 @@ const stripImportQueryPlugin: Plugin = {
 };
 
 export default defineConfig({
+  // Inject the app version (read from package.json at config-load time)
+  // so `import.meta.env.VITE_APP_VERSION` is available in source. Using
+  // a Vite env var keeps it tree-shakable and visible in the type
+  // definition in src/vite-env.d.ts.
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(APP_VERSION),
+  },
   plugins: [react(), stripImportQueryPlugin],
   resolve: {
     alias: {
