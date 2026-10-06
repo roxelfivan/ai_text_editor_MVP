@@ -2,11 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='52' font-size='52'>📝</text></svg>" />
+    <!--
+      ApEditor favicon: a minimal black square with a cyan ape-eye ring,
+      echoing the logo's signature colours.
+    -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23000'/><circle cx='32' cy='32' r='14' fill='none' stroke='%2300E5E5' stroke-width='4'/><circle cx='32' cy='32' r='4' fill='%2300E5E5'/></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Text Editor — MVP</title>
+    <meta name="theme-color" content="#000000" />
+    <title>ApEditor — AI Markdown Editor</title>
   </head>
-  <body class="h-full">
+  <body class="h-full bg-ape-base text-cyber-primary antialiased">
     <div id="root" class="h-full"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -324,22 +324,24 @@ export function ChatPanel() {
     <div ref={containerRef} className="relative shrink-0" style={{ width: chatWidth }}>
       <ResizeHandle handle="left" onPointerDown={(e) => start('left', e)} />
       <aside
-        className="h-full border-l border-gray-200 dark:border-gray-800 flex flex-col bg-white dark:bg-gray-950"
+        className="h-full border-l border-paper-hairline dark:border-cyber-border flex flex-col bg-paper-panel dark:bg-ape-panel"
         style={{ width: '100%' }}
       >
-      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
-        <span className="font-semibold text-sm">AI Chat</span>
-        <span className="text-xs text-gray-500">{api.model}</span>
+      <div className="px-3 py-2 border-b border-paper-hairline dark:border-cyber-border flex items-center gap-2 bg-paper-elevated/50 dark:bg-ape-elevated/40">
+        <span className="font-semibold text-sm text-cyber-clay dark:text-cyber-cyan tracking-wider uppercase">
+          AI Chat
+        </span>
+        <span className="text-xs text-paper-inkSoft dark:text-cyber-muted font-mono truncate">{api.model}</span>
         <div className="flex-1" />
         <button
-          className="text-xs text-gray-500 hover:text-red-600"
+          className="text-xs text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-danger transition-colors"
           onClick={() => currentDocumentId && clearChat(currentDocumentId)}
           disabled={!messages.length}
         >
           Clear
         </button>
         <button
-          className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-gray-100"
+          className="text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors"
           onClick={() => setChatOpen(false)}
           title="Close chat"
         >
@@ -347,9 +349,9 @@ export function ChatPanel() {
         </button>
       </div>
 
-      <div ref={scrollerRef} className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div ref={scrollerRef} className="flex-1 overflow-y-auto p-3 space-y-3 bg-paper-base dark:bg-ape-base">
         {!messages.length && (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-paper-inkSoft dark:text-cyber-muted">
             Ask anything, or highlight text in the editor and send a prompt from
             the library.
           </p>
@@ -366,25 +368,26 @@ export function ChatPanel() {
           />
         ))}
         {error && (
-          <div className="text-xs text-red-600 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded p-2 whitespace-pre-wrap">
+          <div className="text-xs text-cyber-danger bg-cyber-danger/10 border border-cyber-danger/40 rounded p-2 whitespace-pre-wrap">
             {error}
           </div>
         )}
       </div>
 
-      <div className="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2">
-        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-          <label className="flex items-center gap-1 cursor-pointer">
+      <div className="border-t border-paper-hairline dark:border-cyber-border p-3 space-y-2 bg-paper-panel dark:bg-ape-panel">
+        <div className="flex items-center gap-2 text-xs text-paper-inkSoft dark:text-cyber-muted">
+          <label className="flex items-center gap-1 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={includeSelection}
               onChange={(e) => setIncludeSelection(e.target.checked)}
+              className="accent-cyber-clay dark:accent-cyber-cyan"
             />
             include selection
           </label>
           {selection && (
             <button
-              className="px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="px-1.5 py-0.5 rounded border border-cyber-clay/40 dark:border-cyber-cyan/40 text-cyber-clay dark:text-cyber-cyan hover:bg-cyber-clay/5 dark:hover:bg-cyber-cyan/10 transition-colors"
               onClick={handleSendSelection}
               title="Paste the selection into the input"
             >
@@ -402,19 +405,19 @@ export function ChatPanel() {
             }
           }}
           placeholder="Ask, or ⌘/Ctrl+Enter to send…"
-          className="w-full h-24 p-2 text-sm border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+          className="w-full h-24 p-2 text-sm ape-field resize-none font-sans"
         />
         <div className="flex justify-end gap-2">
           {streaming ? (
             <button
-              className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700"
+              className="text-sm px-3 py-1.5 rounded bg-cyber-danger text-white font-semibold hover:bg-cyber-danger/80 transition-colors"
               onClick={handleStop}
             >
               Stop
             </button>
           ) : (
             <button
-              className="text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              className="btn-fire"
               onClick={handleSend}
               disabled={!input.trim() || !currentDocumentId}
             >
@@ -450,12 +453,12 @@ function MessageBubble({
       <div
         className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
           isUser
-            ? 'bg-blue-600 text-white'
-            : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+            ? 'bg-cyber-clay text-paper-base dark:bg-ape-fire dark:text-white font-medium border border-cyber-clay/40 dark:border-cyber-fire/40 dark:shadow-ape-fire-soft'
+            : 'bg-paper-elevated text-paper-ink dark:bg-ape-elevated dark:text-cyber-primary border border-paper-hairline dark:border-cyber-border'
         }`}
       >
         {message.selection && isUser && (
-          <div className="mb-1 text-[10px] uppercase tracking-wide opacity-80">
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-paper-base/70 dark:text-white/80 font-mono">
             ▸ selection ({message.selection.length} chars)
           </div>
         )}
@@ -472,15 +475,15 @@ function MessageBubble({
               onStageReject={onStageReject}
             />
             {staged.length > 0 && (
-              <div className="mt-2 -mx-1 rounded border border-blue-300 dark:border-blue-700 bg-blue-50/60 dark:bg-blue-950/30 p-2 flex items-center gap-2">
-                <span className="text-xs text-blue-700 dark:text-blue-300 flex-1">
+              <div className="mt-2 -mx-1 rounded border border-cyber-clay/40 dark:border-cyber-cyan/50 bg-cyber-clay/5 dark:bg-cyber-cyan/10 p-2 flex items-center gap-2">
+                <span className="text-xs text-cyber-clay dark:text-cyber-cyan flex-1">
                   {staged.length === 1
                     ? '1 rejection comment staged.'
                     : `${staged.length} rejection comments staged.`}
                 </span>
                 <button
                   type="button"
-                  className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="btn-fire-sm"
                   onClick={onCommit}
                   title="Append all staged rejection comments to the chat and ask the AI to revise"
                 >
@@ -489,7 +492,7 @@ function MessageBubble({
                 </button>
                 <button
                   type="button"
-                  className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className="btn-cyan-sm"
                   onClick={onClearStaged}
                   title="Discard all staged rejection comments"
                 >

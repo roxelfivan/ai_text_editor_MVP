@@ -131,11 +131,11 @@ export function Editor() {
 
   if (!doc) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-500">
+      <div className="flex-1 flex items-center justify-center bg-paper-base dark:bg-ape-base">
         <div className="text-center">
-          <p>No document selected.</p>
+          <p className="text-paper-inkSoft dark:text-cyber-muted text-sm">No document selected.</p>
           <button
-            className="mt-3 text-sm px-3 py-1.5 rounded bg-blue-600 text-white"
+            className="btn-fire mt-3"
             onClick={() => useStore.getState().createDocument()}
           >
             Create one
@@ -149,23 +149,25 @@ export function Editor() {
   const showPreview = viewMode === 'preview' || viewMode === 'split';
 
   return (
-    <div className="flex-1 flex flex-col min-w-0">
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-        <span className="font-semibold truncate">{doc.title}</span>
-        <span className="text-xs text-gray-500 ml-2">
-          {lastSavedAt ? 'Saved locally' : ''}
+    <div className="flex-1 flex flex-col min-w-0 bg-paper-base dark:bg-ape-base">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-paper-hairline dark:border-cyber-border bg-paper-base dark:bg-ape-base">
+        <span className="font-semibold text-paper-ink dark:text-cyber-primary truncate">
+          {doc.title}
+        </span>
+        <span className="text-xs text-paper-inkSoft dark:text-cyber-muted ml-2 font-mono uppercase tracking-wider">
+          {lastSavedAt ? '· saved' : ''}
         </span>
         <div className="flex-1" />
-        <div className="inline-flex rounded border border-gray-300 dark:border-gray-700 overflow-hidden text-xs">
-          {(['write', 'split', 'preview'] as const).map((m) => (
+        <div className="inline-flex rounded border border-paper-hairline dark:border-cyber-border overflow-hidden text-xs">
+          {(['write', 'split', 'preview'] as const).map((m, idx) => (
             <button
               key={m}
               onClick={() => setViewMode(m)}
-              className={`px-2 py-1 ${
+              className={`px-2 py-1 transition-colors ${
                 viewMode === m
-                  ? 'bg-blue-600 text-white'
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
+                  ? 'bg-cyber-clay text-paper-base dark:bg-ape-fire dark:text-white font-semibold'
+                  : 'text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan'
+              } ${idx > 0 ? 'border-l border-paper-hairline dark:border-cyber-border' : ''}`}
             >
               {m[0].toUpperCase() + m.slice(1)}
             </button>
@@ -173,7 +175,7 @@ export function Editor() {
         </div>
         <PhotoImportButton />
         <button
-          className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+          className="btn-cyan-sm"
           onClick={() => saveRevision(doc.id)}
           title="Save current content as a revision"
         >
@@ -191,15 +193,15 @@ export function Editor() {
             onSelect={() => reportCaret(true)}
             onKeyUp={() => reportCaret(true)}
             onClick={() => reportCaret(true)}
-            className={`flex-1 p-4 outline-none resize-none font-mono text-sm bg-white dark:bg-gray-950 ${
-              showPreview ? 'border-r border-gray-200 dark:border-gray-800' : ''
+            className={`flex-1 p-4 outline-none resize-none font-mono text-sm bg-paper-base dark:bg-ape-base text-paper-ink dark:text-cyber-primary caret-cyber-clay dark:caret-cyber-cyan placeholder:text-paper-inkSoft/60 dark:placeholder:text-cyber-muted/60 ${
+              showPreview ? 'border-r border-paper-hairline dark:border-cyber-border' : ''
             }`}
             placeholder="Start writing in Markdown…"
             spellCheck={false}
           />
         )}
         {showPreview && (
-          <div className="flex-1 overflow-y-auto p-4 prose-md">
+          <div className="flex-1 overflow-y-auto p-4 prose-md bg-paper-base dark:bg-ape-base">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {doc.content || '*Nothing to preview yet.*'}
             </ReactMarkdown>

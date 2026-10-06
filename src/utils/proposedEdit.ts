@@ -15,6 +15,11 @@ export type ProposedEditSegment =
  * another fence isn't accidentally consumed.
  */
 export function parseProposedEdits(content: string): ProposedEditSegment[] {
+  // #region agent log
+  try {
+    fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0aa8fe' }, body: JSON.stringify({ sessionId: '0aa8fe', location: 'proposedEdit.ts:parseProposedEdits-entry', message: 'parseProposedEdits called', data: { contentLen: content.length }, runId: 'card-split', hypothesisId: 'H3', timestamp: Date.now() }) }).catch(() => {});
+  } catch {}
+  // #endregion
   let segments: ProposedEditSegment[] = [];
   const fenceRe = /```([^\n`]*)\n([\s\S]*?)(?:```|$)/g;
   let lastIndex = 0;
@@ -50,6 +55,43 @@ export function parseProposedEdits(content: string): ProposedEditSegment[] {
   // without the `proposed-edit` fence, and we want to show a card
   // anyway rather than dumping the raw JSON to the user.
   segments = rescueRawJsonEdits(segments);
+  // #region agent log
+  try {
+    const summary = segments
+      .filter((s) => s.kind === 'edit')
+      .map((s) => {
+        const e = (s as { kind: 'edit'; payload: { id: string; original: string; replacement: string } }).payload;
+        const origLines = e.original.split('\n');
+        const replLines = e.replacement.split('\n');
+        // Count consecutive lines that are byte-identical in both, to
+        // detect "context sandwich" cards where the middle of the diff
+        // is unchanged.
+        let unchangedRuns = 0;
+        let longestUnchangedRun = 0;
+        let cur = 0;
+        for (let i = 0; i < Math.min(origLines.length, replLines.length); i++) {
+          if (origLines[i] === replLines[i]) {
+            cur++;
+            if (cur > longestUnchangedRun) longestUnchangedRun = cur;
+          } else {
+            if (cur > 0) unchangedRuns++;
+            cur = 0;
+          }
+        }
+        if (cur > 0) unchangedRuns++;
+        return {
+          id: e.id,
+          origLen: e.original.length,
+          replLen: e.replacement.length,
+          origLines: origLines.length,
+          replLines: replLines.length,
+          unchangedRuns,
+          longestUnchangedRun,
+        };
+      });
+    fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0aa8fe' }, body: JSON.stringify({ sessionId: '0aa8fe', location: 'proposedEdit.ts:parseProposedEdits-exit', message: 'parseProposedEdits done', data: { editCount: summary.length, summary }, runId: 'card-split', hypothesisId: 'H3', timestamp: Date.now() }) }).catch(() => {});
+  } catch {}
+  // #endregion
   return segments;
 }
 
@@ -212,6 +254,11 @@ export function findEditAnchor(
   content: string,
   original: string
 ): { idx: number; length: number } | null {
+  // #region agent log
+  try {
+    fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0aa8fe' }, body: JSON.stringify({ sessionId: '0aa8fe', location: 'proposedEdit.ts:findEditAnchor-entry', message: 'findEditAnchor invoked', data: { contentLen: content.length, originalLen: original.length }, runId: 'audit', hypothesisId: 'H1', timestamp: Date.now() }) }).catch(() => {});
+  } catch {}
+  // #endregion
   if (!content) return null;
   // An empty `original` would `indexOf` to 0 in every string, so the
   // card would always render as "found". Reject that explicitly so the
@@ -286,7 +333,7 @@ export function findEditAnchor(
             if (j !== -1) {
               // #region agent log
               try {
-                fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3b8107'},body:JSON.stringify({sessionId:'3b8107',location:'proposedEdit.ts:findEditAnchor',message:'matched',data:{variant:'setext-body',matchedLen:j+bodyHead.length-i,originalLen:original.length,docIdx:i,titleOnly,bodyHead},runId:'post-fix-2',hypothesisId:'H6',timestamp:Date.now()})}).catch(()=>{});
+                fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0aa8fe' }, body: JSON.stringify({ sessionId: '0aa8fe', location: 'proposedEdit.ts:findEditAnchor-setext-body', message: 'setext-body path entered (would leak titleOnly + bodyHead)', data: { titleOnlyLen: titleOnly.length, bodyHeadLen: bodyHead.length }, runId: 'audit', hypothesisId: 'H1', timestamp: Date.now() }) }).catch(() => {});
               } catch {}
               // #endregion
               return { idx: i, length: j + bodyHead.length - i };
@@ -380,6 +427,11 @@ export function findEditAnchor(
            original[prefixMatch] === content[prefixMatch]) {
       prefixMatch++;
     }
+    // #region agent log
+    try {
+      fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0aa8fe' }, body: JSON.stringify({ sessionId: '0aa8fe', location: 'proposedEdit.ts:findEditAnchor-no-match', message: 'no-match path entered (would leak originalHead + docHead + docSnippetAt0)', data: { originalLen: original.length, contentLen: content.length, docAt, prefixMatch }, runId: 'audit', hypothesisId: 'H1', timestamp: Date.now() }) }).catch(() => {});
+    } catch {}
+    // #endregion
     fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3b8107'},body:JSON.stringify({sessionId:'3b8107',location:'proposedEdit.ts:findEditAnchor',message:'no match found',data:{originalLen:original.length,originalHead:original.slice(0,120),originalHasSetext:/^[^\n]+\n[=-]{2,}\n/.test(original),originalHasAtx:/^#{1,6}\s/.test(original),docLen:content.length,probe,probeDocAt:docAt,prefixMatch,firstDiffOriginalChar:original[prefixMatch]||null,firstDiffDocChar:content[prefixMatch]||null,docHead:content.slice(0,200),docSnippetAt0:content.slice(0,prefixMatch+50)},runId:'post-fix-4',hypothesisId:'H8',timestamp:Date.now()})}).catch(()=>{});
   } catch {}
   // #endregion

@@ -293,7 +293,7 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
         </span>
         {/* View-mode toggle: side-by-side vs inline. */}
         <div
-          className="ml-auto inline-flex rounded border border-gray-300 dark:border-gray-700 overflow-hidden text-[10px] font-mono"
+          className="ml-auto inline-flex rounded border border-paper-hairline dark:border-cyber-border overflow-hidden text-[10px] font-mono"
           role="tablist"
           aria-label="Diff view mode"
         >
@@ -303,8 +303,8 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
             aria-selected={viewMode === 'split'}
             className={`px-1.5 py-0.5 ${
               viewMode === 'split'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                ? 'bg-cyber-clay text-paper-base dark:bg-ape-fire dark:text-white font-semibold'
+                : 'bg-white dark:bg-ape-base text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan'
             }`}
             onClick={() => setViewMode('split')}
             title="Side-by-side: original on the left, proposed on the right"
@@ -315,10 +315,10 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
             type="button"
             role="tab"
             aria-selected={viewMode === 'unified'}
-            className={`px-1.5 py-0.5 border-l border-gray-300 dark:border-gray-700 ${
+            className={`px-1.5 py-0.5 border-l border-paper-hairline dark:border-cyber-border ${
               viewMode === 'unified'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                ? 'bg-cyber-clay text-paper-base dark:bg-ape-fire dark:text-white font-semibold'
+                : 'bg-white dark:bg-ape-base text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan'
             }`}
             onClick={() => setViewMode('unified')}
             title="Inline unified diff"
@@ -331,23 +331,23 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
       <div className="pe-diff flex-1 min-h-0">
         {!anchorInfo.found && (
           <div
-            className="mb-2 py-1.5 px-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-[11px] leading-snug text-amber-800 dark:text-amber-200"
+            className="mb-2 py-1.5 px-2 rounded border border-cyber-warn/50 bg-cyber-warn/10 text-[11px] leading-snug text-cyber-warn"
             role="status"
           >
-            <div className="font-semibold mb-0.5">
+            <div className="font-semibold mb-0.5 text-cyber-warn">
               Potential mismatch detected
             </div>
-            <div>
+            <div className="text-paper-inkSoft dark:text-cyber-muted">
               The AI&rsquo;s original quote doesn&rsquo;t appear in the
               current document &mdash; it may have been edited since this
               reply was generated, or the AI quoted a different wording.
               Normal Apply is unavailable; click in the editor, then use
-              <span className="font-semibold"> Force-apply</span>.
+              <span className="font-semibold text-cyber-warn"> Force-apply</span>.
             </div>
           </div>
         )}
         {flatDiff.length === 0 || (viewMode === 'unified' && unifiedLines.length === 0) ? (
-          <div className="text-xs text-gray-500 dark:text-gray-400 italic">
+          <div className="text-xs text-paper-inkSoft dark:text-cyber-muted italic px-3">
             (no textual change)
           </div>
         ) : viewMode === 'split' ? (
@@ -374,7 +374,7 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
           </div>
         )}
         {!anchorInfo.found && (
-          <div className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 italic">
+          <div className="mt-1 px-3 text-[10px] text-paper-inkSoft dark:text-cyber-muted italic">
             Not anchored to current text &mdash; applying uses Force-apply.
           </div>
         )}
@@ -383,7 +383,7 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
       <div className="pe-actions shrink-0">
         <button
           type="button"
-          className="text-xs px-2 py-1 rounded text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+          className="btn-ghost-sm"
           onClick={handleReject}
           disabled={status.kind === 'applied'}
           title="Dismiss this proposed change"
@@ -392,7 +392,7 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
         </button>
         <button
           type="button"
-          className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-fire-sm"
           onClick={handleApply}
           disabled={disabled}
           title={
@@ -407,7 +407,7 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
         </button>
         <button
           type="button"
-          className="text-xs px-2 py-1 rounded border border-amber-500 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="text-xs px-2 py-1 rounded font-medium border border-cyber-warn/60 text-cyber-warn bg-cyber-warn/5 transition-colors hover:bg-cyber-warn/15 disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleForceApply}
           disabled={!canForceApply}
           title={
@@ -430,7 +430,7 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
       <div className="pe-comment shrink-0">
         <label
           htmlFor={`pe-comment-${messageId}-${edit.id}`}
-          className="block text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1"
+          className="block text-[10px] uppercase tracking-wide text-cyber-clay dark:text-cyber-cyan mb-1"
         >
           Comment (optional)
         </label>
@@ -442,21 +442,21 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
           readOnly={!!staged}
           placeholder="Why reject? (sent to the AI as revision feedback)"
           rows={2}
-          className={`w-full p-1.5 border rounded bg-white dark:bg-gray-900 text-xs outline-none focus:ring-1 focus:ring-blue-500 resize-none ${
+          className={`w-full p-1.5 rounded text-xs outline-none resize-none transition-colors ${
             staged
-              ? 'border-blue-400 dark:border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 cursor-default'
-              : 'border-gray-300 dark:border-gray-700'
+              ? 'border border-cyber-clay/50 dark:border-cyber-cyan/60 bg-cyber-clay/5 dark:bg-cyber-cyan/10 text-cyber-clay dark:text-cyber-cyan cursor-default'
+              : 'ape-field focus:ring-1 focus:ring-cyber-clay dark:focus:ring-cyber-cyan'
           }`}
         />
         <div className="mt-1.5 flex items-center justify-between gap-2">
-          <span className="text-[10px] text-gray-500 dark:text-gray-400">
+          <span className="text-[10px] text-paper-inkSoft dark:text-cyber-muted">
             {staged
               ? 'Staged. Click "Send rejection comments" in the message footer to send.'
               : 'Tip — leave empty to use plain Reject.'}
           </span>
           <button
             type="button"
-            className="text-xs px-2 py-1 rounded border border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-cyan-sm disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleRejectWithFeedback}
             disabled={status.kind === 'applied' || !comment.trim() || staged}
             title={
@@ -475,10 +475,10 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
       )}
       {!anchorInfo.found && edit.original && (
         <details className="pe-status text-[11px] opacity-90 mt-1">
-          <summary className="cursor-pointer select-none">
+          <summary className="cursor-pointer select-none text-paper-inkSoft dark:text-cyber-muted">
             Show what the AI was looking for
           </summary>
-          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-black/10 p-2 text-[11px] leading-snug dark:bg-white/10">
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-white dark:bg-ape-base p-2 text-[11px] leading-snug text-paper-ink dark:text-cyber-primary border border-paper-hairline dark:border-cyber-border">
             {edit.original.length > 800
               ? edit.original.slice(0, 800) + '\n…(truncated)'
               : edit.original}
@@ -510,10 +510,10 @@ function renderSplit(rows: ReturnType<typeof splitDiff>) {
   return (
     <div className="grid grid-cols-2 font-mono text-xs">
       {/* Column headers */}
-      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#a83232] dark:text-cyber-danger/80 border-b border-r border-paper-hairline dark:border-cyber-border bg-[rgba(190,50,50,0.06)] dark:bg-cyber-danger/5">
         Original
       </div>
-      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#1f6f3e] dark:text-cyber-green/80 border-b border-paper-hairline dark:border-cyber-border bg-[rgba(0,130,70,0.08)] dark:bg-cyber-green/5">
         Proposed
       </div>
       {/* Diff rows */}
@@ -536,36 +536,38 @@ function SplitRowView({
 }) {
   const leftKind = row.left?.kind ?? null;
   const rightKind = row.right?.kind ?? null;
+  // Light mode: very soft sage / brick washes. Dark mode: same opacity
+  // ratios on dark panels.
   const leftBg =
     leftKind === 'remove'
-      ? 'bg-red-50 dark:bg-red-900/30'
+      ? 'bg-[rgba(190,50,50,0.10)] dark:bg-cyber-danger/15'
       : leftKind === 'context'
-        ? 'bg-white dark:bg-gray-900'
-        : 'bg-gray-50 dark:bg-gray-800/40';
+        ? 'bg-paper-panel dark:bg-ape-panel'
+        : 'bg-paper-elevated/50 dark:bg-ape-elevated/40';
   const rightBg =
     rightKind === 'add'
-      ? 'bg-green-50 dark:bg-green-900/30'
+      ? 'bg-[rgba(0,130,70,0.12)] dark:bg-cyber-green/15'
       : rightKind === 'context'
-        ? 'bg-white dark:bg-gray-900'
-        : 'bg-gray-50 dark:bg-gray-800/40';
+        ? 'bg-paper-panel dark:bg-ape-panel'
+        : 'bg-paper-elevated/50 dark:bg-ape-elevated/40';
   const leftText =
     leftKind === 'remove'
-      ? 'line-through opacity-80'
+      ? 'line-through opacity-80 text-[#a83232] dark:text-cyber-danger'
       : leftKind === 'context'
-        ? 'opacity-90'
-        : '';
+        ? 'opacity-90 text-paper-ink dark:text-cyber-primary'
+        : 'text-paper-inkSoft dark:text-cyber-muted';
   const rightText =
     rightKind === 'add'
-      ? 'opacity-90'
+      ? 'opacity-90 text-[#1f6f3e] dark:text-cyber-green'
       : rightKind === 'context'
-        ? 'opacity-90'
-        : '';
+        ? 'opacity-90 text-paper-ink dark:text-cyber-primary'
+        : 'text-paper-inkSoft dark:text-cyber-muted';
   const leftMarker = leftKind === 'remove' ? '-' : leftKind === 'context' ? ' ' : '';
   const rightMarker = rightKind === 'add' ? '+' : rightKind === 'context' ? ' ' : '';
   return (
     <>
       <div
-        className={`flex items-start gap-2 px-2 py-0.5 border-r border-gray-200 dark:border-gray-800 ${leftBg}`}
+        className={`flex items-start gap-2 px-2 py-0.5 border-r border-paper-hairline dark:border-cyber-border ${leftBg}`}
       >
         <span className="inline-block w-3 shrink-0 select-none opacity-60">
           {leftMarker}

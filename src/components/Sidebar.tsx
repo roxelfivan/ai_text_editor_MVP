@@ -55,16 +55,16 @@ export function Sidebar() {
   return (
     <div ref={containerRef} className="relative shrink-0" style={{ width }}>
       <aside
-        className="h-full border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50 dark:bg-gray-900"
+        className="h-full border-r border-paper-hairline dark:border-cyber-border flex flex-col bg-paper-panel dark:bg-ape-panel"
         style={{ width: '100%' }}
       >
-        <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-          <span className="text-sm font-semibold tracking-wide uppercase text-gray-500 dark:text-gray-400">
+        <div className="px-3 py-2 border-b border-paper-hairline dark:border-cyber-border flex items-center justify-between bg-paper-elevated/50 dark:bg-ape-elevated/40">
+          <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-cyber-clay dark:text-cyber-cyan">
             Documents
           </span>
           <button
             onClick={() => createDocument()}
-            className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+            className="btn-fire-sm"
             title="New document"
           >
             + New
@@ -72,7 +72,7 @@ export function Sidebar() {
         </div>
         <ul className="flex-1 overflow-y-auto py-1">
           {documents.length === 0 && (
-            <li className="px-3 py-4 text-sm text-gray-500">No documents yet.</li>
+            <li className="px-3 py-4 text-sm text-paper-inkSoft dark:text-cyber-muted">No documents yet.</li>
           )}
           {documents.map((doc) => {
             const active = doc.id === currentId;
@@ -80,10 +80,10 @@ export function Sidebar() {
             return (
               <li
                 key={doc.id}
-                className={`group flex items-center gap-1 px-2 py-1 mx-1 my-0.5 rounded cursor-pointer ${
+                className={`group flex items-center gap-1 px-2 py-1 mx-1 my-0.5 rounded cursor-pointer border-l-2 transition-colors ${
                   active
-                    ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-900 dark:text-blue-100'
-                    : 'hover:bg-gray-200 dark:hover:bg-gray-800'
+                    ? 'bg-paper-elevated text-cyber-clay dark:bg-ape-elevated dark:text-cyber-cyan border-cyber-clay dark:border-cyber-cyan'
+                    : 'border-transparent text-paper-ink dark:text-cyber-primary hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:border-paper-hairline dark:hover:border-cyber-border'
                 }`}
                 onClick={() => {
                   if (!isEditing) setCurrentDocument(doc.id);
@@ -106,7 +106,7 @@ export function Sidebar() {
                         setEditingId(null);
                       }
                     }}
-                    className="flex-1 bg-white dark:bg-gray-800 border border-blue-400 rounded px-1 text-sm"
+                    className="flex-1 bg-white dark:bg-ape-base border border-cyber-clay dark:border-cyber-cyan text-paper-ink dark:text-cyber-primary rounded px-1 text-sm outline-none focus:border-cyber-clay dark:focus:shadow-ape-glow-soft"
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
@@ -123,7 +123,7 @@ export function Sidebar() {
                 )}
                 <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5">
                   <button
-                    className="text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 text-xs px-1"
+                    className="text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-clay dark:hover:text-cyber-cyan text-xs px-1"
                     title="Rename"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -134,7 +134,7 @@ export function Sidebar() {
                     ✎
                   </button>
                   <button
-                    className="text-gray-500 hover:text-red-600 text-xs px-1"
+                    className="text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-danger text-xs px-1"
                     title="Delete"
                     onClick={(e) => {
                       e.stopPropagation();

@@ -140,7 +140,7 @@ export function PhotoImportButton({ disabled = false }: PhotoImportButtonProps) 
       <button
         type="button"
         data-photo-import-toggle
-        className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+        className="btn-cyan-sm disabled:opacity-50"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled || busy}
         title="Import text from photos (in-browser OCR)"
@@ -150,10 +150,12 @@ export function PhotoImportButton({ disabled = false }: PhotoImportButtonProps) 
       {open && !busy && (
         <div
           ref={popoverRef}
-          className="absolute right-0 top-full mt-1 z-30 w-72 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded shadow-lg p-3 text-xs space-y-2"
+          className="absolute right-0 top-full mt-1 z-30 w-72 bg-paper-panel dark:bg-ape-panel border border-paper-hairline dark:border-cyber-border rounded shadow-ape-paper-lift dark:shadow-lg p-3 text-xs space-y-2"
         >
-          <div className="font-semibold text-sm">OCR languages</div>
-          <p className="text-gray-500 dark:text-gray-400 leading-snug">
+          <div className="font-semibold text-sm text-cyber-clay dark:text-cyber-cyan uppercase tracking-wide">
+            OCR languages
+          </div>
+          <p className="text-paper-inkSoft dark:text-cyber-muted leading-snug">
             Pick one or more images or PDF files. PDFs with selectable
             text are read directly (no OCR); scanned PDFs and photos are
             recognized entirely in the browser — nothing is uploaded.
@@ -165,58 +167,59 @@ export function PhotoImportButton({ disabled = false }: PhotoImportButtonProps) 
               return (
                 <label
                   key={opt.code}
-                  className="flex items-center gap-2 cursor-pointer select-none"
+                  className="flex items-center gap-2 cursor-pointer select-none text-paper-ink dark:text-cyber-primary"
                 >
                   <input
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggleLang(opt.code)}
                     disabled={lastOne}
+                    className="accent-cyber-clay dark:accent-cyber-cyan"
                   />
                   <span>{opt.label}</span>
                 </label>
               );
             })}
           </div>
-          <div className="text-[11px] text-gray-500 dark:text-gray-400">
+          <div className="text-[11px] text-paper-inkSoft dark:text-cyber-muted font-mono">
             Strategy: {strategyLabel}.
           </div>
           <div className="flex items-center justify-end gap-2 pt-1">
             <button
               type="button"
-              className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="btn-cyan-sm"
               onClick={() => setOpen(false)}
             >
               Close
             </button>
             <button
               type="button"
-              className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+              className="btn-fire-sm"
               onClick={onPickClick}
             >
-              Choose photos…
+              Choose Import File(s)
             </button>
           </div>
           {error && (
-            <div className="text-[11px] text-red-600 dark:text-red-400">
+            <div className="text-[11px] text-cyber-danger">
               {error}
             </div>
           )}
         </div>
       )}
       {busy && progress && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-72 bg-white dark:bg-gray-900 border border-blue-300 dark:border-blue-700 rounded shadow-lg px-3 py-2 text-xs">
+        <div className="absolute right-0 top-full mt-1 z-30 w-72 bg-paper-panel dark:bg-ape-panel border border-cyber-clay/40 dark:border-cyber-cyan/60 rounded shadow-ape-paper-lift dark:shadow-lg px-3 py-2 text-xs">
           <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            <span className="flex-1 truncate">{statusLabel}</span>
-            <span className="text-gray-500">
+            <span className="inline-block w-2 h-2 rounded-full bg-cyber-clay dark:bg-cyber-cyan animate-pulse" />
+            <span className="flex-1 truncate text-paper-ink dark:text-cyber-primary">{statusLabel}</span>
+            <span className="text-paper-inkSoft dark:text-cyber-muted font-mono">
               {progress.done}/{progress.total}
             </span>
           </div>
         </div>
       )}
       {error && !open && !busy && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-72 bg-white dark:bg-gray-900 border border-red-300 dark:border-red-700 rounded shadow-lg px-3 py-2 text-xs text-red-600 dark:text-red-400">
+        <div className="absolute right-0 top-full mt-1 z-30 w-72 bg-paper-panel dark:bg-ape-panel border border-cyber-danger/40 dark:border-cyber-danger/60 rounded shadow-ape-paper-lift dark:shadow-lg px-3 py-2 text-xs text-cyber-danger">
           {error}
         </div>
       )}

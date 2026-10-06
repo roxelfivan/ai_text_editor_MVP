@@ -60,7 +60,7 @@ export function EdgeAnchor({ side, collapsed, label, onClick }: Props) {
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`edge-anchor group absolute z-30 flex items-center justify-center bg-white/90 dark:bg-gray-900/90 border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 dark:hover:border-blue-700 shadow-sm transition-colors ${positionClasses}`}
+      className={`edge-anchor group absolute z-30 flex items-center justify-center bg-paper-panel/90 dark:bg-ape-panel/90 border border-paper-hairline dark:border-cyber-border text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-clay dark:hover:text-cyber-cyan hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:border-cyber-clay dark:hover:border-cyber-cyan shadow-sm transition-colors ${positionClasses}`}
     >
       <span className="text-base leading-none font-semibold select-none">
         {chevron}

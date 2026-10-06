@@ -76,13 +76,15 @@ export function PromptLibrary({ onApply, open, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-lg shadow-xl flex flex-col max-h-[85vh]">
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center">
-          <h2 className="font-semibold">Prompt library</h2>
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="w-full max-w-2xl bg-paper-panel dark:bg-ape-panel rounded-lg shadow-ape-paper-lift dark:shadow-2xl border border-paper-hairline dark:border-cyber-border flex flex-col max-h-[85vh]">
+        <div className="px-4 py-3 border-b border-paper-hairline dark:border-cyber-border flex items-center bg-paper-elevated/50 dark:bg-ape-elevated/50">
+          <h2 className="font-semibold text-cyber-clay dark:text-cyber-cyan uppercase tracking-wider text-sm">
+            Prompt library
+          </h2>
           <div className="flex-1" />
           <button
-            className="text-gray-500 hover:text-gray-900 dark:hover:text-gray-100"
+            className="text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors text-lg leading-none"
             onClick={onClose}
             title="Close"
           >
@@ -90,16 +92,16 @@ export function PromptLibrary({ onApply, open, onClose }: Props) {
           </button>
         </div>
 
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+        <div className="px-4 py-3 border-b border-paper-hairline dark:border-cyber-border bg-paper-base dark:bg-ape-base">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <input
-              className="sm:col-span-1 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-blue-500"
+              className="sm:col-span-1 ape-field"
               placeholder="Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
             <textarea
-              className="sm:col-span-2 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-blue-500 resize-none h-16"
+              className="sm:col-span-2 ape-field resize-none h-16"
               placeholder="Prompt body. Use {{selection}} to interpolate the editor selection."
               value={body}
               onChange={(e) => setBody(e.target.value)}
@@ -108,14 +110,14 @@ export function PromptLibrary({ onApply, open, onClose }: Props) {
           <div className="mt-2 flex justify-end gap-2">
             {editingId && (
               <button
-                className="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="btn-ghost-sm"
                 onClick={cancelEdit}
               >
                 Cancel
               </button>
             )}
             <button
-              className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+              className="btn-fire-sm"
               onClick={save}
               disabled={!body.trim()}
             >
@@ -124,20 +126,20 @@ export function PromptLibrary({ onApply, open, onClose }: Props) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-paper-base dark:bg-ape-base">
           {prompts.length === 0 && (
-            <p className="text-sm text-gray-500">No prompts yet.</p>
+            <p className="text-sm text-paper-inkSoft dark:text-cyber-muted">No prompts yet.</p>
           )}
           {prompts.map((p) => (
             <div
               key={p.id}
-              className="border border-gray-200 dark:border-gray-800 rounded p-3"
+              className="border border-paper-hairline dark:border-cyber-border rounded p-3 bg-paper-panel dark:bg-ape-panel hover:border-cyber-clay/40 dark:hover:border-cyber-cyan/50 transition-colors"
             >
               <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">{p.name}</span>
+                <span className="font-medium text-sm text-paper-ink dark:text-cyber-primary">{p.name}</span>
                 <div className="flex-1" />
                 <button
-                  className="text-xs px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700"
+                  className="btn-fire-sm"
                   onClick={() => {
                     const sel = readSelection();
                     onApply?.(resolveBody(p.body, sel));
@@ -146,13 +148,13 @@ export function PromptLibrary({ onApply, open, onClose }: Props) {
                   Use
                 </button>
                 <button
-                  className="text-xs px-2 py-0.5 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className="btn-cyan-sm"
                   onClick={() => startEdit(p.id)}
                 >
                   Edit
                 </button>
                 <button
-                  className="text-xs px-2 py-0.5 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                  className="btn-danger-sm"
                   onClick={() => {
                     if (confirm(`Delete prompt "${p.name}"?`)) deletePrompt(p.id);
                   }}
@@ -160,7 +162,7 @@ export function PromptLibrary({ onApply, open, onClose }: Props) {
                   Delete
                 </button>
               </div>
-              <p className="mt-1 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+              <p className="mt-1 text-sm text-paper-inkSoft dark:text-cyber-muted whitespace-pre-wrap">
                 {p.body}
               </p>
             </div>

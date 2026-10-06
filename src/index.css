@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =========================================================================
+   ApEditor design system
+   -------------------------------------------------------------------------
+   Two themes driven by the `.dark` class on <html>:
+     DARK (default)  — cyberpunk: pure black, neon cyan, plum primary CTA.
+     LIGHT           — Muji: warm cream paper, kraft panels, sumi ink,
+                       deep-espresso primary CTA. No glow, no gradient,
+                       no shadow. Clean & focused.
+
+   Component classes (.btn-fire, .btn-cyan, .ape-field, …) use the dark
+   palette as their base and add a `dark:` (or `html:not(.dark)`) block
+   that swaps in the Muji tokens. Surfaces that only make sense in one
+   theme (prose heading colour, brand-mark glow, etc.) are scoped under
+   `html.dark` or `html:not(.dark)` so they don't bleed across themes.
+   ========================================================================= */
+
 html,
 body,
 #root {
@@ -9,31 +25,175 @@ body,
   margin: 0;
 }
 
+/* ---------- Page background / body text ---------- */
 body {
-  @apply bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
+  @apply bg-paper-base text-paper-ink antialiased;
+}
+html.dark body {
+  @apply bg-ape-base text-cyber-primary;
 }
 
-/* Simple scrollbar */
+/* ---------- Reusable text glow (dark only) ---------- */
+.text-glow-cyan {
+  text-shadow: 0 0 10px rgba(0, 229, 229, 0.55), 0 0 2px rgba(0, 229, 229, 0.7);
+}
+.text-glow-green {
+  text-shadow: 0 0 10px rgba(0, 255, 122, 0.55), 0 0 2px rgba(0, 255, 122, 0.7);
+}
+html:not(.dark) .text-glow-cyan,
+html:not(.dark) .text-glow-green {
+  /* Muji has no glow; keep the wordmark quietly sumi-ink instead. */
+  text-shadow: none;
+}
+
+/* =========================================================================
+   Buttons
+   -------------------------------------------------------------------------
+   Base: outlined-minimal pill on warm cream, no shadow, no gradient.
+   Dark: cyan- or plum-coloured button with subtle glow / gradient.
+   ========================================================================= */
+@layer components {
+  /* Primary CTA — DARK: plum gradient with a soft glow.
+                     LIGHT: deep-espresso solid pill, no glow, no shadow. */
+  .btn-fire {
+    @apply inline-flex items-center justify-center gap-1 rounded px-3 py-1.5
+           text-sm font-semibold
+           border border-transparent
+           transition-colors duration-150
+           active:translate-y-px
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    /* Light defaults (Muji) */
+    @apply bg-cyber-clay text-paper-base hover:bg-cyber-claySoft
+           border-cyber-clay/40;
+  }
+  html.dark .btn-fire {
+    @apply text-white bg-ape-fire shadow-ape-fire-soft
+           hover:bg-ape-fire-hover hover:shadow-ape-fire
+           border-cyber-fire/40;
+  }
+  .btn-fire-sm {
+    @apply btn-fire text-xs px-2 py-1;
+  }
+
+  /* Secondary CTA — DARK: cyan outline with glow.
+                     LIGHT: hairline sumi-ink outline, no glow. */
+  .btn-cyan {
+    @apply inline-flex items-center justify-center gap-1 rounded px-3 py-1.5
+           text-sm font-medium
+           border border-cyber-clay/35 text-cyber-clay
+           bg-transparent
+           transition-colors duration-150
+           hover:bg-cyber-clay/5 hover:border-cyber-clay
+           active:translate-y-px
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  html.dark .btn-cyan {
+    @apply text-cyber-cyan border-cyber-cyan/40 bg-cyber-cyan/5
+           hover:bg-cyber-cyan/15 hover:border-cyber-cyan
+           hover:shadow-ape-glow-soft hover:text-cyber-cyanSoft;
+  }
+  .btn-cyan-sm {
+    @apply btn-cyan text-xs px-2 py-1;
+  }
+
+  /* Ghost — DARK: muted on dark panel.
+                LIGHT: muted on paper panel. */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1 rounded px-3 py-1.5
+           text-sm font-medium
+           text-paper-inkSoft
+           transition-colors duration-150
+           hover:bg-paper-elevated hover:text-paper-ink;
+  }
+  html.dark .btn-ghost {
+    @apply text-cyber-muted hover:bg-ape-elevated hover:text-cyber-primary;
+  }
+  .btn-ghost-sm {
+    @apply btn-ghost text-xs px-2 py-1;
+  }
+
+  /* Danger — DARK: red outline on dark.
+                LIGHT: muted brick outline on paper. */
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-1 rounded px-3 py-1.5
+           text-sm font-medium
+           text-cyber-danger
+           border border-cyber-danger/45
+           bg-transparent
+           transition-colors duration-150
+           hover:bg-cyber-danger/10 hover:border-cyber-danger;
+  }
+  html.dark .btn-danger {
+    @apply bg-cyber-danger/5;
+  }
+  .btn-danger-sm {
+    @apply btn-danger text-xs px-2 py-1;
+  }
+
+  /* Form field — DARK: black input with cyan focus ring.
+                   LIGHT: white paper input with hairline + ink focus. */
+  .ape-field {
+    @apply w-full px-2 py-1.5 rounded
+           bg-white
+           border border-paper-hairline
+           text-paper-ink
+           outline-none
+           transition-colors duration-150
+           focus:border-cyber-clay
+           placeholder:text-paper-inkSoft/70;
+  }
+  html.dark .ape-field {
+    @apply bg-ape-base border-cyber-border text-cyber-primary
+           focus:border-cyber-cyan focus:shadow-ape-glow-soft
+           placeholder:text-cyber-muted/70;
+  }
+
+  /* Topbar logo sizing helper. */
+  .brand-mark {
+    @apply h-14 w-auto select-none;
+  }
+  .brand-mark-sm {
+    @apply h-10 w-auto select-none;
+  }
+}
+
+/* =========================================================================
+   Scrollbar
+   ========================================================================= */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 dark:bg-gray-700 rounded;
+  @apply bg-paper-hairline rounded;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-cyber-clay/40;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+html.dark ::-webkit-scrollbar-thumb {
+  @apply bg-cyber-border;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  @apply bg-cyber-cyan/30;
+}
 
-/* Markdown preview tweaks */
+/* =========================================================================
+   Markdown preview
+   ========================================================================= */
+.prose-md {
+  @apply text-paper-ink;
+}
 .prose-md h1 {
-  @apply text-2xl font-semibold mt-4 mb-2;
+  @apply text-2xl font-semibold mt-4 mb-2 text-paper-ink;
 }
 .prose-md h2 {
-  @apply text-xl font-semibold mt-3 mb-2;
+  @apply text-xl font-semibold mt-3 mb-2 text-paper-ink;
 }
 .prose-md h3 {
-  @apply text-lg font-semibold mt-3 mb-1;
+  @apply text-lg font-semibold mt-3 mb-1 text-paper-inkSoft;
 }
 .prose-md p {
   @apply my-2 leading-relaxed;
@@ -45,116 +205,227 @@ body {
   @apply list-decimal pl-6 my-2;
 }
 .prose-md code {
-  @apply bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5 font-mono text-sm;
+  @apply bg-paper-elevated text-cyber-clay rounded px-1 py-0.5 font-mono text-sm;
 }
 .prose-md pre {
-  @apply bg-gray-100 dark:bg-gray-800 rounded p-3 overflow-x-auto text-sm;
+  @apply bg-paper-elevated text-paper-ink rounded p-3 overflow-x-auto text-sm border border-paper-hairline;
 }
 .prose-md pre code {
-  @apply bg-transparent p-0;
+  @apply bg-transparent p-0 text-paper-ink;
 }
 .prose-md blockquote {
-  @apply border-l-4 border-gray-300 dark:border-gray-700 pl-3 italic my-2;
+  @apply border-l-4 border-paper-hairline pl-3 italic my-2 text-paper-inkSoft;
 }
 .prose-md a {
-  @apply text-blue-600 dark:text-blue-400 underline;
+  @apply text-cyber-clay underline decoration-cyber-clay/40 underline-offset-2
+         hover:decoration-cyber-clay;
 }
 .prose-md table {
   @apply border-collapse my-2;
 }
 .prose-md th,
 .prose-md td {
-  @apply border border-gray-300 dark:border-gray-700 px-2 py-1;
+  @apply border border-paper-hairline px-2 py-1;
+}
+.prose-md hr {
+  @apply border-paper-hairline my-4;
+}
+.prose-md strong {
+  @apply text-paper-ink font-semibold;
+}
+html.dark .prose-md {
+  @apply text-cyber-primary;
+}
+html.dark .prose-md h1,
+html.dark .prose-md h2,
+html.dark .prose-md h3 {
+  @apply text-cyber-cyan;
+}
+html.dark .prose-md h3 {
+  @apply text-cyber-cyan/90;
+}
+html.dark .prose-md code {
+  @apply bg-ape-elevated text-cyber-cyan;
+}
+html.dark .prose-md pre {
+  @apply bg-ape-elevated text-cyber-primary border-cyber-border;
+}
+html.dark .prose-md pre code {
+  @apply bg-transparent text-cyber-primary;
+}
+html.dark .prose-md blockquote {
+  @apply border-cyber-cyan/40 text-cyber-muted;
+}
+html.dark .prose-md a {
+  @apply text-cyber-cyan decoration-cyber-cyan/40
+         hover:decoration-cyber-cyan hover:text-cyber-cyanSoft;
+}
+html.dark .prose-md th,
+html.dark .prose-md td {
+  @apply border-cyber-border;
+}
+html.dark .prose-md hr {
+  @apply border-cyber-border;
+}
+html.dark .prose-md strong {
+  @apply text-cyber-primary;
 }
 
-/* Diff viewer */
+/* =========================================================================
+   Diff viewer
+   ========================================================================= */
 .diff-add {
-  @apply bg-green-100 dark:bg-green-900/40;
+  @apply bg-cyber-green/15 text-cyber-green;
 }
 .diff-remove {
-  @apply bg-red-100 dark:bg-red-900/40 line-through opacity-80;
+  @apply bg-cyber-danger/15 text-cyber-danger line-through opacity-90;
+}
+html:not(.dark) .diff-add {
+  /* Soft sage wash on paper. */
+  background-color: rgba(0, 130, 70, 0.12);
+  color: #1f6f3e;
+}
+html:not(.dark) .diff-remove {
+  background-color: rgba(190, 50, 50, 0.10);
+  color: #a83232;
 }
 
-/* Proposed edit card (track-changes preview) */
+/* =========================================================================
+   Proposed edit card
+   ========================================================================= */
 .proposed-edit-card {
-  @apply mt-2 rounded-md border border-gray-300 dark:border-gray-700
-    bg-white dark:bg-gray-900 overflow-hidden;
+  @apply mt-2 rounded-md border border-paper-hairline
+    bg-paper-panel overflow-hidden;
   position: relative;
+  box-shadow: 0 1px 0 rgba(43, 38, 32, 0.04);
 }
 .proposed-edit-card .pe-header {
-  @apply px-3 py-2 border-b border-gray-200 dark:border-gray-800
-    bg-gray-50 dark:bg-gray-800/50 flex items-center gap-2;
+  @apply px-3 py-2 border-b border-paper-hairline
+    bg-paper-elevated flex items-center gap-2;
 }
 .proposed-edit-card .pe-summary {
-  @apply text-xs text-gray-700 dark:text-gray-300 flex-1 truncate;
+  @apply text-xs text-paper-ink flex-1 truncate;
 }
 .proposed-edit-card .pe-id {
   @apply text-[10px] font-mono uppercase tracking-wide
-    text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded
-    bg-gray-100 dark:bg-gray-800;
+    text-cyber-clay px-1.5 py-0.5 rounded
+    bg-white border border-paper-hairline;
 }
 .proposed-edit-card .pe-diff {
   @apply py-2 font-mono text-xs overflow-y-auto;
-  /* When the card is intrinsically sized (no inline height set), bound it
-     to a comfortable max. When the card has an explicit pixel height set
-     by the resize logic, .pe-diff is the flex child that fills the rest. */
   max-height: 260px;
   min-height: 0;
 }
-/* The unified diff view needs its own horizontal padding because its rows
-   are plain text blocks, not the grid cells used by the split view. */
 .proposed-edit-card .pe-diff > .pe-diff-unified {
   @apply px-3;
 }
 .proposed-edit-card.pe-card-sized .pe-diff {
-  /* Card has an explicit height from the resize store: let the diff fill
-     any remaining space instead of being capped at 260px. */
   max-height: none;
   flex: 1 1 auto;
 }
 .proposed-edit-card .pe-actions {
-  @apply px-3 py-2 border-t border-gray-200 dark:border-gray-800
+  @apply px-3 py-2 border-t border-paper-hairline
     flex items-center justify-end gap-2;
 }
 .proposed-edit-card .pe-status {
-  @apply px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-t
-    border-gray-200 dark:border-gray-800;
+  @apply px-3 py-1.5 text-xs text-paper-inkSoft border-t
+    border-paper-hairline;
 }
 .proposed-edit-card .pe-status.error {
-  @apply text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40;
+  @apply text-cyber-warn bg-cyber-warn/10;
 }
 .proposed-edit-card .pe-status.applied {
-  @apply text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/40;
+  @apply text-cyber-green bg-cyber-green/10;
 }
 .proposed-edit-card .pe-status.rejected {
-  @apply text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50;
+  @apply text-paper-inkSoft bg-paper-elevated;
 }
 .proposed-edit-card .pe-comment {
-  @apply px-3 py-2 border-t border-gray-200 dark:border-gray-800
-    bg-gray-50 dark:bg-gray-800/30;
+  @apply px-3 py-2 border-t border-paper-hairline
+    bg-paper-elevated/70;
+}
+.proposed-edit-card .pe-split-header {
+  @apply px-2 py-1 text-[10px] uppercase tracking-wide text-paper-inkSoft
+    border-b border-paper-hairline bg-paper-elevated;
+}
+.proposed-edit-card .pe-split-left {
+  background-color: rgba(190, 50, 50, 0.06);
+}
+.proposed-edit-card .pe-split-right {
+  background-color: rgba(0, 130, 70, 0.08);
+}
+.proposed-edit-card .pe-split-context {
+  @apply bg-paper-panel;
+}
+.proposed-edit-card .pe-split-empty {
+  @apply bg-paper-elevated/50;
 }
 
-/* Resize handles (panel dividers + preview card edges/corners) */
+/* Dark overrides for the proposed edit card. */
+html.dark .proposed-edit-card {
+  @apply border-cyber-border bg-ape-panel;
+}
+html.dark .proposed-edit-card .pe-header {
+  @apply border-cyber-border bg-ape-elevated;
+}
+html.dark .proposed-edit-card .pe-summary {
+  @apply text-cyber-primary;
+}
+html.dark .proposed-edit-card .pe-id {
+  @apply text-cyber-cyan bg-ape-base border-cyber-cyan/30;
+}
+html.dark .proposed-edit-card .pe-actions {
+  @apply border-cyber-border;
+}
+html.dark .proposed-edit-card .pe-status {
+  @apply text-cyber-muted border-cyber-border;
+}
+html.dark .proposed-edit-card .pe-status.rejected {
+  @apply text-cyber-muted bg-ape-elevated;
+}
+html.dark .proposed-edit-card .pe-comment {
+  @apply border-cyber-border bg-ape-elevated/60;
+}
+html.dark .proposed-edit-card .pe-split-header {
+  @apply text-cyber-muted border-cyber-border bg-ape-elevated;
+}
+html.dark .proposed-edit-card .pe-split-left {
+  @apply bg-cyber-danger/10;
+}
+html.dark .proposed-edit-card .pe-split-right {
+  @apply bg-cyber-green/10;
+}
+html.dark .proposed-edit-card .pe-split-context {
+  @apply bg-ape-panel;
+}
+html.dark .proposed-edit-card .pe-split-empty {
+  @apply bg-ape-elevated/50;
+}
+
+/* =========================================================================
+   Resize handles + edge-anchors
+   ========================================================================= */
 .resize-handle {
   background-color: transparent;
 }
 .resize-handle:hover,
 .resize-handle:active {
-  background-color: rgba(59, 130, 246, 0.35); /* blue-500/35 */
+  background-color: rgba(59, 42, 31, 0.30); /* clay-tinged on paper */
 }
-.resize-handle-tl,
-.resize-handle-tr,
-.resize-edit-card-corner {
-  /* corners get a slightly larger hit area already from the inline style;
-     this just ensures they stay on top of the body. */
+html.dark .resize-handle:hover,
+html.dark .resize-handle:active {
+  background-color: rgba(0, 229, 229, 0.35); /* cyan in dark mode */
 }
 
-/* Edge-anchor toggles for the sidebar and chat panel. The component
-   itself sets positioning/sizing inline; this just polishes the hover
-   ring and ensures it sits above the editor content (z-30). */
 .edge-anchor {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 2px rgba(43, 38, 32, 0.06);
 }
 .edge-anchor:hover {
-  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 1px 2px rgba(43, 38, 32, 0.10);
+}
+html.dark .edge-anchor {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+html.dark .edge-anchor:hover {
+  box-shadow: 0 0 12px rgba(0, 229, 229, 0.45), 0 1px 4px rgba(0, 0, 0, 0.4);
 }

@@ -28,43 +28,53 @@ function Topbar({
   const api = useStore((s) => s.api);
 
   return (
-    <header className="h-12 px-3 flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-      <span className="font-semibold text-sm">📝 AI Text Editor</span>
-      <span className="text-xs text-gray-500">v{APP_VERSION}</span>
+    <header className="h-20 px-4 flex items-center gap-3 border-b border-paper-hairline dark:border-cyber-border bg-paper-base/90 dark:bg-ape-base/90 backdrop-blur-sm">
+      <img
+        src="/apeditor-logo.jpg"
+        alt="ApEditor"
+        className="brand-mark rounded"
+      />
+      <div className="flex flex-col leading-tight">
+        <span className="text-xs uppercase tracking-[0.25em] font-semibold text-cyber-clay dark:text-cyber-cyan text-glow-cyan">
+          ApEditor
+        </span>
+        <span className="text-[10px] text-paper-inkSoft dark:text-cyber-muted font-mono">v{APP_VERSION}</span>
+      </div>
       {doc && (
-        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300 truncate">
-          · {doc.title}
+        <span className="ml-3 text-sm text-paper-ink dark:text-cyber-primary truncate flex items-center gap-1">
+          <span className="text-paper-inkSoft dark:text-cyber-muted">/</span>
+          <span className="truncate">{doc.title}</span>
         </span>
       )}
       <div className="flex-1" />
       <button
-        className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+        className="btn-cyan-sm"
         onClick={onOpenRevisions}
         title="Revision history"
       >
         History
       </button>
       <button
-        className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+        className="btn-cyan-sm"
         onClick={onOpenPrompts}
         title="Prompt library"
       >
         Prompts
       </button>
       <button
-        className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+        className="btn-cyan-sm"
         onClick={toggleTheme}
         title="Toggle theme"
       >
-        {theme === 'dark' ? '☀' : '☾'}
+        {theme === 'dark' ? '☀ Light' : '☾ Dark'}
       </button>
       <button
-        className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+        className="btn-fire-sm"
         onClick={onOpenSettings}
         title="Settings"
       >
         Settings
-        {!api.apiKey && <span className="ml-1">⚠</span>}
+        {!api.apiKey && <span className="ml-1 opacity-80">⚠</span>}
       </button>
     </header>
   );

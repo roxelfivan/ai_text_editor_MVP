@@ -42,22 +42,24 @@ export function SettingsModal({ open, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-lg shadow-xl flex flex-col">
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center">
-          <h2 className="font-semibold">Settings</h2>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg bg-paper-panel dark:bg-ape-panel rounded-lg shadow-ape-paper-lift dark:shadow-2xl border border-paper-hairline dark:border-cyber-border flex flex-col">
+        <div className="px-4 py-3 border-b border-paper-hairline dark:border-cyber-border flex items-center bg-paper-elevated/50 dark:bg-ape-elevated/50">
+          <h2 className="font-semibold text-cyber-clay dark:text-cyber-cyan uppercase tracking-wider text-sm">
+            Settings
+          </h2>
           <div className="flex-1" />
           <button
-            className="text-gray-500 hover:text-gray-900 dark:hover:text-gray-100"
+            className="text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors text-lg leading-none"
             onClick={onClose}
           >
             ×
           </button>
         </div>
 
-        <div className="p-4 space-y-3 text-sm">
+        <div className="p-4 space-y-3 text-sm bg-paper-base dark:bg-ape-base">
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
               Provider
             </label>
             <select
@@ -73,7 +75,7 @@ export function SettingsModal({ open, onClose }: Props) {
                 setApiEndpoint(nextPreset.defaultEndpoint);
                 setModel(nextPreset.defaultModel);
               }}
-              className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-blue-500"
+              className="ape-field"
             >
               {PROVIDERS.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -84,7 +86,7 @@ export function SettingsModal({ open, onClose }: Props) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
               API key
             </label>
             <div className="flex gap-2">
@@ -93,20 +95,20 @@ export function SettingsModal({ open, onClose }: Props) {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder={preset.apiKeyPlaceholder}
-                className="flex-1 px-2 py-1.5 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-blue-500"
+                className="flex-1 ape-field font-mono"
                 autoComplete="off"
                 spellCheck={false}
               />
               <button
-                className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-700 rounded"
+                className="btn-cyan-sm"
                 onClick={() => setShowKey((v) => !v)}
               >
                 {showKey ? 'Hide' : 'Show'}
               </button>
             </div>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-paper-inkSoft dark:text-cyber-muted">
               Stored only in this browser's localStorage. Sent as
-              <code className="mx-1 px-1 rounded bg-gray-100 dark:bg-gray-800">
+              <code className="mx-1 px-1 rounded bg-paper-elevated dark:bg-ape-elevated text-cyber-clay dark:text-cyber-cyan font-mono text-[11px]">
                 Authorization: Bearer …
               </code>
               .
@@ -114,21 +116,21 @@ export function SettingsModal({ open, onClose }: Props) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
               API endpoint
             </label>
             <input
               value={apiEndpoint}
               onChange={(e) => setApiEndpoint(e.target.value)}
               placeholder={preset.defaultEndpoint}
-              className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-blue-500 font-mono text-xs"
+              className="ape-field font-mono text-xs"
               spellCheck={false}
             />
-            <p className="mt-1 text-xs text-gray-500">{preset.helpText}</p>
+            <p className="mt-1 text-xs text-paper-inkSoft dark:text-cyber-muted">{preset.helpText}</p>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
               Model
             </label>
             <div className="flex gap-2">
@@ -136,7 +138,7 @@ export function SettingsModal({ open, onClose }: Props) {
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 list="mvp-model-list"
-                className="flex-1 px-2 py-1.5 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-blue-500"
+                className="flex-1 ape-field"
                 spellCheck={false}
               />
               <datalist id="mvp-model-list">
@@ -148,21 +150,21 @@ export function SettingsModal({ open, onClose }: Props) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
               System message
             </label>
             <textarea
               value={systemMessage}
               onChange={(e) => setSystemMessage(e.target.value)}
               rows={3}
-              className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+              className="ape-field resize-none"
             />
           </div>
 
           <div>
-            <label className="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label className="flex items-center justify-between text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
               <span>Temperature</span>
-              <span className="font-mono">{temperature.toFixed(2)}</span>
+              <span className="font-mono text-cyber-clay dark:text-cyber-cyan">{temperature.toFixed(2)}</span>
             </label>
             <input
               type="range"
@@ -171,20 +173,20 @@ export function SettingsModal({ open, onClose }: Props) {
               step={0.05}
               value={temperature}
               onChange={(e) => setTemperature(parseFloat(e.target.value))}
-              className="w-full"
+              className="w-full accent-cyber-clay dark:accent-cyber-fire"
             />
           </div>
         </div>
 
-        <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-2">
+        <div className="px-4 py-3 border-t border-paper-hairline dark:border-cyber-border flex justify-end gap-2 bg-paper-elevated/40 dark:bg-ape-elevated/30">
           <button
-            className="text-sm px-3 py-1.5 rounded text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="btn-ghost"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
-            className="text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
+            className="btn-fire"
             onClick={save}
           >
             Save

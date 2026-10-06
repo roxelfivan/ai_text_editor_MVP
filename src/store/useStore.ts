@@ -229,7 +229,7 @@ export const useStore = create<StoreState>()(
       chatCollapsed: false,
       topbarCollapsed: false,
       includeSelection: true,
-      theme: 'light',
+      theme: 'dark',
       api: defaultApiConfig,
       layout: {
         sidebarWidth: 240,

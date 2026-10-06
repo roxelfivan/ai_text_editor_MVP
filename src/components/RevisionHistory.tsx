@@ -27,13 +27,15 @@ export function RevisionHistory({ open, onClose }: Props) {
     : null;
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-5xl h-[85vh] bg-white dark:bg-gray-900 rounded-lg shadow-xl flex flex-col">
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
-          <h2 className="font-semibold">Revisions — {doc.title}</h2>
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="w-full max-w-5xl h-[85vh] bg-paper-panel dark:bg-ape-panel rounded-lg shadow-ape-paper-lift dark:shadow-2xl border border-paper-hairline dark:border-cyber-border flex flex-col">
+        <div className="px-4 py-3 border-b border-paper-hairline dark:border-cyber-border flex items-center gap-2 bg-paper-elevated/50 dark:bg-ape-elevated/50">
+          <h2 className="font-semibold text-cyber-clay dark:text-cyber-cyan uppercase tracking-wider text-sm">
+            Revisions — <span className="text-paper-ink dark:text-cyber-primary normal-case tracking-normal">{doc.title}</span>
+          </h2>
           <div className="flex-1" />
           <button
-            className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="btn-fire-sm"
             onClick={() => {
               setLabelDraft('');
               saveRevision(doc.id, labelDraft || undefined);
@@ -42,7 +44,7 @@ export function RevisionHistory({ open, onClose }: Props) {
             Snapshot now
           </button>
           <button
-            className="text-gray-500 hover:text-gray-900 dark:hover:text-gray-100"
+            className="text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors text-lg leading-none"
             onClick={onClose}
             title="Close"
           >
@@ -51,11 +53,11 @@ export function RevisionHistory({ open, onClose }: Props) {
         </div>
 
         <div className="flex-1 flex min-h-0">
-          <div className="w-64 border-r border-gray-200 dark:border-gray-800 overflow-y-auto">
+          <div className="w-64 border-r border-paper-hairline dark:border-cyber-border overflow-y-auto bg-paper-base dark:bg-ape-base">
             {revisions.length === 0 && (
-              <p className="p-4 text-sm text-gray-500">
-                No revisions yet. Click <em>Snapshot now</em> or use{' '}
-                <em>Save revision</em> in the toolbar.
+              <p className="p-4 text-sm text-paper-inkSoft dark:text-cyber-muted">
+                No revisions yet. Click <em className="text-cyber-clay dark:text-cyber-cyan not-italic font-semibold">Snapshot now</em> or use{' '}
+                <em className="text-cyber-clay dark:text-cyber-cyan not-italic font-semibold">Save revision</em> in the toolbar.
               </p>
             )}
             <ul>
@@ -67,22 +69,22 @@ export function RevisionHistory({ open, onClose }: Props) {
                   return (
                     <li
                       key={r.id}
-                      className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-gray-800 ${
+                      className={`px-3 py-2 cursor-pointer border-b border-paper-hairline dark:border-cyber-border border-l-2 transition-colors ${
                         active
-                          ? 'bg-blue-50 dark:bg-blue-900/30'
-                          : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                          ? 'bg-paper-elevated dark:bg-ape-elevated border-l-cyber-clay dark:border-l-cyber-cyan'
+                          : 'border-l-transparent hover:bg-paper-elevated/60 dark:hover:bg-ape-elevated/60'
                       }`}
                       onClick={() => setSelectedId(r.id)}
                     >
-                      <div className="text-sm font-medium truncate">
+                      <div className="text-sm font-medium truncate text-paper-ink dark:text-cyber-primary">
                         {r.label || 'Snapshot'}
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-paper-inkSoft dark:text-cyber-muted font-mono">
                         {new Date(r.createdAt).toLocaleString()}
                       </div>
                       <div className="mt-1 flex gap-1">
                         <button
-                          className="text-[10px] px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+                          className="btn-cyan-sm text-[10px] px-1.5 py-0.5"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (
@@ -97,7 +99,7 @@ export function RevisionHistory({ open, onClose }: Props) {
                           Restore
                         </button>
                         <button
-                          className="text-[10px] px-1.5 py-0.5 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                          className="btn-danger-sm text-[10px] px-1.5 py-0.5"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (confirm('Delete this revision?'))
@@ -113,18 +115,18 @@ export function RevisionHistory({ open, onClose }: Props) {
             </ul>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 font-mono text-xs">
+          <div className="flex-1 overflow-y-auto p-4 font-mono text-xs bg-paper-base dark:bg-ape-base">
             {!selected && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-paper-inkSoft dark:text-cyber-muted">
                 Select a revision on the left to see a diff against the
                 current document.
               </p>
             )}
             {selected && diff && (
               <div>
-                <div className="mb-2 text-sm text-gray-700 dark:text-gray-300">
-                  Diff: <em>{selected.label || 'Snapshot'}</em> →{' '}
-                  <em>current</em>
+                <div className="mb-2 text-sm text-paper-inkSoft dark:text-cyber-muted">
+                  Diff: <em className="text-paper-ink dark:text-cyber-primary not-italic font-semibold">{selected.label || 'Snapshot'}</em> →{' '}
+                  <em className="text-cyber-clay dark:text-cyber-cyan not-italic font-semibold">current</em>
                 </div>
                 <pre className="whitespace-pre-wrap">
                   {diff.map((line, i) => (
