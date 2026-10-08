@@ -11,6 +11,7 @@ import type {
   Theme,
 } from '@/types';
 import { getProvider } from '@/config/providers';
+import { applyThemeClass } from '@/utils/theme';
 import {
   clamp,
   MIN_SIDEBAR_WIDTH,
@@ -106,6 +107,10 @@ export interface StoreState {
   // Editor view mode: write (textarea) or preview (rendered markdown).
   viewMode: 'write' | 'preview' | 'split';
 
+  // Editor font size in pixels (applies to both the textarea and the
+  // prose preview). Step is 1px; range is [10, 24]. Persisted.
+  editorFontSize: number;
+
   // Whether the chat panel is open.
   chatOpen: boolean;
 
@@ -163,6 +168,7 @@ export interface StoreState {
   deletePrompt: (id: string) => void;
 
   setViewMode: (mode: StoreState['viewMode']) => void;
+  bumpEditorFontSize: (delta: number) => void;
   setChatOpen: (open: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setChatCollapsed: (collapsed: boolean) => void;
@@ -224,12 +230,13 @@ export const useStore = create<StoreState>()(
       revisions: {},
       prompts: seedPrompts,
       viewMode: 'split',
+      editorFontSize: 14,
       chatOpen: true,
       sidebarCollapsed: false,
       chatCollapsed: false,
       topbarCollapsed: false,
       includeSelection: true,
-      theme: 'dark',
+      theme: 'light',
       api: defaultApiConfig,
       layout: {
         sidebarWidth: 240,
@@ -358,6 +365,10 @@ export const useStore = create<StoreState>()(
         set((s) => ({ prompts: s.prompts.filter((p) => p.id !== id) })),
 
       setViewMode: (viewMode) => set({ viewMode }),
+      bumpEditorFontSize: (delta) =>
+        set((s) => ({
+          editorFontSize: clamp(s.editorFontSize + delta, 10, 24),
+        })),
       setChatOpen: (chatOpen) => set({ chatOpen }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setChatCollapsed: (chatCollapsed) => set({ chatCollapsed }),
@@ -366,9 +377,7 @@ export const useStore = create<StoreState>()(
       toggleTheme: () =>
         set((s) => {
           const next: Theme = s.theme === 'light' ? 'dark' : 'light';
-          if (typeof document !== 'undefined') {
-            document.documentElement.classList.toggle('dark', next === 'dark');
-          }
+          applyThemeClass(next);
           return { theme: next };
         }),
       setApi: (patch) => set((s) => ({ api: { ...s.api, ...patch } })),
@@ -406,6 +415,7 @@ export const useStore = create<StoreState>()(
         revisions: s.revisions,
         prompts: s.prompts,
         viewMode: s.viewMode,
+        editorFontSize: s.editorFontSize,
         chatOpen: s.chatOpen,
         sidebarCollapsed: s.sidebarCollapsed,
         chatCollapsed: s.chatCollapsed,
@@ -416,8 +426,8 @@ export const useStore = create<StoreState>()(
         layout: s.layout,
       }),
       onRehydrateStorage: () => (state) => {
-        if (state?.theme === 'dark' && typeof document !== 'undefined') {
-          document.documentElement.classList.add('dark');
+        if (state?.theme) {
+          applyThemeClass(state.theme);
         }
         // Repair any out-of-bounds layout values persisted by older builds
         // (before bounds clamping existed) so the panels can never blow

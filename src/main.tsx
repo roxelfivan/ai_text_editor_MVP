@@ -2,22 +2,25 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import type { Theme } from './types';
+import { applyThemeClass } from './utils/theme';
 
 // Apply persisted theme before first paint. ApEditor's default theme is
-// dark (cyberpunk); if a user has explicitly chosen light, honour that.
+// light (warm cream paper); if a user has explicitly chosen dark, honour
+// that.
 try {
   const raw = localStorage.getItem('ai-text-editor-mvp');
-  let theme: 'dark' | 'light' = 'dark';
+  let theme: Theme = 'light';
   if (raw) {
     const parsed = JSON.parse(raw);
     if (parsed?.state?.theme === 'light' || parsed?.state?.theme === 'dark') {
       theme = parsed.state.theme;
     }
   }
-  document.documentElement.classList.toggle('dark', theme === 'dark');
+  applyThemeClass(theme);
 } catch {
-  // Fall back to dark on any parse error.
-  document.documentElement.classList.add('dark');
+  // Fall back to light on any parse error.
+  applyThemeClass('light');
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

@@ -41,7 +41,7 @@ interface OcrEngine {
 
 // ---------------------------------------------------------------------------
 // Public API (preserved from the Tesseract.js version for compat with the
-// PhotoImportButton component).
+// ImportMediaButton component).
 // ---------------------------------------------------------------------------
 
 export type OcrLang = 'eng' | 'chi_sim' | 'chi_tra';
@@ -316,34 +316,4 @@ export async function extractTextFromFiles(
     onProgress({ done: files.length, total: files.length, label: 'done' });
   }
   return results;
-}
-
-// ---------------------------------------------------------------------------
-// Backward-compat alias for the old Tesseract.js name. PhotoImportButton
-// still imports `extractTextFromImages` — we re-export it here so the
-// migration is one file at a time.
-// ---------------------------------------------------------------------------
-
-export async function extractTextFromImages(
-  files: File[],
-  langs: OcrLang[],
-  onProgress?: OcrProgressCallback
-): Promise<string[]> {
-  return extractTextFromFiles(files, langs, onProgress);
-}
-
-// ---------------------------------------------------------------------------
-// Optional session cleanup hook. Call from `beforeunload` if desired.
-// ---------------------------------------------------------------------------
-
-export async function disposeOcr(): Promise<void> {
-  if (enginePromise) {
-    const engine = await enginePromise;
-    enginePromise = null;
-    try {
-      await engine.dispose();
-    } catch {
-      /* ignore */
-    }
-  }
 }

@@ -513,7 +513,7 @@ function renderSplit(rows: ReturnType<typeof splitDiff>) {
       <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#a83232] dark:text-cyber-danger/80 border-b border-r border-paper-hairline dark:border-cyber-border bg-[rgba(190,50,50,0.06)] dark:bg-cyber-danger/5">
         Original
       </div>
-      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#1f6f3e] dark:text-cyber-green/80 border-b border-paper-hairline dark:border-cyber-border bg-[rgba(0,130,70,0.08)] dark:bg-cyber-green/5">
+      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#1f6f3e] dark:text-cyber-cyan/80 border-b border-paper-hairline dark:border-cyber-border bg-[rgba(0,130,70,0.08)] dark:bg-cyber-cyan/5">
         Proposed
       </div>
       {/* Diff rows */}
@@ -546,7 +546,7 @@ function SplitRowView({
         : 'bg-paper-elevated/50 dark:bg-ape-elevated/40';
   const rightBg =
     rightKind === 'add'
-      ? 'bg-[rgba(0,130,70,0.12)] dark:bg-cyber-green/15'
+      ? 'bg-[rgba(0,130,70,0.12)] dark:bg-cyber-cyan/15'
       : rightKind === 'context'
         ? 'bg-paper-panel dark:bg-ape-panel'
         : 'bg-paper-elevated/50 dark:bg-ape-elevated/40';
@@ -558,7 +558,7 @@ function SplitRowView({
         : 'text-paper-inkSoft dark:text-cyber-muted';
   const rightText =
     rightKind === 'add'
-      ? 'opacity-90 text-[#1f6f3e] dark:text-cyber-green'
+      ? 'opacity-90 text-[#1f6f3e] dark:text-cyber-cyan'
       : rightKind === 'context'
         ? 'opacity-90 text-paper-ink dark:text-cyber-primary'
         : 'text-paper-inkSoft dark:text-cyber-muted';

@@ -328,8 +328,8 @@ export function ChatPanel() {
         style={{ width: '100%' }}
       >
       <div className="px-3 py-2 border-b border-paper-hairline dark:border-cyber-border flex items-center gap-2 bg-paper-elevated/50 dark:bg-ape-elevated/40">
-        <span className="font-semibold text-sm text-cyber-clay dark:text-cyber-cyan tracking-wider uppercase">
-          AI Chat
+        <span className="text-[15px] font-medium text-paper-ink dark:text-cyber-primary">
+          Chat
         </span>
         <span className="text-xs text-paper-inkSoft dark:text-cyber-muted font-mono truncate">{api.model}</span>
         <div className="flex-1" />

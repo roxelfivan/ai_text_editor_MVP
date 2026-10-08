@@ -1,21 +1,32 @@
+@import '@fontsource/newsreader/400.css';
+@import '@fontsource/newsreader/500.css';
+@import '@fontsource/newsreader/600.css';
+@import '@fontsource/source-sans-3/400.css';
+@import '@fontsource/source-sans-3/500.css';
+@import '@fontsource/source-sans-3/600.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* =========================================================================
-   ApEditor design system
+   ApEditor design system (v0.3.0)
    -------------------------------------------------------------------------
    Two themes driven by the `.dark` class on <html>:
-     DARK (default)  — cyberpunk: pure black, neon cyan, plum primary CTA.
-     LIGHT           — Muji: warm cream paper, kraft panels, sumi ink,
-                       deep-espresso primary CTA. No glow, no gradient,
-                       no shadow. Clean & focused.
+     LIGHT (default)  — landing-page parity: warm cream paper, lifted
+                        surface, sumi ink text, moss-green primary CTA,
+                        brick-red strike. Editorial typography
+                        (Newsreader + Source Sans 3 + IBM Plex Mono).
+     DARK             — inverted landing palette onto a warm near-black.
+                        Same moss / brick hues, brighter for contrast.
+                        Same editorial typography.
 
-   Component classes (.btn-fire, .btn-cyan, .ape-field, …) use the dark
-   palette as their base and add a `dark:` (or `html:not(.dark)`) block
-   that swaps in the Muji tokens. Surfaces that only make sense in one
-   theme (prose heading colour, brand-mark glow, etc.) are scoped under
-   `html.dark` or `html:not(.dark)` so they don't bleed across themes.
+   Component classes (.btn-fire, .btn-cyan, .ape-field, …) use the light
+   palette as their base and add an `html.dark` block that swaps in the
+   dark tokens. Surfaces that only make sense in one theme are scoped
+   under `html.dark` so they don't bleed across themes.
    ========================================================================= */
 
 html,
@@ -25,36 +36,37 @@ body,
   margin: 0;
 }
 
+/* ---------- Theme-aware text tokens ----------
+   `text-cyber-primary` and `text-cyber-muted` resolve to these RGB
+   triplets. Light uses near-black ink + warm grey-muted; dark uses warm
+   cream + soft warm grey. Both pairs clear WCAG AA on their respective
+   backgrounds. */
+:root {
+  --cyber-primary: 23 22 20;       /* #171614 — sumi ink (light) */
+  --cyber-muted: 92 87 79;         /* #5C574F — warm muted (light) */
+}
+html.dark {
+  --cyber-primary: 244 241 234;    /* #F4F1EA — warm cream (dark) */
+  --cyber-muted: 168 174 168;      /* #A8AEA8 — soft warm grey (dark) */
+}
+
 /* ---------- Page background / body text ---------- */
 body {
   @apply bg-paper-base text-paper-ink antialiased;
 }
 html.dark body {
-  @apply bg-ape-base text-cyber-primary;
-}
-
-/* ---------- Reusable text glow (dark only) ---------- */
-.text-glow-cyan {
-  text-shadow: 0 0 10px rgba(0, 229, 229, 0.55), 0 0 2px rgba(0, 229, 229, 0.7);
-}
-.text-glow-green {
-  text-shadow: 0 0 10px rgba(0, 255, 122, 0.55), 0 0 2px rgba(0, 255, 122, 0.7);
-}
-html:not(.dark) .text-glow-cyan,
-html:not(.dark) .text-glow-green {
-  /* Muji has no glow; keep the wordmark quietly sumi-ink instead. */
-  text-shadow: none;
+  @apply bg-ape-base text-paper-base;
 }
 
 /* =========================================================================
    Buttons
    -------------------------------------------------------------------------
-   Base: outlined-minimal pill on warm cream, no shadow, no gradient.
-   Dark: cyan- or plum-coloured button with subtle glow / gradient.
+   Light: outlined-minimal pill on warm cream, no shadow, no gradient.
+   Dark:  moss-coloured CTA with subtle glow / plum gradient accent.
    ========================================================================= */
 @layer components {
   /* Primary CTA — DARK: plum gradient with a soft glow.
-                     LIGHT: deep-espresso solid pill, no glow, no shadow. */
+                     LIGHT: deep-moss solid pill, no glow, no shadow. */
   .btn-fire {
     @apply inline-flex items-center justify-center gap-1 rounded px-3 py-1.5
            text-sm font-semibold
@@ -62,12 +74,11 @@ html:not(.dark) .text-glow-green {
            transition-colors duration-150
            active:translate-y-px
            disabled:opacity-50 disabled:cursor-not-allowed;
-    /* Light defaults (Muji) */
-    @apply bg-cyber-clay text-paper-base hover:bg-cyber-claySoft
-           border-cyber-clay/40;
+    /* Light defaults (editorial) */
+    @apply bg-cyber-clay text-paper-surface hover:bg-cyber-clay/90;
   }
   html.dark .btn-fire {
-    @apply text-white bg-ape-fire shadow-ape-fire-soft
+    @apply text-paper-base bg-ape-fire shadow-ape-fire-soft
            hover:bg-ape-fire-hover hover:shadow-ape-fire
            border-cyber-fire/40;
   }
@@ -75,7 +86,7 @@ html:not(.dark) .text-glow-green {
     @apply btn-fire text-xs px-2 py-1;
   }
 
-  /* Secondary CTA — DARK: cyan outline with glow.
+  /* Secondary CTA — DARK: moss outline with glow.
                      LIGHT: hairline sumi-ink outline, no glow. */
   .btn-cyan {
     @apply inline-flex items-center justify-center gap-1 rounded px-3 py-1.5
@@ -96,8 +107,7 @@ html:not(.dark) .text-glow-green {
     @apply btn-cyan text-xs px-2 py-1;
   }
 
-  /* Ghost — DARK: muted on dark panel.
-                LIGHT: muted on paper panel. */
+  /* Ghost — LIGHT: muted on paper panel. DARK: muted on dark panel. */
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-1 rounded px-3 py-1.5
            text-sm font-medium
@@ -106,54 +116,59 @@ html:not(.dark) .text-glow-green {
            hover:bg-paper-elevated hover:text-paper-ink;
   }
   html.dark .btn-ghost {
-    @apply text-cyber-muted hover:bg-ape-elevated hover:text-cyber-primary;
+    @apply text-cyber-muted hover:bg-ape-elevated hover:text-paper-base;
   }
   .btn-ghost-sm {
     @apply btn-ghost text-xs px-2 py-1;
   }
 
-  /* Danger — DARK: red outline on dark.
-                LIGHT: muted brick outline on paper. */
+  /* Danger — LIGHT: muted brick outline on paper. DARK: same on dark. */
   .btn-danger {
     @apply inline-flex items-center justify-center gap-1 rounded px-3 py-1.5
            text-sm font-medium
-           text-cyber-danger
-           border border-cyber-danger/45
+           text-cyber-brick
+           border border-cyber-brick/45
            bg-transparent
            transition-colors duration-150
-           hover:bg-cyber-danger/10 hover:border-cyber-danger;
+           hover:bg-cyber-brickSoft hover:border-cyber-brick;
   }
   html.dark .btn-danger {
-    @apply bg-cyber-danger/5;
+    @apply bg-cyber-brick/5 text-cyber-brickBright border-cyber-brickBright/45
+           hover:bg-cyber-brickSoftDark;
   }
   .btn-danger-sm {
     @apply btn-danger text-xs px-2 py-1;
   }
 
-  /* Form field — DARK: black input with cyan focus ring.
-                   LIGHT: white paper input with hairline + ink focus. */
+  /* Form field — LIGHT: paper white with hairline + ink focus.
+                   DARK:  dark with hairline + moss focus. */
   .ape-field {
     @apply w-full px-2 py-1.5 rounded
-           bg-white
+           bg-paper-surface
            border border-paper-hairline
            text-paper-ink
            outline-none
            transition-colors duration-150
            focus:border-cyber-clay
-           placeholder:text-paper-inkSoft/70;
+           placeholder:text-paper-inkSoft;
   }
   html.dark .ape-field {
-    @apply bg-ape-base border-cyber-border text-cyber-primary
+    @apply bg-ape-panel border-cyber-border text-paper-base
            focus:border-cyber-cyan focus:shadow-ape-glow-soft
-           placeholder:text-cyber-muted/70;
+           placeholder:text-cyber-muted;
   }
 
   /* Topbar logo sizing helper. */
   .brand-mark {
     @apply h-14 w-auto select-none;
   }
-  .brand-mark-sm {
-    @apply h-10 w-auto select-none;
+
+  /* Wordmark display style — matches the landing page's `.display`:
+     serif (Newsreader) at medium weight with balanced wrapping. */
+  .display {
+    @apply font-serif font-medium;
+    line-height: 1.12;
+    text-wrap: balance;
   }
 }
 
@@ -208,7 +223,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   @apply bg-paper-elevated text-cyber-clay rounded px-1 py-0.5 font-mono text-sm;
 }
 .prose-md pre {
-  @apply bg-paper-elevated text-paper-ink rounded p-3 overflow-x-auto text-sm border border-paper-hairline;
+  @apply bg-paper-elevated text-paper-ink rounded p-2 overflow-x-auto text-sm border border-paper-hairline;
 }
 .prose-md pre code {
   @apply bg-transparent p-0 text-paper-ink;
@@ -234,11 +249,10 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   @apply text-paper-ink font-semibold;
 }
 html.dark .prose-md {
-  @apply text-cyber-primary;
+  @apply text-paper-base;
 }
 html.dark .prose-md h1,
-html.dark .prose-md h2,
-html.dark .prose-md h3 {
+html.dark .prose-md h2 {
   @apply text-cyber-cyan;
 }
 html.dark .prose-md h3 {
@@ -248,10 +262,10 @@ html.dark .prose-md code {
   @apply bg-ape-elevated text-cyber-cyan;
 }
 html.dark .prose-md pre {
-  @apply bg-ape-elevated text-cyber-primary border-cyber-border;
+  @apply bg-ape-elevated text-paper-base border-cyber-border;
 }
 html.dark .prose-md pre code {
-  @apply bg-transparent text-cyber-primary;
+  @apply bg-transparent text-paper-base;
 }
 html.dark .prose-md blockquote {
   @apply border-cyber-cyan/40 text-cyber-muted;
@@ -268,26 +282,25 @@ html.dark .prose-md hr {
   @apply border-cyber-border;
 }
 html.dark .prose-md strong {
-  @apply text-cyber-primary;
+  @apply text-paper-base;
 }
 
 /* =========================================================================
    Diff viewer
    ========================================================================= */
 .diff-add {
-  @apply bg-cyber-green/15 text-cyber-green;
+  @apply bg-cyber-clay/15 text-cyber-clay;
 }
 .diff-remove {
-  @apply bg-cyber-danger/15 text-cyber-danger line-through opacity-90;
+  @apply bg-cyber-brick/15 text-cyber-brick line-through opacity-90;
 }
-html:not(.dark) .diff-add {
-  /* Soft sage wash on paper. */
-  background-color: rgba(0, 130, 70, 0.12);
-  color: #1f6f3e;
+html.dark .diff-add {
+  background-color: rgba(111, 191, 153, 0.18);
+  color: #A8D6BB;
 }
-html:not(.dark) .diff-remove {
-  background-color: rgba(190, 50, 50, 0.10);
-  color: #a83232;
+html.dark .diff-remove {
+  background-color: rgba(211, 144, 128, 0.18);
+  color: #D39080;
 }
 
 /* =========================================================================
@@ -295,9 +308,9 @@ html:not(.dark) .diff-remove {
    ========================================================================= */
 .proposed-edit-card {
   @apply mt-2 rounded-md border border-paper-hairline
-    bg-paper-panel overflow-hidden;
+    bg-paper-surface overflow-hidden;
   position: relative;
-  box-shadow: 0 1px 0 rgba(43, 38, 32, 0.04);
+  box-shadow: 0 1px 0 rgba(23, 22, 20, 0.04);
 }
 .proposed-edit-card .pe-header {
   @apply px-3 py-2 border-b border-paper-hairline
@@ -309,7 +322,7 @@ html:not(.dark) .diff-remove {
 .proposed-edit-card .pe-id {
   @apply text-[10px] font-mono uppercase tracking-wide
     text-cyber-clay px-1.5 py-0.5 rounded
-    bg-white border border-paper-hairline;
+    bg-paper-surface border border-paper-hairline;
 }
 .proposed-edit-card .pe-diff {
   @apply py-2 font-mono text-xs overflow-y-auto;
@@ -331,34 +344,12 @@ html:not(.dark) .diff-remove {
   @apply px-3 py-1.5 text-xs text-paper-inkSoft border-t
     border-paper-hairline;
 }
-.proposed-edit-card .pe-status.error {
-  @apply text-cyber-warn bg-cyber-warn/10;
-}
 .proposed-edit-card .pe-status.applied {
-  @apply text-cyber-green bg-cyber-green/10;
-}
-.proposed-edit-card .pe-status.rejected {
-  @apply text-paper-inkSoft bg-paper-elevated;
+  @apply text-cyber-clay bg-cyber-claySoft;
 }
 .proposed-edit-card .pe-comment {
   @apply px-3 py-2 border-t border-paper-hairline
     bg-paper-elevated/70;
-}
-.proposed-edit-card .pe-split-header {
-  @apply px-2 py-1 text-[10px] uppercase tracking-wide text-paper-inkSoft
-    border-b border-paper-hairline bg-paper-elevated;
-}
-.proposed-edit-card .pe-split-left {
-  background-color: rgba(190, 50, 50, 0.06);
-}
-.proposed-edit-card .pe-split-right {
-  background-color: rgba(0, 130, 70, 0.08);
-}
-.proposed-edit-card .pe-split-context {
-  @apply bg-paper-panel;
-}
-.proposed-edit-card .pe-split-empty {
-  @apply bg-paper-elevated/50;
 }
 
 /* Dark overrides for the proposed edit card. */
@@ -369,7 +360,7 @@ html.dark .proposed-edit-card .pe-header {
   @apply border-cyber-border bg-ape-elevated;
 }
 html.dark .proposed-edit-card .pe-summary {
-  @apply text-cyber-primary;
+  @apply text-paper-base;
 }
 html.dark .proposed-edit-card .pe-id {
   @apply text-cyber-cyan bg-ape-base border-cyber-cyan/30;
@@ -380,26 +371,8 @@ html.dark .proposed-edit-card .pe-actions {
 html.dark .proposed-edit-card .pe-status {
   @apply text-cyber-muted border-cyber-border;
 }
-html.dark .proposed-edit-card .pe-status.rejected {
-  @apply text-cyber-muted bg-ape-elevated;
-}
 html.dark .proposed-edit-card .pe-comment {
   @apply border-cyber-border bg-ape-elevated/60;
-}
-html.dark .proposed-edit-card .pe-split-header {
-  @apply text-cyber-muted border-cyber-border bg-ape-elevated;
-}
-html.dark .proposed-edit-card .pe-split-left {
-  @apply bg-cyber-danger/10;
-}
-html.dark .proposed-edit-card .pe-split-right {
-  @apply bg-cyber-green/10;
-}
-html.dark .proposed-edit-card .pe-split-context {
-  @apply bg-ape-panel;
-}
-html.dark .proposed-edit-card .pe-split-empty {
-  @apply bg-ape-elevated/50;
 }
 
 /* =========================================================================
@@ -410,22 +383,22 @@ html.dark .proposed-edit-card .pe-split-empty {
 }
 .resize-handle:hover,
 .resize-handle:active {
-  background-color: rgba(59, 42, 31, 0.30); /* clay-tinged on paper */
+  background-color: rgba(27, 70, 54, 0.20); /* moss-tinged on paper */
 }
 html.dark .resize-handle:hover,
 html.dark .resize-handle:active {
-  background-color: rgba(0, 229, 229, 0.35); /* cyan in dark mode */
+  background-color: rgba(111, 191, 153, 0.35); /* moss in dark mode */
 }
 
 .edge-anchor {
-  box-shadow: 0 1px 2px rgba(43, 38, 32, 0.06);
+  box-shadow: 0 1px 2px rgba(23, 22, 20, 0.06);
 }
 .edge-anchor:hover {
-  box-shadow: 0 1px 2px rgba(43, 38, 32, 0.10);
+  box-shadow: 0 1px 2px rgba(23, 22, 20, 0.10);
 }
 html.dark .edge-anchor {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 html.dark .edge-anchor:hover {
-  box-shadow: 0 0 12px rgba(0, 229, 229, 0.45), 0 1px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 12px rgba(111, 191, 153, 0.45), 0 1px 4px rgba(0, 0, 0, 0.4);
 }

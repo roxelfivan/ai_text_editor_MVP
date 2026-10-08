@@ -7,6 +7,7 @@ import { PromptLibrary } from '@/components/PromptLibrary';
 import { RevisionHistory } from '@/components/RevisionHistory';
 import { SettingsModal } from '@/components/SettingsModal';
 import { EdgeAnchor } from '@/components/EdgeAnchor';
+import { applyThemeClass } from '@/utils/theme';
 
 // APP_VERSION is injected at build time from package.json via Vite's
 // `define` config (see vite.config.ts). Keeping the source of truth in
@@ -30,12 +31,12 @@ function Topbar({
   return (
     <header className="h-20 px-4 flex items-center gap-3 border-b border-paper-hairline dark:border-cyber-border bg-paper-base/90 dark:bg-ape-base/90 backdrop-blur-sm">
       <img
-        src="/apeditor-logo.jpg"
+        src="/apeditor-logo-transparent.png"
         alt="ApEditor"
-        className="brand-mark rounded"
+        className="brand-mark"
       />
       <div className="flex flex-col leading-tight">
-        <span className="text-xs uppercase tracking-[0.25em] font-semibold text-cyber-clay dark:text-cyber-cyan text-glow-cyan">
+        <span className="display text-xl text-paper-ink dark:text-cyber-primary">
           ApEditor
         </span>
         <span className="text-[10px] text-paper-inkSoft dark:text-cyber-muted font-mono">v{APP_VERSION}</span>
@@ -48,28 +49,28 @@ function Topbar({
       )}
       <div className="flex-1" />
       <button
-        className="btn-cyan-sm"
+        className="btn-cyan-sm !text-[15px] !py-1.5"
         onClick={onOpenRevisions}
         title="Revision history"
       >
         History
       </button>
       <button
-        className="btn-cyan-sm"
+        className="btn-cyan-sm !text-[15px] !py-1.5"
         onClick={onOpenPrompts}
         title="Prompt library"
       >
         Prompts
       </button>
       <button
-        className="btn-cyan-sm"
+        className="btn-cyan-sm !text-[15px] !py-1.5"
         onClick={toggleTheme}
         title="Toggle theme"
       >
         {theme === 'dark' ? '☀ Light' : '☾ Dark'}
       </button>
       <button
-        className="btn-fire-sm"
+        className="btn-fire-sm !text-[15px] !py-1.5"
         onClick={onOpenSettings}
         title="Settings"
       >
@@ -95,9 +96,9 @@ export default function App() {
   const topbarCollapsed = useStore((s) => s.topbarCollapsed);
   const setTopbarCollapsed = useStore((s) => s.setTopbarCollapsed);
 
-  // Apply theme class on first load.
+  // Sync the `<html>` class whenever the theme changes.
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    applyThemeClass(theme);
   }, [theme]);
 
   // If there's no API key, gently prompt the user once on first load.

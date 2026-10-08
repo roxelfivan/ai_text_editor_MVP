@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  extractTextFromImages,
+  extractTextFromFiles,
   type OcrLang,
   type OcrProgress,
 } from '@/utils/ocr';
@@ -13,25 +13,25 @@ const LANG_OPTIONS: { code: Lang; label: string }[] = [
   { code: 'chi_tra', label: 'Traditional Chinese' },
 ];
 
-interface PhotoImportButtonProps {
+interface ImportMediaButtonProps {
   /** Disabled when no document is open. */
   disabled?: boolean;
 }
 
 /**
- * Photo import button + language picker. Click the button to open a small
- * popover with three language checkboxes (English, Simplified Chinese,
- * Traditional Chinese). At least one must stay checked. The
- * "Choose photos" button inside the popover opens a multi-file picker;
- * selected files are run through `extractTextFromImages` and the
- * concatenated text is dispatched as a `mvp:insert-text` window event
- * for the Editor to consume.
+ * Import button + language picker for photos and PDFs. Click the button
+ * to open a small popover with three language checkboxes (English,
+ * Simplified Chinese, Traditional Chinese). At least one must stay
+ * checked. The "Choose Import File(s)" button inside the popover opens
+ * a multi-file picker; selected files are run through
+ * `extractTextFromFiles` and the concatenated text is dispatched as a
+ * `mvp:insert-text` window event for the Editor to consume.
  *
  * Cleanup: after every batch the file input is reset to '' so the same
  * files can be re-picked without a refresh. The OCR util itself handles
  * revoking ObjectURLs, releasing canvases, and terminating the worker.
  */
-export function PhotoImportButton({ disabled = false }: PhotoImportButtonProps) {
+export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -49,7 +49,7 @@ export function PhotoImportButton({ disabled = false }: PhotoImportButtonProps) 
       if (popoverRef.current?.contains(target)) return;
       // Also ignore clicks on the toggle button itself (which controls `open`).
       const btn = (e.target as HTMLElement | null)?.closest(
-        '[data-photo-import-toggle]'
+        '[data-import-media-toggle]'
       );
       if (btn) return;
       setOpen(false);
@@ -102,7 +102,7 @@ export function PhotoImportButton({ disabled = false }: PhotoImportButtonProps) 
     setProgress({ done: 0, total: fileArray.length, label: 'starting…' });
     setOpen(false);
     try {
-      const results = await extractTextFromImages(
+      const results = await extractTextFromFiles(
         fileArray,
         langArray,
         (p) => setProgress(p)
@@ -139,13 +139,13 @@ export function PhotoImportButton({ disabled = false }: PhotoImportButtonProps) 
     <div className="relative inline-block">
       <button
         type="button"
-        data-photo-import-toggle
-        className="btn-cyan-sm disabled:opacity-50"
+        data-import-media-toggle
+        className="btn-cyan-sm disabled:opacity-50 !text-[15px] !py-1.5"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled || busy}
-        title="Import text from photos (in-browser OCR)"
+        title="Import text from photos or PDFs (in-browser OCR)"
       >
-        {busy ? 'Reading…' : 'Import photos / PDFs'}
+        {busy ? 'Reading…' : 'Import'}
       </button>
       {open && !busy && (
         <div

@@ -20,8 +20,6 @@ const pdfWorkerUrl = new URL(
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-export type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
-
 /**
  * Load a PDF from an in-memory byte buffer. The returned document must
  * be destroyed by calling `pdf.destroy()` when no longer needed.

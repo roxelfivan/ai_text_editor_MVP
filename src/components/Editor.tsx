@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useStore, useCurrentDocument } from '@/store/useStore';
-import { PhotoImportButton } from '@/components/PhotoImportButton';
+import { ImportMediaButton } from '@/components/ImportMediaButton';
 
 /**
  * Editor: plain textarea (write) + react-markdown preview (preview),
@@ -13,11 +13,34 @@ export function Editor() {
   const doc = useCurrentDocument();
   const viewMode = useStore((s) => s.viewMode);
   const setViewMode = useStore((s) => s.setViewMode);
+  const editorFontSize = useStore((s) => s.editorFontSize);
+  const bumpEditorFontSize = useStore((s) => s.bumpEditorFontSize);
   const updateContent = useStore((s) => s.updateDocumentContent);
   const saveRevision = useStore((s) => s.saveRevision);
   const setEditorFocus = useStore((s) => s.setEditorFocus);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  // Tick `now` once a minute so the relative "X mins ago" label stays
+  // current without re-rendering the editor text.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const savedLabel = (() => {
+    if (!lastSavedAt) return '';
+    const diffSec = Math.max(0, Math.floor((now - lastSavedAt) / 1000));
+    if (diffSec < 5) return '· saved just now';
+    if (diffSec < 60) return `· saved ${diffSec}s ago`;
+    const mins = Math.floor(diffSec / 60);
+    if (mins < 60) return `· saved ${mins} ${mins === 1 ? 'min' : 'mins'} ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `· saved ${hrs} ${hrs === 1 ? 'hr' : 'hrs'} ago`;
+    const days = Math.floor(hrs / 24);
+    return `· saved ${days} ${days === 1 ? 'day' : 'days'} ago`;
+  })();
 
   // Debounced auto-save: a quick local save. Persistence is handled by zustand.
   useEffect(() => {
@@ -42,7 +65,7 @@ export function Editor() {
     return () => window.removeEventListener('mvp:get-selection', handler);
   }, []);
 
-  // Listen for OCR-insert events from the photo import button. Inserts
+  // Listen for OCR-insert events from the import media button. Inserts
   // the text at the current caret position if the textarea has been
   // interacted with; otherwise appends to the end of the document. The
   // caret is moved to the end of the inserted text so the user can keep
@@ -150,37 +173,77 @@ export function Editor() {
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-paper-base dark:bg-ape-base">
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-paper-hairline dark:border-cyber-border bg-paper-base dark:bg-ape-base">
-        <span className="font-semibold text-paper-ink dark:text-cyber-primary truncate">
-          {doc.title}
-        </span>
-        <span className="text-xs text-paper-inkSoft dark:text-cyber-muted ml-2 font-mono uppercase tracking-wider">
-          {lastSavedAt ? '· saved' : ''}
-        </span>
-        <div className="flex-1" />
-        <div className="inline-flex rounded border border-paper-hairline dark:border-cyber-border overflow-hidden text-xs">
-          {(['write', 'split', 'preview'] as const).map((m, idx) => (
-            <button
-              key={m}
-              onClick={() => setViewMode(m)}
-              className={`px-2 py-1 transition-colors ${
-                viewMode === m
-                  ? 'bg-cyber-clay text-paper-base dark:bg-ape-fire dark:text-white font-semibold'
-                  : 'text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan'
-              } ${idx > 0 ? 'border-l border-paper-hairline dark:border-cyber-border' : ''}`}
-            >
-              {m[0].toUpperCase() + m.slice(1)}
-            </button>
-          ))}
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-paper-hairline dark:border-cyber-border bg-paper-base dark:bg-ape-base text-[15px] leading-none">
+        <div className="relative inline-block">
+          <select
+            value={viewMode}
+            onChange={(e) => setViewMode(e.target.value as 'write' | 'preview' | 'split')}
+            aria-label="Editor view mode"
+            className="appearance-none cursor-pointer pl-2 pr-6 h-7 text-[15px] leading-none rounded border border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel text-paper-ink dark:text-cyber-primary hover:border-cyber-clay dark:hover:border-cyber-cyan focus:outline-none focus:border-cyber-clay dark:focus:border-cyber-cyan transition-colors"
+          >
+            <option value="write">Write</option>
+            <option value="preview">Preview</option>
+            <option value="split">Split</option>
+          </select>
+          <svg
+            aria-hidden="true"
+            className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-paper-inkSoft dark:text-cyber-muted"
+            viewBox="0 0 10 10"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M2 4 L5 7 L8 4" />
+          </svg>
         </div>
-        <PhotoImportButton />
+        <div
+          className="inline-flex rounded border border-paper-hairline dark:border-cyber-border overflow-hidden text-[15px] leading-none"
+          role="group"
+          aria-label="Editor font size"
+        >
+          <button
+            type="button"
+            className="w-7 h-7 flex items-center justify-center text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-r border-paper-hairline dark:border-cyber-border"
+            onClick={() => bumpEditorFontSize(-1)}
+            disabled={editorFontSize <= 10}
+            aria-label="Decrease font size"
+            title="Decrease font size"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            className="w-7 h-7 flex items-center justify-center text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => bumpEditorFontSize(1)}
+            disabled={editorFontSize >= 24}
+            aria-label="Increase font size"
+            title="Increase font size"
+          >
+            +
+          </button>
+        </div>
+        <div className="flex-1" />
+        <ImportMediaButton />
         <button
-          className="btn-cyan-sm"
+          className="btn-cyan-sm !text-[15px] !py-1.5"
           onClick={() => saveRevision(doc.id)}
           title="Save current content as a revision"
         >
-          Save revision
+          Save
         </button>
+      </div>
+      <div className="px-4 pt-3 pb-1 flex items-baseline gap-3 bg-paper-base dark:bg-ape-base">
+        <h2 className="font-semibold text-paper-ink dark:text-cyber-primary truncate text-base">
+          {doc.title}
+        </h2>
+        <span
+          data-saved-label
+          className="text-xs text-paper-inkSoft dark:text-cyber-muted font-mono uppercase tracking-wider"
+        >
+          {savedLabel}
+        </span>
       </div>
       <div className="flex-1 flex min-h-0">
         {showWrite && (
@@ -193,7 +256,8 @@ export function Editor() {
             onSelect={() => reportCaret(true)}
             onKeyUp={() => reportCaret(true)}
             onClick={() => reportCaret(true)}
-            className={`flex-1 p-4 outline-none resize-none font-mono text-sm bg-paper-base dark:bg-ape-base text-paper-ink dark:text-cyber-primary caret-cyber-clay dark:caret-cyber-cyan placeholder:text-paper-inkSoft/60 dark:placeholder:text-cyber-muted/60 ${
+            style={{ fontSize: `${editorFontSize}px`, lineHeight: 1.55 }}
+            className={`flex-1 p-4 outline-none resize-none font-mono bg-paper-base dark:bg-ape-base text-paper-ink dark:text-cyber-primary caret-cyber-clay dark:caret-cyber-cyan placeholder:text-paper-inkSoft/60 dark:placeholder:text-cyber-muted/60 ${
               showPreview ? 'border-r border-paper-hairline dark:border-cyber-border' : ''
             }`}
             placeholder="Start writing in Markdown…"
@@ -201,7 +265,10 @@ export function Editor() {
           />
         )}
         {showPreview && (
-          <div className="flex-1 overflow-y-auto p-4 prose-md bg-paper-base dark:bg-ape-base">
+          <div
+              className="flex-1 overflow-y-auto p-4 prose-md bg-paper-base dark:bg-ape-base"
+              style={{ fontSize: `${editorFontSize}px`, lineHeight: 1.55 }}
+            >
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {doc.content || '*Nothing to preview yet.*'}
             </ReactMarkdown>

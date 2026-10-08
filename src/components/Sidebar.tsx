@@ -32,7 +32,6 @@ export function Sidebar() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-
   const { start } = useDragResize({
     mode: 'axis',
     axis: 'horizontal',
@@ -59,12 +58,12 @@ export function Sidebar() {
         style={{ width: '100%' }}
       >
         <div className="px-3 py-2 border-b border-paper-hairline dark:border-cyber-border flex items-center justify-between bg-paper-elevated/50 dark:bg-ape-elevated/40">
-          <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-cyber-clay dark:text-cyber-cyan">
+          <span className="text-[15px] font-medium text-paper-ink dark:text-cyber-primary">
             Documents
           </span>
           <button
             onClick={() => createDocument()}
-            className="btn-fire-sm"
+            className="btn-fire-sm !text-[15px] !py-1.5"
             title="New document"
           >
             + New
