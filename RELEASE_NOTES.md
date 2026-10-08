@@ -1,3 +1,36 @@
+## v0.3.1 — Inline sentence completion + roomier editor toolbar
+
+Feature + polish release on top of [v0.3.0](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.0).
+
+### Added
+
+- **Inline sentence completion in the editor (new `src/hooks/useInlineCompletion.ts`).** While you write, the editor suggests the next single sentence using the chat model and endpoint you already set up in Settings. You don't need to configure anything new.
+  - **Triggering:** a request is sent after a 300 ms pause in typing. No request is sent while you have text selected, after a deletion or undo, or while a suggestion is already showing.
+  - **Manual trigger:** `⌘ / Ctrl + \` requests a suggestion immediately. It skips the 300 ms wait and also works when text is selected.
+  - **Accept or dismiss:** press `Tab` to accept the suggestion and `Esc` to dismiss it. Typing any other key also discards it.
+  - **Suggestion panel:** suggestions appear in a panel at the bottom of the editor, sized to the suggestion and capped at 40% of the editor's height. While a request is in progress it shows a pulsing "…" indicator. The panel also has an **Accept** button for mouse users.
+  - **Token-saving limits:** at most 600 characters before the cursor are sent as context. Output is capped at `max_tokens: 500` and stops at the first line break, so you get at most one sentence. Temperature is capped at 0.4. Any earlier request still in flight is cancelled as soon as you keep typing.
+  - **Output cleanup:** `<think>…</think>` reasoning blocks are removed while the reply streams in. If the model repeats the last words you typed, the repeated part is removed so accepting a suggestion doesn't duplicate text.
+- **Three new controls in the editor toolbar:**
+  - **Status pill.** Shows `idle`, `thinking` (pulsing dot) or `ready · tab`.
+  - **Counter pill.** Shows how many suggestions were requested and how many were accepted in this session (`requested / accepted`). Click it to reset both counts.
+  - **On/Off toggle.** A switch with an I/O knob that turns inline completion on or off. It is greyed out until an API key and endpoint are configured. Turning it off cancels any request in progress and clears the current suggestion.
+
+### Changed
+
+- **Editor toolbar controls are a bit taller (28 px → 36 px, `h-7` → `h-9`).** This affects the View dropdown, the font-size `−` / `+` buttons (now `w-9 h-9`) and the three new controls. The text stays at **15 px**, the same as the topbar buttons. Import and Save keep the topbar button style (`btn-cyan-sm !text-[15px] !py-1.5`).
+- **`src/components/Editor.tsx`** — the textarea is now wrapped in a column that also holds the suggestion panel. Two new window events were added: `mvp:accept-completion` (applies an accepted suggestion and puts the cursor at its end) and a global `⌘ / Ctrl + \` key handler.
+- **`package.json`** — version bumped to `0.3.1`.
+
+### Notes
+
+- Inline completion is turned off automatically when no API key or endpoint is configured. Store and persisted state are unchanged. The on/off setting and the counters reset when the page reloads.
+- Each suggestion is a separate API request to your configured provider, so it uses tokens. Use the On/Off toggle to turn the feature off.
+
+### Verification
+
+- `npm run build` — clean (TypeScript + Vite production build).
+
 ## v0.2.5 — ApEditor cyberpunk UI + Muji light theme
 
 UI overhaul on top of [v0.2.4](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.2.4).
