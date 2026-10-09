@@ -11,6 +11,8 @@ interface Props {
 export function SettingsModal({ open, onClose }: Props) {
   const api = useStore((s) => s.api);
   const setApi = useStore((s) => s.setApi);
+  const debugMode = useStore((s) => s.debugMode);
+  const setDebugMode = useStore((s) => s.setDebugMode);
 
   const [provider, setProvider] = useState<ApiProvider>(api.provider);
   const [apiKey, setApiKey] = useState(api.apiKey);
@@ -175,6 +177,71 @@ export function SettingsModal({ open, onClose }: Props) {
               onChange={(e) => setTemperature(parseFloat(e.target.value))}
               className="w-full accent-cyber-clay dark:accent-cyber-fire"
             />
+          </div>
+
+          {/* Debug Mode — gates developer-facing diagnostics
+              (currently the inline-completion request/accept counter
+              in the editor toolbar). Persisted across reloads. */}
+          <div>
+            <label className="flex items-center justify-between text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
+              <span>Debug Mode</span>
+              <span className="font-mono text-cyber-clay dark:text-cyber-cyan">
+                {debugMode ? 'On' : 'Off'}
+              </span>
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setDebugMode(!debugMode);
+              }}
+              aria-pressed={debugMode}
+              aria-label={`Debug Mode ${debugMode ? 'on' : 'off'}. Click to toggle.`}
+              title={
+                debugMode
+                  ? 'Debug Mode is ON — diagnostic controls are visible'
+                  : 'Debug Mode is OFF — click to reveal diagnostic controls'
+              }
+              className={[
+                'group inline-flex items-center h-9 w-full rounded-full border transition-colors select-none',
+                'pl-1.5 pr-3 gap-2',
+                debugMode
+                  ? 'border-cyber-clay/60 dark:border-cyber-cyan/60 bg-cyber-clay/10 dark:bg-cyber-cyan/10'
+                  : 'border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel hover:border-cyber-clay/40 dark:hover:border-cyber-cyan/40',
+              ].join(' ')}
+            >
+              <span
+                className="relative inline-block h-6 w-9 overflow-hidden"
+                aria-hidden
+              >
+                <span
+                  className={[
+                    'absolute top-0 left-0 inline-flex items-center justify-center h-6 w-6 rounded-full border transition-all duration-200 ease-out',
+                    debugMode
+                      ? 'translate-x-[8px] border-cyber-clay dark:border-cyber-cyan bg-cyber-clay dark:bg-cyber-cyan shadow-[0_0_6px_var(--cyber-clay-glow,rgba(232,93,59,0.55))] dark:shadow-[0_0_6px_var(--cyber-cyan-glow,rgba(0,229,255,0.55))]'
+                      : 'translate-x-0 border-paper-inkSoft/50 dark:border-cyber-muted/50 bg-paper-base dark:bg-ape-base',
+                  ].join(' ')}
+                >
+                  {debugMode ? (
+                    <span className="block w-[3px] h-3 rounded-sm bg-paper-base dark:bg-ape-base" />
+                  ) : (
+                    <span className="block w-2.5 h-2.5 rounded-full border-[1.5px] border-paper-inkSoft/70 dark:border-cyber-muted/70" />
+                  )}
+                </span>
+              </span>
+              <span
+                className={[
+                  'text-[15px] font-mono uppercase tracking-wider',
+                  debugMode
+                    ? 'text-cyber-clay dark:text-cyber-cyan'
+                    : 'text-paper-inkSoft dark:text-cyber-muted',
+                ].join(' ')}
+              >
+                {debugMode ? 'On' : 'Off'}
+              </span>
+              <span className="ml-auto text-[11px] font-normal normal-case tracking-normal text-paper-inkSoft dark:text-cyber-muted">
+                Show inline-completion counters
+              </span>
+            </button>
           </div>
         </div>
 

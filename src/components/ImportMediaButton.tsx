@@ -140,12 +140,41 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
       <button
         type="button"
         data-import-media-toggle
-        className="btn-cyan-sm disabled:opacity-50 !text-[15px] !py-1.5"
+        aria-label="Import text from photos or PDFs"
+        className="btn-icon-square disabled:opacity-50"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled || busy}
-        title="Import text from photos or PDFs (in-browser OCR)"
+        title={
+          busy
+            ? 'Reading file…'
+            : 'Import text from photos or PDFs (in-browser OCR)'
+        }
       >
-        {busy ? 'Reading…' : 'Import'}
+        {busy ? (
+          // Spinner — three small dots that pulse in sequence. Pure CSS,
+          // mirrors the one used in the editor's streaming indicator.
+          <span className="inline-flex gap-0.5">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-current opacity-50 animate-pulse" style={{ animationDelay: '0ms' }} />
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-current opacity-50 animate-pulse" style={{ animationDelay: '150ms' }} />
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-current opacity-50 animate-pulse" style={{ animationDelay: '300ms' }} />
+          </span>
+        ) : (
+          // Download-into-tray icon: arrow down into a tray.
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 16 16"
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M8 2 L8 10" />
+            <path d="M4.5 6.5 L8 10 L11.5 6.5" />
+            <path d="M3 13 L13 13" />
+          </svg>
+        )}
       </button>
       {open && !busy && (
         <div

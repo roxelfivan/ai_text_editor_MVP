@@ -44,10 +44,19 @@ body,
 :root {
   --cyber-primary: 23 22 20;       /* #171614 — sumi ink (light) */
   --cyber-muted: 92 87 79;         /* #5C574F — warm muted (light) */
+  /* Inline-completion ghost text. Slightly lighter than ink + softer
+     than muted so it reads as "draft, not yet typed" while still
+     remaining legible on the warm-cream panel. Dark mode keeps the
+     original soft-grey because contrast against the dark panel was
+     already fine. */
+  --ghost-color: rgba(60, 50, 40, 0.85);
+  --ghost-color-rgb: 60 50 40;
 }
 html.dark {
   --cyber-primary: 244 241 234;    /* #F4F1EA — warm cream (dark) */
   --cyber-muted: 168 174 168;      /* #A8AEA8 — soft warm grey (dark) */
+  --ghost-color: rgba(200, 210, 200, 0.85);
+  --ghost-color-rgb: 200 210 200;
 }
 
 /* ---------- Page background / body text ---------- */
@@ -120,6 +129,27 @@ html.dark body {
   }
   .btn-ghost-sm {
     @apply btn-ghost text-xs px-2 py-1;
+  }
+
+  /* Square icon-only button used in the editor toolbar (Import, Save,
+     and similar 1-glyph actions). Fixed 36×36 footprint so several
+     can sit in a row without the row height jumping. Inherits the
+     secondary-CTA outline + hover treatment so it reads as the same
+     button family as the wider pill buttons. */
+  .btn-icon-square {
+    @apply inline-flex items-center justify-center
+           h-9 w-9 rounded-md
+           border border-cyber-clay/35 text-cyber-clay
+           bg-transparent
+           transition-colors duration-150
+           hover:bg-cyber-clay/5 hover:border-cyber-clay
+           active:translate-y-px
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  html.dark .btn-icon-square {
+    @apply text-cyber-cyan border-cyber-cyan/40 bg-cyber-cyan/5
+           hover:bg-cyber-cyan/15 hover:border-cyber-cyan
+           hover:shadow-ape-glow-soft hover:text-cyber-cyanSoft;
   }
 
   /* Danger — LIGHT: muted brick outline on paper. DARK: same on dark. */

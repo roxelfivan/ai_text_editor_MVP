@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { useStore, useCurrentDocument } from '@/store/useStore';
 import { ImportMediaButton } from '@/components/ImportMediaButton';
 import { useInlineCompletion } from '@/hooks/useInlineCompletion';
+import { useDragResize } from '@/hooks/useDragResize';
 
 /**
  * Editor: plain textarea (write) + react-markdown preview (preview),
@@ -20,16 +21,74 @@ export function Editor() {
   const saveRevision = useStore((s) => s.saveRevision);
   const setEditorFocus = useStore((s) => s.setEditorFocus);
   const api = useStore((s) => s.api);
+  const debugMode = useStore((s) => s.debugMode);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const writePaneRef = useRef<HTMLDivElement>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
+
+  // Suggestion-panel height (px). Persisted in localStorage so the
+  // user's preferred size survives reloads. Defaults to 160. Clamped
+  // to a sensible range on render so a stale stored value can't
+  // collapse the textarea or take over the whole viewport. The drag
+  // handle at the top edge of the panel lets the user adjust this.
+  const [suggestionHeight, setSuggestionHeight] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem('ai-text-editor-mvp:suggestion-height');
+      if (!raw) return 160;
+      const n = parseInt(raw, 10);
+      if (!Number.isFinite(n)) return 160;
+      return Math.min(600, Math.max(80, n));
+    } catch {
+      return 160;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'ai-text-editor-mvp:suggestion-height',
+        String(suggestionHeight)
+      );
+    } catch {
+      /* ignore quota errors */
+    }
+  }, [suggestionHeight]);
+  const dragResize = useDragResize({
+    mode: 'axis',
+    axis: 'vertical',
+    onDelta: ({ dy }) => {
+      // dy is cumulative from drag start; use a ref-tracked anchor
+      // so we can convert it to an absolute height.
+      anchorRef.current = anchorStartRef.current - dy;
+      const next = clampSuggestionHeight(anchorRef.current);
+      setSuggestionHeight(next);
+    },
+  });
+  const anchorRef = useRef<number>(suggestionHeight);
+  const anchorStartRef = useRef<number>(suggestionHeight);
+  const onSuggestionHandleDown = (
+    e: React.PointerEvent<HTMLDivElement>
+  ) => {
+    anchorStartRef.current = suggestionHeight;
+    anchorRef.current = suggestionHeight;
+    dragResize.start('top', e);
+  };
+  const clampSuggestionHeight = (px: number): number => {
+    const pane = writePaneRef.current;
+    const max = pane ? Math.max(120, pane.clientHeight * 0.6) : 600;
+    return Math.min(max, Math.max(80, px));
+  };
 
   // Inline sentence completion. Auto-disabled when no API key is configured.
   const apiConfigured = Boolean(api.apiKey && api.apiEndpoint);
   // User-controlled on/off toggle for the inline-completion feature.
-  // Defaults to ON when the API is configured; the user can flip it
-  // off with the appliance-style toggle next to the counter pill.
+  // Defaults to ON when the API is configured; the user toggles it
+  // by clicking the Predict button in the toolbar.
   const [inlineOn, setInlineOn] = useState<boolean>(true);
+  // Ref mirror so the click handler (and queued microtasks) can read
+  // the latest value without depending on a stale closure.
+  const inlineOnRef = useRef<boolean>(inlineOn);
+  inlineOnRef.current = inlineOn;
   const inlineEnabled = apiConfigured && inlineOn;
   const inline = useInlineCompletion({
     textareaRef,
@@ -37,17 +96,33 @@ export function Editor() {
     api,
     enabled: inlineEnabled,
   });
-  // When the user flips the toggle off, immediately cancel any in-flight
-  // request and drop the ghost so it doesn't linger on screen.
-  const toggleInline = () => {
-    if (inlineOn) {
+  // When the user clicks the Predict button we toggle the inline-
+  // prediction feature. Going OFF → ON also fires a single immediate
+  // prediction (delightful "starter suggestion") while going ON → OFF
+  // cancels any in-flight stream + drops the ghost so no suggestion
+  // sticks around after the user disabled the feature.
+  const toggleInlinePredict = () => {
+    const wasOn = inlineOnRef.current;
+    if (wasOn) {
+      // ON → OFF: cancel any in-flight request before flipping the flag
+      // so no ghost appears once the panel closes.
       inline.onBlur();
+      setInlineOn(false);
+      return;
     }
-    setInlineOn((v) => !v);
+    // OFF → ON: flip first so the hook is enabled, then fire.
+    setInlineOn(true);
+    // Queue the trigger for next tick so the hook has re-rendered with
+    // enabled=true (otherwise the gating logic returns early).
+    queueMicrotask(() => {
+      if (inlineOnRef.current && apiConfigured) {
+        inline.triggerNow();
+      }
+    });
   };
 
-  // Tick `now` once a minute so the relative "X mins ago" label stays
-  // current without re-rendering the editor text.
+// Tick `now` once a minute so the relative "X mins ago" label stays
+    // current without re-rendering the editor text.
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
@@ -244,7 +319,7 @@ export function Editor() {
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-paper-base dark:bg-ape-base">
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-paper-hairline dark:border-cyber-border bg-paper-base dark:bg-ape-base text-[15px] leading-none">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-paper-hairline dark:border-cyber-border bg-paper-base dark:bg-ape-base text-[15px] leading-none">
         <div className="relative inline-block">
           <select
             value={viewMode}
@@ -323,110 +398,125 @@ export function Editor() {
           )}
         </div>
         {/* Inline-completion counters: requests fired / completions
-            accepted this session. Click to reset. */}
+            accepted this session. Click to reset. Hidden unless the user
+            has enabled Debug Mode in Settings, so the toolbar stays
+            minimal for end users. */}
+        {debugMode && (
+          <button
+            type="button"
+            onClick={inline.resetStats}
+            className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded border border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel text-[15px] font-mono uppercase tracking-wider text-paper-inkSoft dark:text-cyber-muted hover:border-cyber-clay/60 dark:hover:border-cyber-cyan/60 hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors"
+            aria-label={`Inline completion counters: ${inline.stats.requested} requested, ${inline.stats.accepted} accepted. Click to reset.`}
+            title="Click to reset the counters"
+          >
+            <span className="text-paper-ink dark:text-cyber-primary normal-case tracking-normal font-mono">
+              {inline.stats.requested}
+            </span>
+            <span className="opacity-60">/</span>
+            <span className="text-cyber-clay dark:text-cyber-cyan normal-case tracking-normal font-mono">
+              {inline.stats.accepted}
+            </span>
+          </button>
+        )}
+        {/* Unified Predict button — replaces the previous On/Off rocker.
+            The button's COLOUR is now the state indicator:
+              • GREEN (brand clay/cyan) ⇒ inline prediction ON
+              • VERY LIGHT GREY ⇒ inline prediction OFF
+            Click toggles. Going OFF→ON also fires a single immediate
+            prediction (delightful "starter suggestion"); going ON→OFF
+            cancels any in-flight stream + drops the ghost. Same
+            ⌘/Ctrl + \ keyboard shortcut still works. */}
         <button
           type="button"
-          onClick={inline.resetStats}
-          className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded border border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel text-[15px] font-mono uppercase tracking-wider text-paper-inkSoft dark:text-cyber-muted hover:border-cyber-clay/60 dark:hover:border-cyber-cyan/60 hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors"
-          aria-label={`Inline completion counters: ${inline.stats.requested} requested, ${inline.stats.accepted} accepted. Click to reset.`}
-          title="Click to reset the counters"
-        >
-          <span className="text-paper-ink dark:text-cyber-primary normal-case tracking-normal font-mono">
-            {inline.stats.requested}
-          </span>
-          <span className="opacity-60">/</span>
-          <span className="text-cyber-clay dark:text-cyber-cyan normal-case tracking-normal font-mono">
-            {inline.stats.accepted}
-          </span>
-        </button>
-        {/* Inline-completion on/off toggle. Styled like an electronic
-            appliance rocker: a recessed track with a sliding knob, a
-            glowing dot inside the knob when on, and an I/O symbol on
-            the right. Click to flip state. Disabled (but visible) when
-            no API key is configured, so the user can still see the
-            feature exists. */}
-        <button
-          type="button"
-          onClick={toggleInline}
+          onClick={() => {
+            toggleInlinePredict();
+          }}
+          onMouseDown={(e) => e.preventDefault()}
           disabled={!apiConfigured}
           aria-pressed={inlineOn}
-          aria-label={`Inline completion ${inlineOn ? 'on' : 'off'}. Click to toggle.`}
+          aria-label={`Predict ${inlineOn ? 'on' : 'off'}. Click to ${inlineOn ? 'turn off' : 'turn on'}.`}
           title={
-            apiConfigured
-              ? `Inline completion is ${inlineOn ? 'ON' : 'OFF'} — click to toggle`
-              : 'Inline completion unavailable: configure an API key first'
+            !apiConfigured
+              ? 'Configure an API key in Settings to enable prediction'
+              : inlineOn
+                ? 'Click to stop inline predictions'
+                : 'Click to start inline predictions'
           }
           className={[
-            'group inline-flex items-center h-9 rounded-full border transition-colors select-none',
-            'pl-1.5 pr-2.5 gap-2',
-            apiConfigured
-              ? inlineOn
-                ? 'border-cyber-clay/60 dark:border-cyber-cyan/60 bg-cyber-clay/10 dark:bg-cyber-cyan/10'
-                : 'border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel hover:border-cyber-clay/40 dark:hover:border-cyber-cyan/40'
-              : 'border-paper-hairline dark:border-cyber-border bg-paper-surface/50 dark:bg-ape-panel/50 opacity-50 cursor-not-allowed',
+            'inline-flex items-center gap-1.5 h-9 px-2.5 rounded border text-[15px] font-mono uppercase tracking-wider transition-colors select-none',
+            !apiConfigured
+              ? 'border-paper-hairline dark:border-cyber-border bg-paper-surface/40 dark:bg-ape-panel/40 text-paper-inkSoft/40 dark:text-cyber-muted/40 cursor-not-allowed'
+              : inlineOn
+                // GREEN: brand colour fills the pill. Reads as "active"
+                // immediately. Matches the codebase's existing accent
+                // palette, so the active Predict button visually links
+                // to the cyan/clay accents elsewhere in the toolbar.
+                ? 'border-cyber-clay dark:border-cyber-cyan bg-cyber-clay/85 dark:bg-cyber-cyan/85 text-paper-base dark:text-ape-base shadow-[0_0_6px_var(--cyber-clay-glow,rgba(232,93,59,0.45))] dark:shadow-[0_0_8px_var(--cyber-cyan-glow,rgba(0,229,255,0.55))] hover:bg-cyber-clay dark:hover:bg-cyber-cyan cursor-pointer'
+                // VERY LIGHT GREY: pale outline + soft text. Clearly
+                // inactive but still discoverable in the toolbar.
+                : 'border-paper-hairline dark:border-cyber-border bg-paper-surface/30 dark:bg-ape-panel/30 text-paper-inkSoft/55 dark:text-cyber-muted/55 hover:border-cyber-clay/40 dark:hover:border-cyber-cyan/40 hover:text-cyber-clay dark:hover:text-cyber-cyan cursor-pointer',
           ].join(' ')}
         >
-          {/* Fixed-width track. The knob slides inside this 36px
-              channel; the channel itself does not move, so the
-              label position stays put. */}
-          <span
-            className="relative inline-block h-6 w-9 overflow-hidden"
-            aria-hidden
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 12 12"
+            className="h-3 w-3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <span
-              className={[
-                'absolute top-0 left-0 inline-flex items-center justify-center h-6 w-6 rounded-full border transition-all duration-200 ease-out',
-                inlineOn
-                  ? 'translate-x-[8px] border-cyber-clay dark:border-cyber-cyan bg-cyber-clay dark:bg-cyber-cyan shadow-[0_0_6px_var(--cyber-clay-glow,rgba(232,93,59,0.55))] dark:shadow-[0_0_6px_var(--cyber-cyan-glow,rgba(0,229,255,0.55))]'
-                  : 'translate-x-0 border-paper-inkSoft/50 dark:border-cyber-muted/50 bg-paper-base dark:bg-ape-base',
-              ].join(' ')}
-            >
-              {/* I/O glyph inside the knob. "I" (vertical bar) when on,
-                  "O" (ring) when off. Centered. */}
-              {inlineOn ? (
-                <span className="block w-[3px] h-3 rounded-sm bg-paper-base dark:bg-ape-base" />
-              ) : (
-                <span className="block w-2.5 h-2.5 rounded-full border-[1.5px] border-paper-inkSoft/70 dark:border-cyber-muted/70" />
-              )}
-            </span>
-          </span>
-          {/* Label, in monospace small caps like the other pills.
-              Sits in a fixed slot to the right of the track. */}
-          <span
-            className={[
-              'text-[15px] font-mono uppercase tracking-wider',
-              inlineOn
-                ? 'text-cyber-clay dark:text-cyber-cyan'
-                : 'text-paper-inkSoft dark:text-cyber-muted',
-            ].join(' ')}
-          >
-            {inlineOn ? 'On' : 'Off'}
-          </span>
+            {/* Sparkle glyph: two stacked four-point stars. */}
+            <path d="M6 1 L6.6 4.4 L10 5 L6.6 5.6 L6 9 L5.4 5.6 L2 5 L5.4 4.4 Z" />
+            <path d="M10 8.5 L10.25 9.75 L11.5 10 L10.25 10.25 L10 11.5 L9.75 10.25 L8.5 10 L9.75 9.75 Z" />
+          </svg>
+          Predict
         </button>
-        <div className="flex-1" />
+        {/* Spacer: pushes the action cluster to the right when the row
+            fits on one line. With flex-wrap on the outer row this
+            flex-1 collapses cleanly when items wrap to a new line. */}
+        <div className="flex-1 basis-full sm:basis-auto" aria-hidden />
         <ImportMediaButton />
         <button
-          className="btn-cyan-sm !text-[15px] !py-1.5"
+          type="button"
+          aria-label="Save current content as a revision"
+          className="btn-icon-square"
           onClick={() => saveRevision(doc.id)}
           title="Save current content as a revision"
         >
-          Save
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 16 16"
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {/* Classic floppy-disk icon. Reads as "save" across
+                platforms and keeps the toolbar compact. */}
+            <path d="M3 3 L11 3 L13 5 L13 13 L3 13 Z" />
+            <path d="M5 3 L5 6 L10 6 L10 3" />
+            <path d="M5 9 L11 9 L11 12 L5 12 Z" />
+          </svg>
         </button>
       </div>
-      <div className="px-4 pt-3 pb-1 flex items-baseline gap-3 bg-paper-base dark:bg-ape-base">
-        <h2 className="font-semibold text-paper-ink dark:text-cyber-primary truncate text-base">
+      <div className="px-4 pt-3 pb-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 bg-paper-base dark:bg-ape-base">
+        <h2 className="font-semibold text-paper-ink dark:text-cyber-primary truncate text-base min-w-0">
           {doc.title}
         </h2>
         <span
           data-saved-label
-          className="text-xs text-paper-inkSoft dark:text-cyber-muted font-mono uppercase tracking-wider"
+          className="text-xs text-paper-inkSoft dark:text-cyber-muted font-mono uppercase tracking-wider whitespace-nowrap"
         >
           {savedLabel}
         </span>
       </div>
       <div className="flex-1 flex min-h-0">
         {showWrite && (
-          <div className={`relative flex-1 min-w-0 flex flex-col ${showPreview ? 'border-r border-paper-hairline dark:border-cyber-border' : ''}`}>
+          <div ref={writePaneRef} className={`relative flex-1 min-w-0 flex flex-col ${showPreview ? 'border-r border-paper-hairline dark:border-cyber-border' : ''}`}>
             <textarea
               ref={textareaRef}
               value={doc.content}
@@ -460,54 +550,111 @@ export function Editor() {
               <div
                 aria-live="polite"
                 aria-label="Inline completion suggestion"
-                className="flex flex-col border-t border-paper-hairline dark:border-cyber-border bg-paper-elevated/60 dark:bg-ape-elevated/60"
-                style={{ maxHeight: '40%' }}
+                className="relative flex flex-col border-t border-paper-hairline dark:border-cyber-border bg-paper-elevated/60 dark:bg-ape-elevated/60"
+                style={{ height: `${suggestionHeight}px`, maxHeight: '60%' }}
+                data-suggestion-panel-height={suggestionHeight}
               >
-                <div className="flex items-center justify-between gap-3 px-4 pt-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-paper-inkSoft dark:text-cyber-muted select-none">
+                {/* Resize handle on the top edge. Drag up to enlarge,
+                    drag down to shrink. Capped at 60% of the write pane
+                    height so the textarea always stays usable. */}
+                <div
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-label="Resize suggestion panel"
+                  aria-valuenow={suggestionHeight}
+                  aria-valuemin={80}
+                  aria-valuemax={600}
+                  onPointerDown={onSuggestionHandleDown}
+                  className="absolute -top-1 left-0 right-0 h-2 cursor-ns-resize z-10 flex items-center justify-center group"
+                  data-suggestion-handle
+                >
+                  <span
+                    aria-hidden
+                    className="block w-12 h-1 rounded-full bg-paper-hairline dark:bg-cyber-border group-hover:bg-cyber-clay/60 dark:group-hover:bg-cyber-cyan/60 transition-colors"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 pt-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-paper-inkSoft dark:text-cyber-muted select-none">
                   <span>Suggestion · Tab to accept · Esc to dismiss</span>
-                  {/* Accept button. Sits in the panel header so it's
-                      always visible regardless of suggestion length.
-                      Dim (disabled visual) when no ghost is on screen
-                      yet (i.e. still streaming), and active when a
-                      ghost is ready to be inserted. Equivalent to
-                      pressing Tab. */}
-                  <button
-                    type="button"
-                    onClick={inline.accept}
-                    // onMouseDown + preventDefault stops the textarea
-                    // from blurring when the button is clicked. Without
-                    // this, blur fires before click and the hook's
-                    // onBlur handler cancels the ghost before accept()
-                    // can read it.
-                    onMouseDown={(e) => e.preventDefault()}
-                    disabled={!inline.ghost}
-                    aria-label="Accept inline completion"
-                    title={
-                      inline.ghost
-                        ? 'Accept the suggestion (Tab)'
-                        : 'Waiting for a suggestion…'
-                    }
-                    className={[
-                      'inline-flex items-center gap-1.5 h-7 px-2.5 rounded border text-sm font-mono uppercase tracking-wider transition-colors',
-                      inline.ghost
-                        ? 'border-cyber-clay dark:border-cyber-cyan bg-cyber-clay/15 dark:bg-cyber-cyan/15 text-cyber-clay dark:text-cyber-cyan hover:bg-cyber-clay/25 dark:hover:bg-cyber-cyan/25 cursor-pointer'
-                        : 'border-paper-hairline dark:border-cyber-border bg-paper-surface/60 dark:bg-ape-panel/60 text-paper-inkSoft/50 dark:text-cyber-muted/50 cursor-not-allowed',
-                    ].join(' ')}
-                  >
-                    <svg
-                      aria-hidden="true"
-                      viewBox="0 0 12 12"
-                      className="h-3 w-3"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                  {/* Action row: Reject + Accept sit side-by-side at the
+                      end of the panel header. Both use the same
+                      onMouseDown + preventDefault guard as the original
+                      Accept button so the textarea does not blur before
+                      the click handler runs. */}
+                  <div className="inline-flex items-center gap-1.5">
+                    {/* Reject button. Mirrors the keyboard Esc behavior:
+                        clears the ghost + aborts any in-flight stream +
+                        hides the bottom panel. Active whenever the panel
+                        is on screen (i.e. there is either a streaming
+                        request or a ghost ready to be accepted),
+                        because dismissing while streaming is useful too
+                        — the user can stop a slow request they no longer
+                        want. Equivalent to pressing Esc. */}
+                    <button
+                      type="button"
+                      onClick={inline.reject}
+                      onMouseDown={(e) => e.preventDefault()}
+                      aria-label="Reject inline completion"
+                      title="Reject the suggestion (Esc)"
+                      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded border text-sm font-mono uppercase tracking-wider transition-colors border-paper-hairline dark:border-cyber-border bg-paper-surface/60 dark:bg-ape-panel/60 text-paper-inkSoft dark:text-cyber-muted hover:border-cyber-brick/60 dark:hover:border-cyber-brickBright/60 hover:text-cyber-brick dark:hover:text-cyber-brickBright hover:bg-cyber-brickSoft dark:hover:bg-cyber-brickSoftDark cursor-pointer"
                     >
-                      <path d="M2 6.5 L5 9 L10 3.5" />
-                    </svg>
-                    Accept
-                  </button>
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 12 12"
+                        className="h-3 w-3"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M3 3 L9 9 M9 3 L3 9" />
+                      </svg>
+                      Reject
+                    </button>
+                    {/* Accept button. Sits in the panel header so it's
+                        always visible regardless of suggestion length.
+                        Dim (disabled visual) when no ghost is on screen
+                        yet (i.e. still streaming), and active when a
+                        ghost is ready to be inserted. Equivalent to
+                        pressing Tab. */}
+                    <button
+                      type="button"
+                      onClick={inline.accept}
+                      // onMouseDown + preventDefault stops the textarea
+                      // from blurring when the button is clicked. Without
+                      // this, blur fires before click and the hook's
+                      // onBlur handler cancels the ghost before accept()
+                      // can read it.
+                      onMouseDown={(e) => e.preventDefault()}
+                      disabled={!inline.ghost}
+                      aria-label="Accept inline completion"
+                      title={
+                        inline.ghost
+                          ? 'Accept the suggestion (Tab)'
+                          : 'Waiting for a suggestion…'
+                      }
+                      className={[
+                        'inline-flex items-center gap-1.5 h-7 px-2.5 rounded border text-sm font-mono uppercase tracking-wider transition-colors',
+                        inline.ghost
+                          ? 'border-cyber-clay dark:border-cyber-cyan bg-cyber-clay/15 dark:bg-cyber-cyan/15 text-cyber-clay dark:text-cyber-cyan hover:bg-cyber-clay/25 dark:hover:bg-cyber-cyan/25 cursor-pointer'
+                          : 'border-paper-hairline dark:border-cyber-border bg-paper-surface/60 dark:bg-ape-panel/60 text-paper-inkSoft/50 dark:text-cyber-muted/50 cursor-not-allowed',
+                      ].join(' ')}
+                    >
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 12 12"
+                        className="h-3 w-3"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M2 6.5 L5 9 L10 3.5" />
+                      </svg>
+                      Accept
+                    </button>
+                  </div>
                 </div>
                 <div
                   className="px-4 pb-3 font-mono whitespace-pre-wrap break-words overflow-y-auto"

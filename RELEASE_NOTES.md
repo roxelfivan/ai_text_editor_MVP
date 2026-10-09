@@ -1,3 +1,40 @@
+## v0.3.2 — Debug Mode, mobile-friendly editor, manual Predict
+
+Polish + UX release on top of [v0.3.1](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.1).
+
+### Added
+
+- **Debug Mode toggle in Settings.** A new switch at the bottom of the Settings modal gates developer-style diagnostics. Off by default.
+  - When **off** (default), the inline-completion counter pill (`requested / accepted`) in the editor toolbar stays hidden — the toolbar stays minimal for end users.
+  - When **on**, the counter pill appears between the status pill and the Predict button. Clicking it resets both counters back to `0 / 0`.
+  - The setting is persisted across reloads via the `debugMode` field in `useStore.ts`, and older persisted state is migrated to `false` on rehydration.
+- **Mobile-friendly editor toolbar.** The editor toolbar now `flex-wraps` instead of clipping on narrow viewports, so every control (view-mode select, font size, status pill, counter pill, Predict button, Import, Save) stays reachable on phone-sized viewports. The `flex-1` spacer uses `basis-full sm:basis-auto` to push the action cluster (Import + Save) onto its own row when needed. The doc-title row also wraps the "saved … ago" label cleanly below the title on narrow screens.
+- **Adjustable suggestion panel.** The bottom suggestion panel now has a hairline drag handle on its top edge. Drag it up or down to resize. Height is persisted in `localStorage` under `ai-text-editor-mvp:suggestion-height` so your preferred size survives reloads. The panel is clamped to `[80 px, 60 % of the write-pane height]` so the textarea never collapses or gets pushed off-screen.
+- **Manual Predict button next to the on/off toggle.** A new sparkle-labelled **Predict** button next to the appliance rocker lets you request a single inline completion on demand, bypassing the 300 ms debounce and the selection suppression. It is greyed out while a ghost is already on screen and when no API key is configured. Keyboard equivalent: ⌘/Ctrl + \ (unchanged).
+- **Reject button in the suggestion panel.** Next to Accept. Same observable effect as pressing Esc — clears the ghost, aborts any in-flight stream, and hides the panel.
+- **Square Import + Save icons in the toolbar.** The cyan pill buttons for Import and Save are replaced by square 36×36 icon-only buttons sharing the same brand outline. The new `.btn-icon-square` utility class is shared via `src/index.css` so they stay consistent in both themes. Tooltips and keyboard equivalents are unchanged.
+- **Darker ghost-text colour in light mode.** A new theme-aware CSS variable `--ghost-color` (`rgba(60, 50, 40, 0.85)` in light, soft warm-grey in dark) replaces the previous rgba fallback that washed out on cream paper. The bottom suggestion text now reads clearly in both themes while still being visibly "draft" versus the surrounding ink.
+
+### Changed
+
+- **`src/components/Editor.tsx`** — toolbar wraps, resize handle, drag-resize hook usage, square Save icon, doc-title row layout.
+- **`src/components/ImportMediaButton.tsx`** — square icon toggle instead of cyan pill; OCR popover logic unchanged.
+- **`src/components/SettingsModal.tsx`** — Debug Mode row with rocker + helper line.
+- **`src/hooks/useInlineCompletion.ts`** — exposes `reject` (same as Esc) and a simplified `cancel`. Public API unchanged.
+- **`src/store/useStore.ts`** — adds `debugMode` boolean + `setDebugMode` action, persisted, with rehydration migration.
+- **`src/index.css`** — adds `--ghost-color` custom property (theme-aware) and the `.btn-icon-square` helper class.
+- **`package.json`** — version bumped to `0.3.2`.
+
+### Notes
+
+- The Predict button is the new state indicator: green (brand clay in light, cyan in dark) means inline prediction is ON, very-light-grey means OFF. Click toggles and, on the OFF→ON transition, also fires a single immediate prediction. The keyboard shortcut ⌘/Ctrl + \ still triggers a one-off prediction regardless of state.
+- Suggestion panel height is the only UI affordance persisted outside the main store (kept in `localStorage` directly, not in the zustand persist config, because it is session-shaped display state and doesn't need to migrate through store version bumps).
+
+### Verification
+
+- `npm run typecheck` — clean.
+- `npm run build` — clean.
+
 ## v0.3.1 — Inline sentence completion + roomier editor toolbar
 
 Feature + polish release on top of [v0.3.0](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.0).

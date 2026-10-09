@@ -130,6 +130,11 @@ export interface StoreState {
   // Whether to include the current selection with each chat message.
   includeSelection: boolean;
 
+  // Whether to show developer-style diagnostics in the UI (e.g. the
+  // inline-completion request/accept counters in the editor toolbar).
+  // Defaults to off so the toolbar stays minimal for end users.
+  debugMode: boolean;
+
   // Settings
   theme: Theme;
   api: ApiConfig;
@@ -174,6 +179,7 @@ export interface StoreState {
   setChatCollapsed: (collapsed: boolean) => void;
   setTopbarCollapsed: (collapsed: boolean) => void;
   setIncludeSelection: (v: boolean) => void;
+  setDebugMode: (v: boolean) => void;
   toggleTheme: () => void;
   setApi: (patch: Partial<ApiConfig>) => void;
   setLayout: (
@@ -236,6 +242,7 @@ export const useStore = create<StoreState>()(
       chatCollapsed: false,
       topbarCollapsed: false,
       includeSelection: true,
+      debugMode: false,
       theme: 'light',
       api: defaultApiConfig,
       layout: {
@@ -374,6 +381,7 @@ export const useStore = create<StoreState>()(
       setChatCollapsed: (chatCollapsed) => set({ chatCollapsed }),
       setTopbarCollapsed: (topbarCollapsed) => set({ topbarCollapsed }),
       setIncludeSelection: (includeSelection) => set({ includeSelection }),
+      setDebugMode: (debugMode) => set({ debugMode }),
       toggleTheme: () =>
         set((s) => {
           const next: Theme = s.theme === 'light' ? 'dark' : 'light';
@@ -421,6 +429,7 @@ export const useStore = create<StoreState>()(
         chatCollapsed: s.chatCollapsed,
         topbarCollapsed: s.topbarCollapsed,
         includeSelection: s.includeSelection,
+        debugMode: s.debugMode,
         theme: s.theme,
         api: s.api,
         layout: s.layout,
@@ -449,6 +458,13 @@ export const useStore = create<StoreState>()(
           // endpoint/model keep working unchanged.
           if (state.api && typeof state.api === 'object' && !('provider' in state.api)) {
             (state.api as ApiConfig).provider = 'minimax';
+            repaired = true;
+          }
+          // Migration for Debug Mode: older payloads predate the
+          // `debugMode` field. Default to off so the toolbar stays
+          // minimal for users upgrading from earlier versions.
+          if (typeof state.debugMode !== 'boolean') {
+            state.debugMode = false;
             repaired = true;
           }
           if (repaired) {

@@ -79,6 +79,13 @@ export interface UseInlineCompletionResult {
    */
   accept: () => void;
   /**
+   * Reject the current ghost suggestion: clears the ghost, aborts any
+   * in-flight stream, and hides the bottom panel. Equivalent to
+   * pressing Esc. Safe to call when no ghost is shown (no-op). Wire
+   * to a "Reject" button in the bottom panel for mouse-only users.
+   */
+  reject: () => void;
+  /**
    * Per-session counters for the inline-completion feature.
    * - requested: requests that actually went out (passed all gates)
    * - accepted:  completions the user accepted with Tab
@@ -293,6 +300,13 @@ export function useInlineCompletion(
     cancel();
   }, [textareaRef, cancel]);
 
+  // Reject the current ghost: clear the ghost, abort any in-flight
+  // stream, and hide the panel. Same observable effect as pressing
+  // Esc, so the keyboard and button stay in lockstep.
+  const reject = useCallback(() => {
+    cancel();
+  }, [cancel]);
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (!ghost) return;
@@ -332,6 +346,7 @@ export function useInlineCompletion(
     onBlur,
     triggerNow,
     accept,
+    reject,
     stats: { requested: statsRequested, accepted: statsAccepted },
     resetStats,
   };
