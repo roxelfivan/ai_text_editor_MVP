@@ -79,7 +79,9 @@ async function getEngine(): Promise<OcrEngine> {
         // zero-leakage guarantee.
         ortOptions: {
           wasmPaths: '/ort/',
-          // Use the WASM backend (deterministic, no WebGPU dependency).
+          // WASM-only. Vite aliases `onnxruntime-web` to
+          // ort.wasm.bundle.min.mjs so the default WebGPU/JSEP bundle
+          // (which calls `new Function` and trips CSP) is never loaded.
           backend: 'wasm',
           // Allow multi-threaded ORT (requires SAB; provided by the
           // COOP/COEP headers in vite.config.ts).
