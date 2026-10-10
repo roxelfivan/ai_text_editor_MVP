@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import {
   extractTextFromFiles,
@@ -6,6 +6,45 @@ import {
   type OcrProgress,
 } from '@/utils/ocr';
 import { formatOcrAsMarkdown } from '@/utils/ocrMarkdown';
+
+const VIEWPORT_PAD = 8;
+const POPOVER_WIDTH = 288; // Tailwind w-72
+
+/**
+ * Pin a popover to the viewport so a left-side (or wrapped) Import
+ * button cannot shove it off-screen on a narrow/vertical layout.
+ * Uses `fixed` coordinates measured from the toggle button.
+ */
+function clampPopoverToViewport(panel: HTMLElement, anchor: HTMLElement) {
+  const pad = VIEWPORT_PAD;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const maxW = Math.min(POPOVER_WIDTH, Math.max(0, vw - pad * 2));
+  panel.style.width = `${maxW}px`;
+  panel.style.maxWidth = `${Math.max(0, vw - pad * 2)}px`;
+  panel.style.maxHeight = `${Math.max(0, vh - pad * 2)}px`;
+  panel.style.overflowY = 'auto';
+
+  const ar = anchor.getBoundingClientRect();
+  // Prefer right-aligning to the button (desktop toolbar), then clamp
+  // so both edges stay on screen.
+  let left = ar.right - maxW;
+  if (left < pad) left = pad;
+  if (left + maxW > vw - pad) left = Math.max(pad, vw - pad - maxW);
+
+  let top = ar.bottom + 4;
+  const h = panel.offsetHeight;
+  if (top + h > vh - pad) {
+    const above = ar.top - 4 - h;
+    top = above >= pad ? above : Math.max(pad, vh - pad - h);
+  }
+
+  panel.style.position = 'fixed';
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+  panel.style.right = 'auto';
+  panel.style.marginTop = '0';
+}
 
 type Lang = OcrLang;
 
@@ -39,11 +78,13 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
   const api = useStore((s) => s.api);
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [langs, setLangs] = useState<Set<Lang>>(() => new Set(['eng']));
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<OcrProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const panelVisible = open || busy || Boolean(error);
 
   // Close the popover on outside click.
   useEffect(() => {
@@ -67,6 +108,25 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
   useEffect(() => {
     if (open) setError(null);
   }, [open]);
+
+  // Keep the language / progress / error panels inside the viewport
+  // after wrap (mobile) or when the window is resized / scrolled.
+  useLayoutEffect(() => {
+    if (!panelVisible) return;
+    const panel = popoverRef.current;
+    const anchor = anchorRef.current;
+    if (!panel || !anchor) return;
+    const apply = () => clampPopoverToViewport(panel, anchor);
+    apply();
+    window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', apply);
+    window.addEventListener('scroll', apply, true);
+    return () => {
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('orientationchange', apply);
+      window.removeEventListener('scroll', apply, true);
+    };
+  }, [panelVisible, open, busy, error]);
 
   const toggleLang = (code: Lang) => {
     setLangs((prev) => {
@@ -153,7 +213,7 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
   const strategyLabel = `${langs.size} language${langs.size === 1 ? '' : 's'} checked (single pass; multilingual model)`;
 
   return (
-    <div className="relative inline-block">
+    <div ref={anchorRef} className="relative inline-block">
       <button
         type="button"
         data-import-media-toggle
@@ -196,7 +256,7 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
       {open && !busy && (
         <div
           ref={popoverRef}
-          className="absolute right-0 top-full mt-1 z-30 w-72 bg-paper-panel dark:bg-ape-panel border border-paper-hairline dark:border-cyber-border rounded shadow-ape-paper-lift dark:shadow-lg p-3 text-xs space-y-2"
+          className="fixed z-40 w-72 max-w-[calc(100vw-1rem)] bg-paper-panel dark:bg-ape-panel border border-paper-hairline dark:border-cyber-border rounded shadow-ape-paper-lift dark:shadow-lg p-3 text-xs space-y-2 box-border"
         >
           <div className="font-semibold text-sm text-cyber-clay dark:text-cyber-cyan uppercase tracking-wide">
             OCR languages
@@ -231,7 +291,7 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
           <div className="text-[11px] text-paper-inkSoft dark:text-cyber-muted font-mono">
             Strategy: {strategyLabel}.
           </div>
-          <div className="flex items-center justify-end gap-2 pt-1">
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
             <button
               type="button"
               className="btn-cyan-sm"
@@ -255,7 +315,10 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
         </div>
       )}
       {busy && progress && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-72 bg-paper-panel dark:bg-ape-panel border border-cyber-clay/40 dark:border-cyber-cyan/60 rounded shadow-ape-paper-lift dark:shadow-lg px-3 py-2 text-xs">
+        <div
+          ref={popoverRef}
+          className="fixed z-40 w-72 max-w-[calc(100vw-1rem)] bg-paper-panel dark:bg-ape-panel border border-cyber-clay/40 dark:border-cyber-cyan/60 rounded shadow-ape-paper-lift dark:shadow-lg px-3 py-2 text-xs box-border"
+        >
           <div className="flex items-center gap-2">
             <span className="inline-block w-2 h-2 rounded-full bg-cyber-clay dark:bg-cyber-cyan animate-pulse" />
             <span className="flex-1 truncate text-paper-ink dark:text-cyber-primary">{statusLabel}</span>
@@ -266,7 +329,10 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
         </div>
       )}
       {error && !open && !busy && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-72 bg-paper-panel dark:bg-ape-panel border border-cyber-danger/40 dark:border-cyber-danger/60 rounded shadow-ape-paper-lift dark:shadow-lg px-3 py-2 text-xs text-cyber-danger">
+        <div
+          ref={popoverRef}
+          className="fixed z-40 w-72 max-w-[calc(100vw-1rem)] bg-paper-panel dark:bg-ape-panel border border-cyber-danger/40 dark:border-cyber-danger/60 rounded shadow-ape-paper-lift dark:shadow-lg px-3 py-2 text-xs text-cyber-danger box-border"
+        >
           {error}
         </div>
       )}
