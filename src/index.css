@@ -152,6 +152,25 @@ html.dark body {
            hover:shadow-ape-glow-soft hover:text-cyber-cyanSoft;
   }
 
+  /* Primary square icon button (Settings). Same 36×36 footprint as
+     `.btn-icon-square`, but filled with the fire / clay treatment so
+     the settings control stays visually distinct in the topbar. */
+  .btn-icon-square-fire {
+    @apply inline-flex items-center justify-center
+           h-9 w-9 rounded-md
+           border border-transparent
+           bg-cyber-clay text-paper-surface
+           transition-colors duration-150
+           hover:bg-cyber-clay/90
+           active:translate-y-px
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  html.dark .btn-icon-square-fire {
+    @apply text-paper-base bg-ape-fire shadow-ape-fire-soft
+           hover:bg-ape-fire-hover hover:shadow-ape-fire
+           border-cyber-fire/40;
+  }
+
   /* Danger — LIGHT: muted brick outline on paper. DARK: same on dark. */
   .btn-danger {
     @apply inline-flex items-center justify-center gap-1 rounded px-3 py-1.5
