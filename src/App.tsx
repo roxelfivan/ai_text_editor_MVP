@@ -55,18 +55,47 @@ function Topbar({
       )}
       <div className="flex-1" />
       <button
-        className="btn-cyan-sm !text-[15px] !py-1.5"
+        type="button"
+        className="btn-icon-square"
         onClick={onOpenRevisions}
         title="Revision history"
+        aria-label="Revision history"
       >
-        History
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 16 16"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {/* Clock: revision history. */}
+          <circle cx="8" cy="8" r="5.5" />
+          <path d="M8 5.2 V8.1 L10.3 9.6" />
+        </svg>
       </button>
       <button
-        className="btn-cyan-sm !text-[15px] !py-1.5"
+        type="button"
+        className="btn-icon-square"
         onClick={onOpenPrompts}
         title="Prompt library"
+        aria-label="Prompt library"
       >
-        Prompts
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 16 16"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {/* Bookmark: saved prompts. */}
+          <path d="M4 2.5 H12 V13.5 L8 11 L4 13.5 Z" />
+        </svg>
       </button>
       <button
         className="btn-cyan-sm !text-[15px] !py-1.5"
@@ -76,12 +105,32 @@ function Topbar({
         {theme === 'dark' ? '☀ Light' : '☾ Dark'}
       </button>
       <button
-        className="btn-fire-sm !text-[15px] !py-1.5"
+        type="button"
+        className="btn-icon-square-fire relative"
         onClick={onOpenSettings}
         title="Settings"
+        aria-label={api.apiKey ? 'Settings' : 'Settings (API key missing)'}
       >
-        Settings
-        {!api.apiKey && <span className="ml-1 opacity-80">⚠</span>}
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {/* Gear: settings. */}
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z" />
+        </svg>
+        {!api.apiKey && (
+          <span
+            className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400"
+            aria-hidden="true"
+          />
+        )}
       </button>
     </header>
   );
