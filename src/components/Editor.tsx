@@ -1,10 +1,56 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { useStore, useCurrentDocument } from '@/store/useStore';
 import { ImportMediaButton } from '@/components/ImportMediaButton';
 import { useInlineCompletion } from '@/hooks/useInlineCompletion';
 import { useDragResize } from '@/hooks/useDragResize';
+
+/**
+ * After any code path that updates the controlled textarea's value
+ * (`updateContent`, OCR insert, accept-completion, wrapSelection…),
+ * restore the caret / focus on the next microtask so React has flushed
+ * the new value into the DOM.
+ *
+ * The microtask is needed because `updateContent` triggers a React
+ * re-render; trying to focus or set the selection range synchronously
+ * hits a stale element. `focus({ preventScroll: true })` keeps the
+ * surrounding page from scrolling when the textarea is far down on
+ * the page. `try/catch` around `setSelectionRange` defends against
+ * React 18 strict mode briefly detaching the element between commit
+ * and the microtask, which would otherwise throw `InvalidStateError`.
+ *
+ * Optional `preserveScroll` additionally restores the textarea's
+ * internal `scrollTop`/`scrollLeft` after the focus/selection change
+ * in case the browser tried to scroll the textarea itself.
+ */
+function restoreCaret(
+  ta: HTMLTextAreaElement | null,
+  start: number,
+  end: number,
+  options?: { preserveScroll?: boolean }
+) {
+  if (!ta) return;
+  const scrollTop = options?.preserveScroll ? ta.scrollTop : 0;
+  const scrollLeft = options?.preserveScroll ? ta.scrollLeft : 0;
+  queueMicrotask(() => {
+    try {
+      ta.focus({ preventScroll: true });
+    } catch {
+      ta.focus();
+    }
+    try {
+      ta.setSelectionRange(start, end);
+    } catch {
+      /* textarea may be temporarily detached between commit and microtask */
+    }
+    if (options?.preserveScroll) {
+      if (ta.scrollTop !== scrollTop) ta.scrollTop = scrollTop;
+      if (ta.scrollLeft !== scrollLeft) ta.scrollLeft = scrollLeft;
+    }
+  });
+}
 
 /**
  * Editor: plain textarea (write) + react-markdown preview (preview),
@@ -197,16 +243,7 @@ export function Editor() {
       updateContent(doc.id, newValue);
       // Restore the caret to the end of the inserted text on the next
       // tick so React has applied the new value to the textarea first.
-      queueMicrotask(() => {
-        const el = textareaRef.current;
-        if (!el) return;
-        el.focus();
-        try {
-          el.setSelectionRange(caret, caret);
-        } catch {
-          /* some browsers throw if the element is not visible */
-        }
-      });
+      restoreCaret(textareaRef.current, caret, caret);
     };
     window.addEventListener('mvp:insert-text', handler);
     return () => window.removeEventListener('mvp:insert-text', handler);
@@ -224,16 +261,7 @@ export function Editor() {
       if (typeof text !== 'string' || typeof caret !== 'number') return;
       if (!doc) return;
       updateContent(doc.id, text);
-      queueMicrotask(() => {
-        const el = textareaRef.current;
-        if (!el) return;
-        el.focus();
-        try {
-          el.setSelectionRange(caret, caret);
-        } catch {
-          /* some browsers throw if the element is not visible */
-        }
-      });
+      restoreCaret(textareaRef.current, caret, caret);
     };
     window.addEventListener('mvp:accept-completion', handler);
     return () => window.removeEventListener('mvp:accept-completion', handler);
@@ -298,6 +326,145 @@ export function Editor() {
     });
   };
 
+  // Inline-format helper. Wraps the current textarea selection (or
+  // inserts a pair at the caret if there is no selection) with the
+  // appropriate markdown / HTML marker, and unwraps if the selection
+  // is already wrapped with that exact marker. Used by the toolbar
+  // B/I/U buttons and the Ctrl/Cmd+B / I / U keyboard shortcuts.
+  //
+  //   Bold      → **...**   (markdown; rendered as <strong>)
+  //   Italic    → *...*     (markdown; rendered as <em>)
+  //   Underline → <u>...</u> (raw HTML passed through react-markdown)
+  //
+  // The caret / selection is restored on the next microtask so React
+  // has a chance to apply the new value to the controlled textarea
+  // before we re-set its selection range. Same pattern the OCR
+  // insert event uses a few effects above.
+  type WrapKind = 'bold' | 'italic' | 'underline';
+  const wrapSelection = useCallback(
+    (kind: WrapKind) => {
+      const ta = textareaRef.current;
+      if (!ta || !doc) return;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const value = doc.content;
+      // Clamp the live textarea selection into the document. If the
+      // doc content was changed under us (e.g. by an AI reply landing
+      // mid-keystroke), selectionStart/End can briefly exceed the
+      // string length; coerce to the current bounds so slice() is safe.
+      const safeStart = Math.max(0, Math.min(start, value.length));
+      const safeEnd = Math.max(0, Math.min(end, value.length));
+      const before = value.slice(0, safeStart);
+      const selected = value.slice(safeStart, safeEnd);
+      const after = value.slice(safeEnd);
+      const hasSelection = safeStart !== safeEnd;
+      const open =
+        kind === 'bold' ? '**' : kind === 'italic' ? '*' : '<u>';
+      const close =
+        kind === 'bold' ? '**' : kind === 'italic' ? '*' : '</u>';
+
+      let next: string;
+      let caretStart: number;
+      let caretEnd: number;
+
+      if (hasSelection) {
+        // Context-aware toggle. The old check only fired when the
+        // selection itself started/ended with the markers, which
+        // failed the common case of "select just the inner text and
+        // click the format to toggle it off". Now we look at the
+        // document text immediately before/after the selection.
+        //
+        // We also disambiguate between ** and * (bold vs italic) so
+        // that `**hello**` + click I correctly ADDS italic (instead
+        // of incorrectly unwrapping one of the bold markers).
+        let wrappedBy = false;
+        let stripBefore = 0;
+        let stripAfter = 0;
+        if (kind === 'underline') {
+          // `<u>` and `</u>` are unambiguous; no disambiguation needed.
+          const beforeMarker = value.slice(
+            Math.max(0, safeStart - open.length),
+            safeStart
+          );
+          const afterMarker = value.slice(safeEnd, safeEnd + close.length);
+          wrappedBy = beforeMarker === open && afterMarker === close;
+          stripBefore = open.length;
+          stripAfter = close.length;
+        } else if (kind === 'bold') {
+          // Bold open/close is `**` (two stars). It's a clean bold
+          // wrap when the two stars before/after the selection are
+          // NOT part of a longer `***` triple.
+          const before2 = value.slice(
+            Math.max(0, safeStart - 2),
+            safeStart
+          );
+          const after2 = value.slice(safeEnd, safeEnd + 2);
+          const charBefore2 = safeStart >= 2 ? value[safeStart - 3] : '';
+          const charAfter2 =
+            safeEnd + 2 < value.length ? value[safeEnd + 2] : '';
+          wrappedBy =
+            before2 === '**' &&
+            after2 === '**' &&
+            charBefore2 !== '*' &&
+            charAfter2 !== '*';
+          stripBefore = 2;
+          stripAfter = 2;
+        } else {
+          // Italic open/close is `*` (one star). The single `*` is
+          // an italic marker only when it's NOT part of a `**` bold
+          // pair or a `***` bold-italic triple on either side.
+          const before1 = safeStart >= 1 ? value[safeStart - 1] : '';
+          const after1 = safeEnd < value.length ? value[safeEnd] : '';
+          const charBefore1 = safeStart >= 2 ? value[safeStart - 2] : '';
+          const charAfter1 =
+            safeEnd + 1 < value.length ? value[safeEnd + 1] : '';
+          wrappedBy =
+            before1 === '*' &&
+            after1 === '*' &&
+            charBefore1 !== '*' &&
+            charAfter1 !== '*';
+          stripBefore = 1;
+          stripAfter = 1;
+        }
+        if (wrappedBy) {
+          // Markers are in the document text around the selection, so
+          // the inner text IS the selected text. Drop stripBefore
+          // chars from the end of `before` and stripAfter chars from
+          // the start of `after`.
+          next =
+            before.slice(0, before.length - stripBefore) +
+            selected +
+            after.slice(stripAfter);
+          caretStart = safeStart - stripBefore;
+          caretEnd = caretStart + selected.length;
+        } else {
+          next = before + open + selected + close + after;
+          caretStart = safeStart + open.length;
+          caretEnd = caretStart + selected.length;
+        }
+      } else {
+        // No selection: insert the pair and drop the caret between
+        // them so the user can keep typing.
+        next = before + open + close + after;
+        caretStart = safeStart + open.length;
+        caretEnd = caretStart;
+      }
+
+      updateContent(doc.id, next);
+      // Restore the selection on the next microtask so React has
+      // flushed the new value into the controlled textarea.
+      // `preserveScroll: true` keeps the surrounding page from
+      // jumping to top/bottom when the user clicks a toolbar button
+      // (button briefly takes focus, then we re-focus the textarea;
+      // without `preventScroll` the browser may scroll the page to
+      // bring the newly-focused element into view).
+      restoreCaret(textareaRef.current, caretStart, caretEnd, {
+        preserveScroll: true,
+      });
+    },
+    [doc, updateContent]
+  );
+
   if (!doc) {
     return (
       <div className="flex-1 flex items-center justify-center bg-paper-base dark:bg-ape-base">
@@ -318,7 +485,18 @@ export function Editor() {
   const showPreview = viewMode === 'preview' || viewMode === 'split';
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-paper-base dark:bg-ape-base">
+    <div
+      className="flex-1 flex flex-col min-w-0 bg-paper-base dark:bg-ape-base"
+      // The editor's textarea and preview are governed by their own
+      // explicit `font-size` (in px, via `editorFontSize`). The
+      // toolbar's chrome uses literal `text-[Npx]` utilities which
+      // already ignore `<html>` font-size. The only descendants still
+      // scaled by `<html>` font-size are a few stray `text-xs` /
+      // `text-sm` helpers (e.g. the inline-completion status pill),
+      // so we set a stable 14px root here to keep those readable
+      // regardless of the global UI font-size setting.
+      style={{ fontSize: '14px' }}
+    >
       <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-paper-hairline dark:border-cyber-border bg-paper-base dark:bg-ape-base text-[15px] leading-none">
         <div className="relative inline-block">
           <select
@@ -370,37 +548,82 @@ export function Editor() {
             +
           </button>
         </div>
-        {/* Inline-completion status pill. Three states: idle (no dot),
-            thinking (pulsing dot + "thinking…"), generated (solid dot +
-            "ready"). The "generated" state means a ghost is on screen
-            waiting to be accepted with Tab. */}
+        {/* Inline-format toolbar: B (bold), I (italic), U (underline).
+            Mirrors the font-size group's pill shape so the row reads
+            as a single coherent toolbar. The buttons wrap the current
+            selection in the corresponding markdown / HTML marker (or
+            insert a pair at the caret if nothing is selected). The
+            same actions are also bound to Ctrl/Cmd+B/I/U via the
+            textarea's onKeyDown. */}
         <div
-          className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded border border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel text-[15px] font-mono uppercase tracking-wider select-none"
-          aria-live="polite"
-          aria-label="Inline completion status"
-          title="Inline sentence completion status"
+          className="inline-flex rounded border border-paper-hairline dark:border-cyber-border overflow-hidden text-[15px] leading-none"
+          role="group"
+          aria-label="Inline formatting"
         >
-          {inline.streaming ? (
-            <>
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyber-clay dark:bg-cyber-cyan animate-pulse" />
-              <span className="text-cyber-clay dark:text-cyber-cyan">thinking</span>
-            </>
-          ) : inline.ghost ? (
-            <>
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyber-clay dark:bg-cyber-cyan" />
-              <span className="text-cyber-clay dark:text-cyber-cyan">ready · tab</span>
-            </>
-          ) : (
-            <>
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-paper-inkSoft/40 dark:bg-cyber-muted/40" />
-              <span className="text-paper-inkSoft dark:text-cyber-muted">idle</span>
-            </>
-          )}
+          <button
+            type="button"
+            className="w-9 h-9 flex items-center justify-center text-[15px] font-bold text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors border-r border-paper-hairline dark:border-cyber-border"
+            onClick={() => wrapSelection('bold')}
+            // Prevent the button from stealing focus on mousedown, so
+            // the focus stays on the textarea and the page does not
+            // jump to top/end after a toolbar click.
+            onMouseDown={(e) => e.preventDefault()}
+            aria-label="Bold"
+            title="Bold — wraps the selection in **...** (Ctrl/Cmd+B)"
+          >
+            B
+          </button>
+          <button
+            type="button"
+            className="w-9 h-9 flex items-center justify-center text-[15px] font-serif italic text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors border-r border-paper-hairline dark:border-cyber-border"
+            onClick={() => wrapSelection('italic')}
+            onMouseDown={(e) => e.preventDefault()}
+            aria-label="Italic"
+            title="Italic — wraps the selection in *...* (Ctrl/Cmd+I)"
+          >
+            I
+          </button>
+          <button
+            type="button"
+            className="w-9 h-9 flex items-center justify-center text-[15px] underline underline-offset-2 text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors"
+            onClick={() => wrapSelection('underline')}
+            onMouseDown={(e) => e.preventDefault()}
+            aria-label="Underline"
+            title="Underline — wraps the selection in <u>...</u> (Ctrl/Cmd+U)"
+          >
+            U
+          </button>
         </div>
-        {/* Inline-completion counters: requests fired / completions
-            accepted this session. Click to reset. Hidden unless the user
-            has enabled Debug Mode in Settings, so the toolbar stays
-            minimal for end users. */}
+        {/* Inline-completion status pill. Gated by `debugMode`; the
+            state machine that drives the pill keeps running
+            regardless (see `debugMode` in useStore.ts). */}
+        {debugMode && (
+          <div
+            className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded border border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel text-[15px] font-mono uppercase tracking-wider select-none"
+            aria-live="polite"
+            aria-label="Inline completion status"
+            title="Inline sentence completion status"
+          >
+            {inline.streaming ? (
+              <>
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyber-clay dark:bg-cyber-cyan animate-pulse" />
+                <span className="text-cyber-clay dark:text-cyber-cyan">thinking</span>
+              </>
+            ) : inline.ghost ? (
+              <>
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyber-clay dark:bg-cyber-cyan" />
+                <span className="text-cyber-clay dark:text-cyber-cyan">ready · tab</span>
+              </>
+            ) : (
+              <>
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-paper-inkSoft/40 dark:bg-cyber-muted/40" />
+                <span className="text-paper-inkSoft dark:text-cyber-muted">idle</span>
+              </>
+            )}
+          </div>
+        )}
+        {/* Inline-completion counters (requested / accepted). Gated
+            by `debugMode`; click to reset. */}
         {debugMode && (
           <button
             type="button"
@@ -525,6 +748,30 @@ export function Editor() {
                 if (inlineEnabled) inline.onTextChange(e.target.value);
               }}
               onKeyDown={(e) => {
+                // Ctrl/Cmd + B / I / U → inline-format the selection.
+                // Checked before the inline-completion handler so the
+                // shortcut wins over any ghost the model may have on
+                // screen. preventDefault stops the browser from also
+                // firing its own B / I / U bindings (Firefox in
+                // particular maps Ctrl+U to view-source).
+                if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+                  const k = e.key.toLowerCase();
+                  if (k === 'b') {
+                    e.preventDefault();
+                    wrapSelection('bold');
+                    return;
+                  }
+                  if (k === 'i') {
+                    e.preventDefault();
+                    wrapSelection('italic');
+                    return;
+                  }
+                  if (k === 'u') {
+                    e.preventDefault();
+                    wrapSelection('underline');
+                    return;
+                  }
+                }
                 if (inlineEnabled) inline.onKeyDown(e);
               }}
               onFocus={() => reportCaret(true)}
@@ -685,7 +932,10 @@ export function Editor() {
               className="flex-1 overflow-y-auto p-4 prose-md bg-paper-base dark:bg-ape-base"
               style={{ fontSize: `${editorFontSize}px`, lineHeight: 1.55 }}
             >
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw]}
+            >
               {doc.content || '*Nothing to preview yet.*'}
             </ReactMarkdown>
           </div>

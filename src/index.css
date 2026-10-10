@@ -278,6 +278,22 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 .prose-md strong {
   @apply text-paper-ink font-semibold;
 }
+
+/* Underline styling for inline <u> tags emitted by the B/I/U toolbar.
+   Mirrors the design tokens used for links (`prose-md a`) so an
+   underlined span reads as a deliberate accent rather than a browser
+   default (which can be a thin low-contrast line on warm paper and
+   a bright hue on dark mode). The decoration color follows the
+   shared "clay" / "cyan" accent in light / dark mode respectively. */
+.prose-md u {
+  @apply underline decoration-cyber-clay/60 decoration-1 underline-offset-2;
+}
+html.dark .prose-md em {
+  @apply text-paper-base;
+}
+html.dark .prose-md u {
+  @apply decoration-cyber-cyan/70 decoration-1 underline-offset-2;
+}
 html.dark .prose-md {
   @apply text-paper-base;
 }

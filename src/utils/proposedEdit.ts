@@ -64,7 +64,6 @@ function rescueRawJsonEdits(
   segments: ProposedEditSegment[]
 ): ProposedEditSegment[] {
   const out: ProposedEditSegment[] = [];
-  let rescued = 0;
   // The JSON object regex matches a top-level `{` followed by
   // `"id"` / `"summary"` / `"original"` / `"replacement"` string
   // properties, then balanced braces. We allow unescaped `"` inside the
@@ -89,7 +88,6 @@ function rescueRawJsonEdits(
       }
       const edit = tryParseEditLenient(mm[0]);
       if (edit) {
-        rescued++;
         out.push({ kind: 'edit', payload: edit });
       } else {
         out.push({ kind: 'text', payload: mm[0] });
@@ -99,8 +97,6 @@ function rescueRawJsonEdits(
     if (cursor < text.length) {
       out.push({ kind: 'text', payload: text.slice(cursor) });
     }
-  }
-  if (rescued > 0) {
   }
   return out;
 }
@@ -341,6 +337,37 @@ export function applyEdit(
     replacement +
     content.slice(anchor.idx + anchor.length);
   return { ok: true, next };
+}
+
+/**
+ * Apply a batch of `ProposedEdit`s in order against a running string
+ * accumulator. Each edit's `original` is looked up against the *current*
+ * accumulator (which already reflects any prior edits in the batch), so
+ * two overlapping edits compose correctly: the second `applyEdit` runs
+ * against text that has the first edit applied.
+ *
+ * Edits whose `original` is not found in the current accumulator are
+ * skipped silently — no error is raised. The caller derives the skip
+ * count from `edits.length - appliedIds.length` for any user-visible
+ * summary, matching the per-message "Apply All" action's footer
+ * (`"Applied X of Y changes (Z skipped — not anchored)"`).
+ */
+export function applyAllEdits(
+  content: string,
+  edits: ProposedEdit[]
+): { next: string; appliedIds: string[] } {
+  let acc = content;
+  const appliedIds: string[] = [];
+  for (const edit of edits) {
+    const anchor = findEditAnchor(acc, edit.original);
+    if (!anchor) continue;
+    acc =
+      acc.slice(0, anchor.idx) +
+      edit.replacement +
+      acc.slice(anchor.idx + anchor.length);
+    appliedIds.push(edit.id);
+  }
+  return { next: acc, appliedIds };
 }
 
 /**

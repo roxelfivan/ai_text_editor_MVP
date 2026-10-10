@@ -9,6 +9,12 @@ import { SettingsModal } from '@/components/SettingsModal';
 import { EdgeAnchor } from '@/components/EdgeAnchor';
 import { applyThemeClass } from '@/utils/theme';
 
+// Inputs that are safe to treat as "the user is typing" for the purpose
+// of deferring global shortcuts. Lifted to module scope so the regex
+// is compiled once per app lifetime rather than once per keystroke.
+const TEXT_INPUT_TYPES =
+  /^(text|search|email|url|tel|password|number)$/;
+
 // APP_VERSION is injected at build time from package.json via Vite's
 // `define` config (see vite.config.ts). Keeping the source of truth in
 // package.json means the topbar always matches the published version.
@@ -88,6 +94,7 @@ export default function App() {
 
   const theme = useStore((s) => s.theme);
   const api = useStore((s) => s.api);
+  const uiFontSize = useStore((s) => s.uiFontSize);
   const sidebarCollapsed = useStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useStore((s) => s.setSidebarCollapsed);
   const chatCollapsed = useStore((s) => s.chatCollapsed);
@@ -100,6 +107,16 @@ export default function App() {
   useEffect(() => {
     applyThemeClass(theme);
   }, [theme]);
+
+  // Sync the `<html>` base font-size whenever the global UI font size
+  // setting changes. Every `rem`-based Tailwind text utility
+  // (text-xs, text-sm, text-[11px], …) resolves against this value, so
+  // the entire app's UI text scales uniformly. The editor subtree
+  // overrides the cascade with its own explicit `font-size`, so it is
+  // unaffected.
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${uiFontSize}px`;
+  }, [uiFontSize]);
 
   // If there's no API key, gently prompt the user once on first load.
   useEffect(() => {
@@ -116,6 +133,19 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
+      // Defer to the focused editor's own keyboard shortcuts when the
+      // event originated inside an editable element. Otherwise Ctrl+B
+      // would also collapse the sidebar while the user is just trying
+      // to bold some text, and any future editor shortcut (Ctrl+I,
+      // Ctrl+U, etc.) would be at risk of the same conflict.
+      const t = e.target as HTMLElement | null;
+      const editable =
+        t instanceof HTMLTextAreaElement ||
+        // text-ish inputs only; checkboxes / radios / buttons keep
+        // the global shortcuts.
+        (t instanceof HTMLInputElement && TEXT_INPUT_TYPES.test(t.type)) ||
+        (t?.isContentEditable ?? false);
+      if (editable) return;
       if (e.key === '.') {
         e.preventDefault();
         setSettingsOpen(true);

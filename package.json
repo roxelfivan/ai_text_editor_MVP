@@ -1,7 +1,7 @@
 {
   "name": "ai-text-editor-mvp",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "description": "Minimal local-first AI markdown editor (MVP).",
   "scripts": {
@@ -21,6 +21,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
+    "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.0",
     "uuid": "^9.0.1",
     "zustand": "^4.5.4"

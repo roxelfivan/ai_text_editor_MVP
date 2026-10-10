@@ -209,6 +209,64 @@ recognitions.
 | ⌘ / Ctrl + h      | Open Revision history |
 | ⌘ / Ctrl + Enter | Send chat message     |
 
+## Release notes
+
+### v0.3.3 — Apply All, B/I/U toolbar, debug mode, global UI font size
+
+- **Apply All** for proposed edits — each assistant message with
+  proposed edits now has a single **Apply All** button that bulk-applies
+  every anchorable edit in one document update and reports
+  `Applied X of Y changes (Z skipped — not anchored)` in the chat
+  footer. Un-anchorable edits are skipped silently, matching the
+  per-card "force-apply at caret" fallback for individual edits.
+- **Editor B / I / U toolbar** — three new buttons (and ⌘/Ctrl+B,
+  ⌘/Ctrl+I, ⌘/Ctrl+U shortcuts) wrap the current selection in the
+  matching markdown marker. Bold / Italic are toggle-aware (clicking
+  on already-formatted text unwraps it); Underline uses raw
+  `<u>…</u>` HTML via `rehype-raw`. The page no longer jumps to the
+  top/end of the document when a toolbar button is clicked with the
+  mouse — `preventDefault` on `mousedown` keeps focus on the textarea
+  and the focus-restoration microtask uses
+  `focus({ preventScroll: true })`.
+- **Debug Mode** — a new switch in **Settings** that gates the
+  inline-completion status pill (`idle` / `thinking` / `ready · tab`)
+  and the request/accept counters in the editor toolbar. The
+  underlying inline-completion state machine keeps running
+  regardless, so toggling Debug Mode only changes which diagnostic
+  UI is visible — it never pauses or restarts the feature. Defaults
+  to off so the toolbar stays minimal for end users.
+- **Global UI font size** — a new slider in **Settings** scales
+  every UI text in the app (topbar, sidebar, chat, modals) while
+  the editor's own textarea / preview / toolbar remain governed by
+  their independent per-document font-size control. A `Reset` button
+  restores the 14px default; the value is persisted in `localStorage`
+  and clamped to `[12, 20]` px.
+- **Settings modal layout** — the modal body is now scrollable
+  (header / footer stay pinned at small window heights), and
+  **Debug Mode** + **UI font size** sit on a single row at
+  `sm:` viewports and stack below.
+- **Hygiene pass** — several dead-code and unreachable-code paths
+  were removed (orphaned counters, three `queueMicrotask` blocks
+  consolidated into a `restoreCaret` helper, the no-op
+  `.prose-md em { @apply italic; }` rule, an unused `skippedIds`
+  field, `disabled={!doc}` on buttons guarded by an early return).
+
+### v0.3.2 — Debug mode, mobile-friendly editor, manual Predict
+
+- Initial Debug Mode hookup, mobile-friendly editor layout, and a
+  manual **Predict** button as a fallback for the inline trigger.
+
+### v0.3.1 — Inline sentence completion + roomier editor toolbar
+
+- Tab-to-accept and ⌘/Ctrl+\\ manual trigger for the inline sentence
+  completion feature; toolbar chrome made roomier for the new
+  affordances.
+
+### v0.3.0 — Editorial palette, transparent wordmark, redesigned toolbar
+
+- ApEditor design system (cyberpunk dark + Muji light), transparent
+  logo wordmark, and a redesigned editor toolbar.
+
 ## What's intentionally **not** here
 
 This MVP is a bare-bones reproduction. The original project includes far more:

@@ -111,6 +111,13 @@ export interface StoreState {
   // prose preview). Step is 1px; range is [10, 24]. Persisted.
   editorFontSize: number;
 
+  // Global UI font size in pixels. Applied to <html> as the base font
+  // size, so every `rem`-based Tailwind text utility (text-xs, text-sm,
+  // text-[11px], etc.) scales uniformly. The editor is excluded because
+  // its own subtree sets an explicit font-size on its root. Step is 1px;
+  // range is [12, 20]. Persisted.
+  uiFontSize: number;
+
   // Whether the chat panel is open.
   chatOpen: boolean;
 
@@ -130,9 +137,15 @@ export interface StoreState {
   // Whether to include the current selection with each chat message.
   includeSelection: boolean;
 
-  // Whether to show developer-style diagnostics in the UI (e.g. the
-  // inline-completion request/accept counters in the editor toolbar).
-  // Defaults to off so the toolbar stays minimal for end users.
+  // Whether to show developer-style diagnostics in the UI:
+  //   - the inline-completion status pill (idle / thinking / ready)
+  //     in the editor toolbar, and
+  //   - the inline-completion request/accept counters next to it.
+  // The underlying inline-completion state machine keeps running
+  // even when this flag is off, so toggling it only changes which
+  // diagnostic UI is visible — it never pauses or restarts the
+  // feature. Defaults to off so the toolbar stays minimal for
+  // end users.
   debugMode: boolean;
 
   // Settings
@@ -174,6 +187,7 @@ export interface StoreState {
 
   setViewMode: (mode: StoreState['viewMode']) => void;
   bumpEditorFontSize: (delta: number) => void;
+  setUiFontSize: (size: number) => void;
   setChatOpen: (open: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setChatCollapsed: (collapsed: boolean) => void;
@@ -237,6 +251,7 @@ export const useStore = create<StoreState>()(
       prompts: seedPrompts,
       viewMode: 'split',
       editorFontSize: 14,
+      uiFontSize: 14,
       chatOpen: true,
       sidebarCollapsed: false,
       chatCollapsed: false,
@@ -376,6 +391,7 @@ export const useStore = create<StoreState>()(
         set((s) => ({
           editorFontSize: clamp(s.editorFontSize + delta, 10, 24),
         })),
+      setUiFontSize: (size) => set({ uiFontSize: clamp(size, 12, 20) }),
       setChatOpen: (chatOpen) => set({ chatOpen }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setChatCollapsed: (chatCollapsed) => set({ chatCollapsed }),
@@ -424,6 +440,7 @@ export const useStore = create<StoreState>()(
         prompts: s.prompts,
         viewMode: s.viewMode,
         editorFontSize: s.editorFontSize,
+        uiFontSize: s.uiFontSize,
         chatOpen: s.chatOpen,
         sidebarCollapsed: s.sidebarCollapsed,
         chatCollapsed: s.chatCollapsed,
@@ -467,10 +484,29 @@ export const useStore = create<StoreState>()(
             state.debugMode = false;
             repaired = true;
           }
+          // Migration for UI font size: older payloads predate the
+          // `uiFontSize` field. Default to 14px (the implicit body
+          // size before this setting existed) and clamp any out-of-
+          // range value persisted by a future build.
+          if (typeof state.uiFontSize !== 'number') {
+            state.uiFontSize = 14;
+            repaired = true;
+          } else if (state.uiFontSize < 12 || state.uiFontSize > 20) {
+            state.uiFontSize = clamp(state.uiFontSize, 12, 20);
+            repaired = true;
+          }
           if (repaired) {
             try {
-              // Persist the corrected values so we don't re-run the repair on every load.
-              useStore.setState({ layout: state.layout, api: state.api });
+              // Persist the corrected values so we don't re-run the
+              // repair on every load. Include all migrated fields
+              // explicitly — a partial setState leaves stale values
+              // in localStorage and forces re-repair on next boot.
+              useStore.setState({
+                layout: state.layout,
+                api: state.api,
+                debugMode: state.debugMode,
+                uiFontSize: state.uiFontSize,
+              });
             } catch {
               /* ignore */
             }

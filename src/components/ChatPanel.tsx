@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { v4 as uuid } from 'uuid';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { useStore } from '@/store/useStore';
 import { buildRequestMessages, streamChatCompletion, ApiError } from '@/api/chat';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage, ProposedEdit } from '@/types';
 import { ProposedEditCard } from '@/components/ProposedEditCard';
 import { ResizeHandle } from '@/components/ResizeHandle';
 import { useDragResize, clamp, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH } from '@/hooks/useDragResize';
-import { parseProposedEdits, formatRejectionBatch } from '@/utils/proposedEdit';
+import { parseProposedEdits, formatRejectionBatch, applyAllEdits } from '@/utils/proposedEdit';
 
 // Maximum fraction of the viewport width the chat panel is allowed to
 // occupy. The static MAX_CHAT_WIDTH is still used as a floor so the panel
@@ -54,6 +55,13 @@ export function ChatPanel() {
   // "committed" set keyed by editId so the card hides itself immediately.
   const [committedRejections, setCommittedRejections] = useState<
     Record<string, Record<string, true>>
+  >({});
+  // Per-message "Apply All" summary, shown briefly in the message footer
+  // after a bulk apply finishes. Keyed by assistant message id. The
+  // `at` timestamp is used by a per-message useEffect to clear the entry
+  // after a short delay so it fades out on its own.
+  const [applyAllSummary, setApplyAllSummary] = useState<
+    Record<string, { applied: number; total: number; at: number }>
   >({});
   const abortRef = useRef<AbortController | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -271,6 +279,57 @@ export function ChatPanel() {
     });
   };
 
+  // Bulk-apply every anchorable ProposedEdit in an assistant message in
+  // one document update. Skips edits whose `original` is not found in
+  // the current document — those keep their "Potential mismatch
+  // detected" banner and the user can still use Force-apply manually.
+  const applyAllForMessage = (messageId: string) => {
+    // Doc-switch safety: re-read the current doc id at click time so a
+    // stale closure can't write to the wrong document.
+    const liveDocId = useStore.getState().currentDocumentId;
+    if (!liveDocId) return;
+    const doc = useStore.getState().documents.find((d) => d.id === liveDocId);
+    if (!doc) return;
+    const msg = (useStore.getState().chats[liveDocId] ?? []).find(
+      (m) => m.id === messageId && m.role === 'assistant'
+    );
+    if (!msg) return;
+    const segments = parseProposedEdits(msg.content);
+    const edits: ProposedEdit[] = [];
+    for (const seg of segments) {
+      if (seg.kind === 'edit') edits.push(seg.payload);
+    }
+    if (edits.length === 0) return;
+    const { next, appliedIds } = applyAllEdits(doc.content, edits);
+    if (appliedIds.length === 0) return;
+    useStore.getState().updateDocumentContent(doc.id, next);
+    // Mark applied ids as committed so the cards hide without flicker,
+    // mirroring the existing staged-rejection commit pattern.
+    setCommittedRejections((prev) => {
+      const existing = prev[messageId] ?? {};
+      const added: Record<string, true> = {};
+      for (const id of appliedIds) added[id] = true;
+      return { ...prev, [messageId]: { ...existing, ...added } };
+    });
+    setApplyAllSummary((prev) => ({
+      ...prev,
+      [messageId]: {
+        applied: appliedIds.length,
+        total: edits.length,
+        at: Date.now(),
+      },
+    }));
+  };
+
+  const clearApplyAllSummary = (messageId: string) => {
+    setApplyAllSummary((prev) => {
+      if (!prev[messageId]) return prev;
+      const next = { ...prev };
+      delete next[messageId];
+      return next;
+    });
+  };
+
   // Stream a follow-up assistant reply after the user has submitted their
   // batched rejection comments. Mirrors the streaming logic in handleSend
   // but is keyed off an already-appended user message instead of the
@@ -365,6 +424,9 @@ export function ChatPanel() {
             onStageReject={(info) => stageReject(m.id, info)}
             onCommit={() => commitStagedRejections(m.id)}
             onClearStaged={() => clearStagedRejections(m.id)}
+            onApplyAll={() => applyAllForMessage(m.id)}
+            applyAllSummary={applyAllSummary[m.id] ?? null}
+            onClearApplyAllSummary={() => clearApplyAllSummary(m.id)}
           />
         ))}
         {error && (
@@ -438,6 +500,9 @@ function MessageBubble({
   onStageReject,
   onCommit,
   onClearStaged,
+  onApplyAll,
+  applyAllSummary,
+  onClearApplyAllSummary,
 }: {
   message: ChatMessage;
   staged: Array<{ editId: string; comment: string }>;
@@ -445,9 +510,39 @@ function MessageBubble({
   onStageReject: (info: { editId: string; comment: string }) => void;
   onCommit: () => void;
   onClearStaged: () => void;
+  onApplyAll: () => void;
+  applyAllSummary: { applied: number; total: number; at: number } | null;
+  onClearApplyAllSummary: () => void;
 }) {
   const isUser = message.role === 'user';
   const currentDocumentId = useStore((s) => s.currentDocumentId);
+
+  // Count ProposedEdit segments in this assistant message and how many
+  // of them are still unapplied (i.e. not already in the `committed`
+  // map). The footer shows the "Apply N change(s)" button only when
+  // there is at least one unapplied edit.
+  const { totalEdits, unappliedEdits } = useMemo(() => {
+    if (isUser) return { totalEdits: 0, unappliedEdits: 0 };
+    const segments = parseProposedEdits(message.content);
+    let total = 0;
+    let unapplied = 0;
+    for (const seg of segments) {
+      if (seg.kind !== 'edit') continue;
+      total++;
+      if (!committed[seg.payload.id]) unapplied++;
+    }
+    return { totalEdits: total, unappliedEdits: unapplied };
+  }, [isUser, message.content, committed]);
+
+  // Auto-clear the "Applied X of Y" summary after a short delay so it
+  // fades out without the user having to dismiss it. The effect is
+  // keyed on `applyAllSummary?.at` so re-applying restarts the timer.
+  useEffect(() => {
+    if (!applyAllSummary) return;
+    const t = window.setTimeout(onClearApplyAllSummary, 4000);
+    return () => window.clearTimeout(t);
+  }, [applyAllSummary, onClearApplyAllSummary]);
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
@@ -474,30 +569,69 @@ function MessageBubble({
               committed={committed}
               onStageReject={onStageReject}
             />
-            {staged.length > 0 && (
-              <div className="mt-2 -mx-1 rounded border border-cyber-clay/40 dark:border-cyber-cyan/50 bg-cyber-clay/5 dark:bg-cyber-cyan/10 p-2 flex items-center gap-2">
-                <span className="text-xs text-cyber-clay dark:text-cyber-cyan flex-1">
-                  {staged.length === 1
-                    ? '1 rejection comment staged.'
-                    : `${staged.length} rejection comments staged.`}
-                </span>
-                <button
-                  type="button"
-                  className="btn-fire-sm"
-                  onClick={onCommit}
-                  title="Append all staged rejection comments to the chat and ask the AI to revise"
-                >
-                  Send {staged.length} rejection{' '}
-                  {staged.length === 1 ? 'comment' : 'comments'}
-                </button>
-                <button
-                  type="button"
-                  className="btn-cyan-sm"
-                  onClick={onClearStaged}
-                  title="Discard all staged rejection comments"
-                >
-                  Clear staged
-                </button>
+            {(staged.length > 0 || unappliedEdits > 0 || applyAllSummary) && (
+              <div className="mt-2 -mx-1 rounded border border-paper-hairline dark:border-cyber-border bg-paper-base/50 dark:bg-ape-base/40 p-2 space-y-1.5">
+                {unappliedEdits > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-paper-inkSoft dark:text-cyber-muted flex-1">
+                      {totalEdits === 1
+                        ? '1 proposed change in this reply.'
+                        : `${totalEdits} proposed changes in this reply.`}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-fire-sm"
+                      onClick={onApplyAll}
+                      title="Apply every change whose original text is found in the current document (one document update). Edits that cannot be anchored are skipped."
+                    >
+                      Apply {unappliedEdits}{' '}
+                      {unappliedEdits === 1 ? 'change' : 'changes'}
+                    </button>
+                  </div>
+                )}
+                {staged.length > 0 && (
+                  <div className="flex items-center gap-2 rounded border border-cyber-clay/40 dark:border-cyber-cyan/50 bg-cyber-clay/5 dark:bg-cyber-cyan/10 p-1.5">
+                    <span className="text-xs text-cyber-clay dark:text-cyber-cyan flex-1">
+                      {staged.length === 1
+                        ? '1 rejection comment staged.'
+                        : `${staged.length} rejection comments staged.`}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-fire-sm"
+                      onClick={onCommit}
+                      title="Append all staged rejection comments to the chat and ask the AI to revise"
+                    >
+                      Send {staged.length} rejection{' '}
+                      {staged.length === 1 ? 'comment' : 'comments'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-cyan-sm"
+                      onClick={onClearStaged}
+                      title="Discard all staged rejection comments"
+                    >
+                      Clear staged
+                    </button>
+                  </div>
+                )}
+                {applyAllSummary && (
+                  <div
+                    className="text-[11px] text-paper-inkSoft dark:text-cyber-muted"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {applyAllSummary.applied === applyAllSummary.total
+                      ? `Applied all ${applyAllSummary.total} change${
+                          applyAllSummary.total === 1 ? '' : 's'
+                        }.`
+                      : `Applied ${applyAllSummary.applied} of ${
+                          applyAllSummary.total
+                        } changes (${
+                          applyAllSummary.total - applyAllSummary.applied
+                        } skipped — not anchored in the current document).`}
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -534,7 +668,10 @@ function AssistantContent({
           if (!seg.payload.trim()) return null;
           return (
             <div key={i} className="prose-md">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
+              >
                 {seg.payload}
               </ReactMarkdown>
             </div>
