@@ -11,16 +11,15 @@
     <meta name="theme-color" content="#F4F1EA" />
     <!--
       Baseline CSP for a client-only SPA. connect-src allows HTTPS providers
-      plus localhost (dev / local models). wasm-unsafe-eval allows
-      WebAssembly.compile for in-browser OCR (ONNX Runtime + OpenCV).
-      JS eval is not allowed: Vite aliases onnxruntime-web to the
-      WASM-only build and rewrites OpenCV.js embind helpers that would
-      otherwise call new Function. Tighten further at the host layer
-      if you pin to a single API origin.
+      plus localhost (dev / local models). In-browser OCR needs
+      wasm-unsafe-eval (WebAssembly.compile) and unsafe-eval (OpenCV.js
+      embind uses the Function constructor). connect-src includes data:
+      because OpenCV.js fetches its embedded WASM from a data: URL.
+      Tighten further at the host layer if you pin to a single API origin.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: https: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';"
     />
     <title>ApEditor — AI Markdown Editor</title>
   </head>

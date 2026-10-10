@@ -80,7 +80,7 @@ async function getEngine(): Promise<OcrEngine> {
         ortOptions: {
           wasmPaths: '/ort/',
           // WASM-only. Vite aliases `onnxruntime-web` to
-          // ort.wasm.bundle.min.mjs so the default WebGPU/JSEP bundle
+          // ort.wasm.min.mjs so the default WebGPU/JSEP bundle
           // (which calls `new Function` and trips CSP) is never loaded.
           backend: 'wasm',
           // Allow multi-threaded ORT (requires SAB; provided by the
