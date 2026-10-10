@@ -67,9 +67,22 @@ export default defineConfig({
   },
   plugins: [react(), stripImportQueryPlugin],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
+    alias: [
+      {
+        find: '@',
+        replacement: fileURLToPath(new URL('./src', import.meta.url)),
+      },
+      // Default `onnxruntime-web` is ort.bundle.min.mjs, which embeds the
+      // WebGPU/JSEP glue. The WASM-only extern build matches
+      // ortOptions.backend: 'wasm' and loads binaries from wasmPaths.
+      {
+        find: /^onnxruntime-web$/,
+        replacement: resolve(
+          __dirname,
+          'node_modules/onnxruntime-web/dist/ort.wasm.min.mjs'
+        ),
+      },
+    ],
   },
   server: {
     port: 5174,
