@@ -1,6 +1,8 @@
-// Turn raw OCR / extracted-PDF text into reader-friendly Markdown
-// using the user's configured chat model. Images stay in-browser;
-// only the recognized text is sent to the API.
+// Turn raw OCR / extracted-PDF text into reader-friendly Markdown.
+// The only credentials used are the API key, endpoint, and model the
+// user saved in Settings — the same ApiConfig chat and inline
+// completion use. There is no built-in / Cursor / fallback key.
+// Images stay in-browser; only the recognized text is sent to that API.
 
 import { streamChatCompletion } from '@/api/chat';
 import type { ApiConfig, ChatMessage } from '@/types';
@@ -72,8 +74,15 @@ export async function formatOcrAsMarkdown(
     },
   ];
 
+  // Pass the Settings config through unchanged except for a lower
+  // temperature. Do not substitute another key, host, or model.
+  const settingsApi: ApiConfig = {
+    ...api,
+    temperature: Math.min(api.temperature, 0.3),
+  };
+
   let acc = '';
-  await streamChatCompletion(messages, { ...api, temperature: Math.min(api.temperature, 0.3) }, {
+  await streamChatCompletion(messages, settingsApi, {
     signal: options?.signal,
     onDelta: (delta) => {
       acc += delta;

@@ -204,8 +204,8 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
           <p className="text-paper-inkSoft dark:text-cyber-muted leading-snug">
             Pick one or more images or PDF files. Recognition stays in
             the browser. After a successful import the extracted text
-            is sent to your configured model and rewritten as readable
-            Markdown before it is inserted.
+            is rewritten as readable Markdown using only the API key,
+            endpoint, and model from Settings — then inserted.
           </p>
           <div className="space-y-1">
             {LANG_OPTIONS.map((opt) => {
