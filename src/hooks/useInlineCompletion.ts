@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-import { resolveChatEndpoint } from '@/api/chat';
+import { assertSafeChatEndpoint, resolveChatEndpoint } from '@/api/chat';
 import type { ApiConfig } from '@/types';
 
 /**
@@ -371,6 +371,12 @@ async function streamInlineCompletion(args: StreamArgs): Promise<void> {
   const { prefix, api, signal, onStart, onDelta, onDone, onError } = args;
   const endpoint = resolveChatEndpoint(api.apiEndpoint);
   if (!endpoint || !api.apiKey) {
+    onError();
+    return;
+  }
+  try {
+    assertSafeChatEndpoint(endpoint);
+  } catch {
     onError();
     return;
   }

@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { v4 as uuid } from 'uuid';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
 import { useStore } from '@/store/useStore';
 import { buildRequestMessages, streamChatCompletion, ApiError } from '@/api/chat';
 import type { ChatMessage, ProposedEdit } from '@/types';
@@ -10,6 +8,7 @@ import { ProposedEditCard } from '@/components/ProposedEditCard';
 import { ResizeHandle } from '@/components/ResizeHandle';
 import { useDragResize, clamp, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH } from '@/hooks/useDragResize';
 import { parseProposedEdits, formatRejectionBatch, applyAllEdits } from '@/utils/proposedEdit';
+import { remarkPlugins, rehypePlugins } from '@/utils/markdown';
 
 // Maximum fraction of the viewport width the chat panel is allowed to
 // occupy. The static MAX_CHAT_WIDTH is still used as a floor so the panel
@@ -669,8 +668,8 @@ function AssistantContent({
           return (
             <div key={i} className="prose-md">
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeRaw]}
+                remarkPlugins={remarkPlugins}
+                rehypePlugins={rehypePlugins}
               >
                 {seg.payload}
               </ReactMarkdown>

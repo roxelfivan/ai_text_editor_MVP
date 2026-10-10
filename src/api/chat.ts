@@ -15,6 +15,29 @@ export function resolveChatEndpoint(endpoint: string): string {
   return `${trimmed}/chat/completions`;
 }
 
+/**
+ * Reject cleartext / non-http(s) endpoints before attaching a Bearer token.
+ * Localhost over http is allowed for local proxy / self-hosted models.
+ */
+export function assertSafeChatEndpoint(endpoint: string): void {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    throw new ApiError(
+      'API endpoint must be an absolute URL (e.g. https://api.example.com/v1).'
+    );
+  }
+  const host = url.hostname.toLowerCase();
+  const isLocal =
+    host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  if (url.protocol === 'https:') return;
+  if (url.protocol === 'http:' && isLocal) return;
+  throw new ApiError(
+    `Refusing to send your API key to a non-HTTPS endpoint (${url.protocol}//${url.host}). Use https:// or a localhost http:// URL.`
+  );
+}
+
 export class ApiError extends Error {
   status?: number;
   body?: string;
@@ -47,6 +70,7 @@ export async function streamChatCompletion(
   if (!config.apiKey) {
     throw new ApiError('No API key configured. Open Settings to set one.');
   }
+  assertSafeChatEndpoint(endpoint);
 
   const body = {
     model: config.model,
