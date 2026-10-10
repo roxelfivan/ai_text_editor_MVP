@@ -32,6 +32,32 @@ const coopCoepHeaders = {
 // the `?import` suffix, and serve the actual file from public/.
 // This middleware is a no-op in `vite build` / `vite preview` since
 // those don't have the import-analysis layer rewriting URLs.
+// Serve the WASM-only ORT entry as a raw static module. If Vite's
+// import-analysis transforms it, it rewrites `import(url)` to
+// `import(__vite__injectQuery(url, 'import'))`, and Chrome then fails
+// the WASM glue / pthread worker load with
+// "Importing a module script failed".
+const serveRawOrtPlugin: Plugin = {
+  name: 'serve-raw-ort',
+  apply: 'serve',
+  configureServer(server) {
+    const ortEntry = resolve(
+      __dirname,
+      'node_modules/onnxruntime-web/dist/ort.wasm.min.mjs'
+    );
+    server.middlewares.use((req, res, next) => {
+      const path = (req.url ?? '').split('?')[0];
+      if (!path.endsWith('/ort.wasm.min.mjs')) {
+        next();
+        return;
+      }
+      res.setHeader('Content-Type', 'text/javascript');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.end(readFileSync(ortEntry));
+    });
+  },
+};
+
 const stripImportQueryPlugin: Plugin = {
   name: 'strip-import-query',
   apply: 'serve',
@@ -65,7 +91,7 @@ export default defineConfig({
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(APP_VERSION),
   },
-  plugins: [react(), stripImportQueryPlugin],
+  plugins: [react(), serveRawOrtPlugin, stripImportQueryPlugin],
   resolve: {
     alias: [
       {

@@ -26,6 +26,7 @@ import {
   pageNativeText,
   renderPageToCanvas,
 } from './pdf';
+import { publicUrl } from './publicUrl';
 
 /**
  * Subset of the PaddleOCR API we actually use. Whether PaddleOCR.create
@@ -78,16 +79,18 @@ async function getEngine(): Promise<OcrEngine> {
         // WASM from cdn.jsdelivr.net (a third-party CDN) — violating the
         // zero-leakage guarantee.
         ortOptions: {
-          wasmPaths: '/ort/',
-          // WASM-only. Vite aliases `onnxruntime-web` to
-          // ort.wasm.min.mjs so the default WebGPU/JSEP bundle
-          // (which calls `new Function` and trips CSP) is never loaded.
+          // Absolute same-origin URLs. A relative "/ort/" path plus
+          // Vite's `?import` rewrite made Chrome fail the WASM glue
+          // `import()` / module-worker load with
+          // "Importing a module script failed".
+          wasmPaths: publicUrl('ort/'),
           backend: 'wasm',
-          // Allow multi-threaded ORT (requires SAB; provided by the
-          // COOP/COEP headers in vite.config.ts).
-          numThreads: typeof navigator !== 'undefined'
-            ? Math.max(1, Math.min(4, navigator.hardwareConcurrency || 2))
-            : 2,
+          // Single-thread avoids Emscripten pthread module workers
+          // (`new Worker(import.meta.url, { type: "module" })`), which
+          // fail in some browsers when the glue URL has a query string.
+          numThreads: 1,
+          proxy: false,
+          disableWasmProxy: true,
           simd: true,
         },
         // Self-hosted PaddleOCR PP-OCRv6_tiny model files (tar archives

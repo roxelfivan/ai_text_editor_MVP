@@ -7,16 +7,12 @@
 // see vite.config.ts (COOP/COEP) and public/pdfjs/ for the static asset.
 
 import * as pdfjsLib from 'pdfjs-dist';
+import { publicUrl } from './publicUrl';
 
-// pdf.js worker is served as a same-origin static asset from
-// public/pdfjs/pdf.worker.min.mjs. Vite's `new URL(..., import.meta.url)`
-// pattern resolves to the served URL at build time (in production) or
-// at request time (in dev). Same-origin is required for cross-origin
-// isolation under our COOP/COEP headers.
-const pdfWorkerUrl = new URL(
-  '/pdfjs/pdf.worker.min.mjs',
-  typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
-).href;
+// pdf.js 4.x loads this as `new Worker(src, { type: "module" })`.
+// Use a BASE_URL-aware same-origin URL so subdirectory deploys do not
+// 404 HTML (Chrome: "Importing a module script failed").
+const pdfWorkerUrl = publicUrl('pdfjs/pdf.worker.min.mjs');
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
