@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { useStore } from '@/store/useStore';
 import {
   extractTextFromFiles,
   type OcrLang,
   type OcrProgress,
 } from '@/utils/ocr';
+import { formatOcrAsMarkdown } from '@/utils/ocrMarkdown';
 
 type Lang = OcrLang;
 
@@ -24,14 +26,17 @@ interface ImportMediaButtonProps {
  * Simplified Chinese, Traditional Chinese). At least one must stay
  * checked. The "Choose Import File(s)" button inside the popover opens
  * a multi-file picker; selected files are run through
- * `extractTextFromFiles` and the concatenated text is dispatched as a
- * `mvp:insert-text` window event for the Editor to consume.
+ * `extractTextFromFiles`. On success the extracted text is sent to the
+ * configured chat model and rewritten as reader-friendly Markdown, then
+ * dispatched as a `mvp:insert-text` window event for the Editor. Raw
+ * OCR is never pasted.
  *
  * Cleanup: after every batch the file input is reset to '' so the same
  * files can be re-picked without a refresh. The OCR util itself handles
  * revoking ObjectURLs, releasing canvases, and terminating the worker.
  */
 export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) {
+  const api = useStore((s) => s.api);
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -95,6 +100,11 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
       e.target.value = '';
       return;
     }
+    if (!api.apiKey || !api.apiEndpoint) {
+      setError('Open Settings and add an API key so imported text can be formatted as Markdown.');
+      e.target.value = '';
+      return;
+    }
     const langArray = Array.from(langs) as Lang[];
     const fileArray = Array.from(files);
     setBusy(true);
@@ -107,16 +117,23 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
         langArray,
         (p) => setProgress(p)
       );
-      // Drop empty results so we don't insert stray blank lines.
+      // Drop empty results so we don't send stray blank files to the model.
       const blocks = results
         .map((r) => r.trim())
         .filter((r) => r.length > 0);
-      if (blocks.length > 0) {
-        const payload = blocks.join('\n\n');
-        window.dispatchEvent(
-          new CustomEvent('mvp:insert-text', { detail: { text: payload } })
-        );
+      if (blocks.length === 0) {
+        setError('No text was recognized in the selected file(s).');
+        return;
       }
+      setProgress({
+        done: fileArray.length,
+        total: fileArray.length,
+        label: 'formatting as Markdown…',
+      });
+      const markdown = await formatOcrAsMarkdown(blocks.join('\n\n'), api);
+      window.dispatchEvent(
+        new CustomEvent('mvp:insert-text', { detail: { text: markdown } })
+      );
     } catch (err) {
       setError((err as Error).message || 'OCR failed.');
     } finally {
@@ -147,7 +164,7 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
         title={
           busy
             ? 'Reading file…'
-            : 'Import text from photos or PDFs (in-browser OCR)'
+            : 'Import text from photos or PDFs (OCR, then Markdown via your model)'
         }
       >
         {busy ? (
@@ -185,9 +202,10 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
             OCR languages
           </div>
           <p className="text-paper-inkSoft dark:text-cyber-muted leading-snug">
-            Pick one or more images or PDF files. PDFs with selectable
-            text are read directly (no OCR); scanned PDFs and photos are
-            recognized entirely in the browser — nothing is uploaded.
+            Pick one or more images or PDF files. Recognition stays in
+            the browser. After a successful import the extracted text
+            is rewritten as readable Markdown using only the API key,
+            endpoint, and model from Settings — then inserted.
           </p>
           <div className="space-y-1">
             {LANG_OPTIONS.map((opt) => {
