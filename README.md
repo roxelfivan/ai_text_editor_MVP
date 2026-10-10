@@ -217,6 +217,48 @@ recognitions.
 
 ## Release notes
 
+### v0.3.4 — Import → Markdown, OCR works under CSP, security hardening, topbar icons
+
+- **Import photos & PDFs → Markdown** — successful OCR / PDF text
+  extraction is now rewritten as reader-friendly Markdown by the
+  configured chat model before anything is inserted into the editor.
+  Raw OCR output is never pasted into the document. The conversion
+  request goes through the same chat client as the rest of the app,
+  using only the API key configured in **Settings** — no built-in,
+  Cursor, or fallback key is used. An API key is required; images
+  still stay in the browser.
+- **OCR & PDF import under CSP** — Photo / PDF import failed under
+  the v0.3.3 page CSP because PaddleOCR pulls OpenCV.js (whose
+  embind layer builds invokers with the `Function` constructor) and
+  an ONNX Runtime bundle that loaded a `data:`-sourced WASM. OCR
+  now initializes under the existing `script-src` policy: ONNX
+  Runtime is aliased to the WASM-only extern build (so the WebGPU
+  / JSEP embind path isn't loaded), and `unsafe-eval` plus
+  `data:` are allowed specifically for the OCR path.
+- **Topbar action icons** — the **History**, **Prompts**, and
+  **Settings** buttons in the topbar are now distinct icons
+  instead of text labels. History uses a clock, Prompts a
+  bookmark, and Settings a gear with a missing-key badge. The
+  first two share the square outline treatment used by
+  **Import** / **Save**; Settings keeps its filled fire
+  treatment.
+- **Import popover stays in the viewport on mobile** — the OCR
+  language picker used to be absolutely right-aligned to the
+  Import button; on a wrapped vertical mobile toolbar that put
+  the panel off-screen. It now uses fixed coordinates clamped to
+  the viewport on both edges.
+- **Security hygiene pass** — markdown rendered from the chat
+  model is now passed through `rehype-sanitize` after `rehype-raw`
+  (keeping `<u>` for the toolbar's underline button). API
+  requests refuse to send the Bearer token to non-HTTPS endpoints
+  (`http://localhost` is still allowed for local dev). A baseline
+  CSP meta tag is added to `index.html`, and a new `SECURITY.md`
+  documents findings and residual risks. No secrets were found in
+  the v0.3.3 tree.
+- **Docs** — the seeded Welcome document was rewritten as a 7-step
+  quick start so first-time users see a guided path instead of a
+  long reference page.
+
 ### v0.3.3 — Apply All, B/I/U toolbar, debug mode, global UI font size
 
 - **Apply All** for proposed edits — each assistant message with
