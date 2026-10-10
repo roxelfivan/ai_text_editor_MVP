@@ -186,9 +186,12 @@ recognitions.
 3. Pick the language(s), then click **Choose Import File(s)**.
 4. Select one or more images / PDFs. A small progress chip
    (`reading… 2/5`) appears while the engine works.
-5. When the batch finishes, the recognized text is inserted at the
-   caret as a single block separated by blank lines. The file input
+5. When recognition finishes, the extracted text is sent to your
+   configured chat model and rewritten as reader-friendly Markdown.
+   Only that Markdown is inserted at the caret. The file input
    resets so you can re-pick the same files without a refresh.
+   An API key is required — without one, import stops before any
+   text is pasted.
 
 ### Under the hood
 
@@ -196,9 +199,12 @@ recognitions.
   (image vs PDF), strict per-call cleanup.
 - `src/utils/pdf.ts` — thin wrapper around `pdfjs-dist` for
   `getTextContent` and `page.render`.
-- `src/components/PhotoImportButton.tsx` — image+PDF picker, language
-  checkboxes, progress UI; dispatches a `mvp:insert-text` `CustomEvent`
-  that `src/components/Editor.tsx` consumes to splice the text in.
+- `src/components/ImportMediaButton.tsx` — image+PDF picker, language
+  checkboxes, progress UI; after OCR, calls `formatOcrAsMarkdown` then
+  dispatches a `mvp:insert-text` `CustomEvent` that
+  `src/components/Editor.tsx` consumes to splice the Markdown in.
+- `src/utils/ocrMarkdown.ts` — streams the extracted text through the
+  configured model and unwraps an accidental outer markdown fence.
 
 ## Hotkeys
 

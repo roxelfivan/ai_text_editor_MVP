@@ -259,8 +259,9 @@ text, \`Esc\` to dismiss, or click the **Predict** button (or
 ## 7. 📷 Read text from photos or PDFs
 
 **Click Import photos / PDFs in the editor toolbar.** Pick an image
-or a PDF; the recognized text is inserted at your caret. Nothing
-leaves your browser.`
+or a PDF. Recognition stays in the browser; the extracted text is
+then rewritten as readable Markdown by your configured model before
+it is inserted at your caret.`
   ),
   makeDoc(
     'Ideas',
