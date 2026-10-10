@@ -215,25 +215,52 @@ export interface StoreState {
 const initialDocs: DocumentRecord[] = [
   makeDoc(
     'Welcome',
-    `# Welcome to AI Text Editor (MVP)
+    `# 👋 Welcome to ApEditor
 
-This is a minimal local-first markdown editor with an AI chat sidebar.
+A local-first AI markdown editor. Everything you write stays in your
+browser.
 
-## Features
+## 1. 🔑 Connect an AI
 
-- **Documents** — create, rename, delete, switch from the sidebar.
-- **Markdown** — write in the textarea, toggle to preview (or split).
-- **AI chat** — open the chat panel, ask anything, or send the selected text.
-- **Prompt library** — save reusable prompts and run them with one click.
-- **Revisions** — every save creates a snapshot. View diffs and restore.
+**Open Settings (top right ⚙) and paste your API key.** That's the
+only setup. The chat panel on the right can now answer questions and
+rewrite passages, streaming the response as it arrives.
 
-## Get started
+## 2. ✍️ Just write
 
-1. Open **Settings** (top right) and paste your MiniMax API key.
-2. Select some text in this document, then ask the AI to "rewrite" it.
-3. Press the **Save revision** button in the toolbar to snapshot this version.
+**Type on the left.** Markdown renders live on the right. Use the
+**View** dropdown to switch to **Preview** or **Split**.
 
-Happy writing!`
+## 3. 💾 Save a snapshot
+
+**Click Save in the toolbar** when you like a draft. ApEditor stores
+a snapshot you can diff against later (\`⌘/Ctrl + h\`) and restore
+in one click.
+
+## 4. 💬 Use a saved prompt
+
+**Press \`⌘/Ctrl + ,\`** to open the prompt library. Click any
+prompt to drop it into the chat input, or write your own and ask the
+AI to rewrite / shorten / expand the selection.
+
+## 5. 📝 Accept or reject AI edits
+
+**AI rewrites show up as cards next to your text.** Click **Accept**
+or **Reject** on each one to handle them one by one, or use the
+**Apply All** button in the chat footer to take every edit in a
+message at once.
+
+## 6. ✨ Get sentence suggestions while writing
+
+**Press \`Tab\` to accept** the suggestion that appears under your
+text, \`Esc\` to dismiss, or click the **Predict** button (or
+\`⌘/Ctrl + \\\`) to ask for one on demand.
+
+## 7. 📷 Read text from photos or PDFs
+
+**Click Import photos / PDFs in the editor toolbar.** Pick an image
+or a PDF; the recognized text is inserted at your caret. Nothing
+leaves your browser.`
   ),
   makeDoc(
     'Ideas',
