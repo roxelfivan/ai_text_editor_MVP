@@ -123,11 +123,13 @@ export function SettingsModal({ open, onClose }: Props) {
               </button>
             </div>
             <p className="mt-1 text-xs text-paper-inkSoft dark:text-cyber-muted">
-              Stored only in this browser's localStorage. Sent as
+              Stored only in this browser's localStorage (never uploaded to
+              this app's servers — there are none). Sent as
               <code className="mx-1 px-1 rounded bg-paper-elevated dark:bg-ape-elevated text-cyber-clay dark:text-cyber-cyan font-mono text-[11px]">
                 Authorization: Bearer …
               </code>
-              .
+              to the HTTPS endpoint below. Do not use a shared computer
+              without clearing site data afterward.
             </p>
           </div>
 

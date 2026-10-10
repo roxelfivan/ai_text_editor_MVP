@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
 import { useStore, useCurrentDocument } from '@/store/useStore';
 import { ImportMediaButton } from '@/components/ImportMediaButton';
 import { useInlineCompletion } from '@/hooks/useInlineCompletion';
 import { useDragResize } from '@/hooks/useDragResize';
+import { remarkPlugins, rehypePlugins } from '@/utils/markdown';
 
 /**
  * After any code path that updates the controlled textarea's value
@@ -933,8 +932,8 @@ export function Editor() {
               style={{ fontSize: `${editorFontSize}px`, lineHeight: 1.55 }}
             >
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeRaw]}
+              remarkPlugins={remarkPlugins}
+              rehypePlugins={rehypePlugins}
             >
               {doc.content || '*Nothing to preview yet.*'}
             </ReactMarkdown>

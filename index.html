@@ -9,6 +9,16 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23171614'/><circle cx='32' cy='32' r='14' fill='none' stroke='%231B4636' stroke-width='4'/><circle cx='32' cy='32' r='4' fill='%231B4636'/></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#F4F1EA" />
+    <!--
+      Baseline CSP for a client-only SPA. connect-src allows HTTPS providers
+      plus localhost (dev / local models). wasm-unsafe-eval is required by
+      ONNX Runtime for in-browser OCR. Tighten further at the host layer
+      if you pin to a single API origin.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';"
+    />
     <title>ApEditor — AI Markdown Editor</title>
   </head>
   <body class="h-full bg-ape-base text-cyber-primary antialiased">
