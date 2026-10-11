@@ -8,7 +8,10 @@ import { ProposedEditCard } from '@/components/ProposedEditCard';
 import { ResizeHandle } from '@/components/ResizeHandle';
 import { useDragResize, clamp, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH } from '@/hooks/useDragResize';
 import { parseProposedEdits, formatRejectionBatch, applyAllEdits } from '@/utils/proposedEdit';
+import { formatCommentBatch } from '@/utils/comments';
 import { remarkPlugins, rehypePlugins } from '@/utils/markdown';
+import { buildGoogleAiModeUrl } from '@/utils/googleAiMode';
+import { requiresApiKey } from '@/config/providers';
 
 // Maximum fraction of the viewport width the chat panel is allowed to
 // occupy. The static MAX_CHAT_WIDTH is still used as a floor so the panel
@@ -67,6 +70,19 @@ export function ChatPanel() {
   const chatWidth = useChatWidth();
   const setLayout = useStore((s) => s.setLayout);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Keyless (google-ai-mode) state: when this provider is active, the
+  // chat does NOT stream a completion. Instead, handleSend opens a new
+  // tab to Google AI Mode with the prompt pre-filled, and we reveal a
+  // "paste the answer here" textarea the user fills in. We track which
+  // assistant message id is awaiting the paste so submitPasteAnswer()
+  // knows which ChatMessage to fill in.
+  const [awaitingPaste, setAwaitingPaste] = useState<string | null>(null);
+  const [pasteDraft, setPasteDraft] = useState('');
+  // Last AI Mode URL we opened for the current awaitingPaste. Kept so
+  // the user can re-open the tab if they accidentally closed it
+  // without copying the answer.
+  const [lastAiModeUrl, setLastAiModeUrl] = useState<string | null>(null);
+  const isKeyless = !requiresApiKey(api.provider);
 
   const messages: ChatMessage[] = currentDocumentId
     ? chats[currentDocumentId] ?? []
@@ -92,15 +108,117 @@ export function ChatPanel() {
         setLayout({ chatWidth: clamp(raw, MIN_CHAT_WIDTH, max) });
       }
     };
+    // Comment-batch send: triggered by `CommentTray` in the editor
+    // via the `mvp:send-comments` window event. We build the user
+    // message body from the current document + the selected
+    // comments, append it, then stream the assistant reply through
+    // the same pipeline as a normal chat send.
+    const onSendComments = async (e: Event) => {
+      const detail = (
+        e as CustomEvent<{
+          commentIds: string[];
+        }>
+      ).detail;
+      if (!detail || !Array.isArray(detail.commentIds)) return;
+      if (!currentDocumentId || streaming) return;
+      const docSnap = useStore
+        .getState()
+        .documents.find((d) => d.id === currentDocumentId);
+      if (!docSnap) return;
+      const allComments = useStore.getState().comments[currentDocumentId] ?? [];
+      const comments = allComments.filter(
+        (c) => detail.commentIds.includes(c.id) && !c.outdated
+      );
+      if (comments.length === 0) return;
+      const body = formatCommentBatch(docSnap.content, comments);
+      const userMsg: ChatMessage = {
+        id: uuid(),
+        role: 'user',
+        content: body,
+        createdAt: Date.now(),
+      };
+      appendMessage(currentDocumentId, userMsg);
+      // Mark the sent comments in the store + notify any open
+      // popover that the comments have been committed.
+      useStore
+        .getState()
+        .markCommentsSent(comments.map((c) => c.id));
+      window.dispatchEvent(
+        new CustomEvent('mvp:mark-comments-sent', {
+          detail: { ids: comments.map((c) => c.id) },
+        })
+      );
+      // Stream the assistant reply through the same pipeline as a
+      // normal chat send. We inline the streaming body here so the
+      // listener doesn't need to reference `runAssistantReplyAfterCommit`
+      // (which is defined further down the component body).
+      const historyFromStore =
+        useStore.getState().chats[currentDocumentId] ?? [];
+      const assistantMsg: ChatMessage = {
+        id: uuid(),
+        role: 'assistant',
+        content: '',
+        createdAt: Date.now(),
+      };
+      appendMessage(currentDocumentId, assistantMsg);
+      const history = [...historyFromStore, userMsg, assistantMsg];
+      setStreaming(true);
+      setError(null);
+      // Notify other components (e.g. the editor's CommentTray) that
+      // a chat send is in progress so they can dim / disable their
+      // own "Send to AI" button to prevent double-sends.
+      window.dispatchEvent(new CustomEvent('mvp:chat-streaming', { detail: { streaming: true } }));
+      abortRef.current = new AbortController();
+      let acc = '';
+      try {
+        await streamChatCompletion(
+          buildRequestMessages(
+            history,
+            api.systemMessage,
+            docSnap ? { title: docSnap.title, content: docSnap.content } : null
+          ),
+          api,
+          {
+            signal: abortRef.current.signal,
+            onDelta: (delta) => {
+              acc += delta;
+              updateLastAssistant(currentDocumentId, acc);
+            },
+          }
+        );
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+          // user cancelled
+        } else if (err instanceof ApiError) {
+          setError((err as ApiError).message);
+        } else {
+          setError((err as Error).message || 'Unknown error');
+        }
+      } finally {
+        setStreaming(false);
+        // Notify other components the chat is no longer streaming.
+        window.dispatchEvent(new CustomEvent('mvp:chat-streaming', { detail: { streaming: false } }));
+        abortRef.current = null;
+      }
+    };
     window.addEventListener('mvp:editor-selection', onSel);
     window.addEventListener('mvp:fill-chat', onFill);
     window.addEventListener('resize', onResize);
+    window.addEventListener('mvp:send-comments', onSendComments);
     return () => {
       window.removeEventListener('mvp:editor-selection', onSel);
       window.removeEventListener('mvp:fill-chat', onFill);
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('mvp:send-comments', onSendComments);
     };
-  }, [setLayout]);
+  }, [
+    setLayout,
+    currentDocumentId,
+    streaming,
+    appendMessage,
+    updateLastAssistant,
+    api,
+  ]);
 
   // Auto-scroll to bottom on new messages / streaming.
   useEffect(() => {
@@ -156,17 +274,53 @@ export function ChatPanel() {
       selection: includeSelection ? selection || undefined : undefined,
       createdAt: Date.now(),
     };
+    appendMessage(currentDocumentId, userMsg);
+
+    if (isKeyless) {
+      // Keyless provider: build the AI Mode deep-link from the same
+      // shape of messages the OpenAI path would have sent (just the
+      // single user turn, since the AI Mode page has no chat history
+      // concept) and open it in a new tab. Then append a placeholder
+      // assistant message and arm the paste-and-submit UI so the user
+      // can copy the answer back. No streaming, no abort controller.
+      const history: ChatMessage[] = [...messages, userMsg];
+      const url = buildGoogleAiModeUrl(
+        history,
+        api.systemMessage,
+        docSnap ? { title: docSnap.title, content: docSnap.content } : null
+      );
+      const assistantMsg: ChatMessage = {
+        id: uuid(),
+        role: 'assistant',
+        content: '',
+        createdAt: Date.now(),
+      };
+      appendMessage(currentDocumentId, assistantMsg);
+      setLastAiModeUrl(url);
+      setAwaitingPaste(assistantMsg.id);
+      setPasteDraft('');
+      // noopener,noreferrer for security; the AI Mode page is on
+      // google.com so it should not get a window handle back to us.
+      try {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } catch {
+        // Pop-up blocked: the URL is still in `lastAiModeUrl` so the
+        // user can click "Open in new tab" from the notice card.
+      }
+      return;
+    }
+
     const assistantMsg: ChatMessage = {
       id: uuid(),
       role: 'assistant',
       content: '',
       createdAt: Date.now(),
     };
-    appendMessage(currentDocumentId, userMsg);
     appendMessage(currentDocumentId, assistantMsg);
 
     const history = [...messages, userMsg, assistantMsg];
     setStreaming(true);
+    window.dispatchEvent(new CustomEvent('mvp:chat-streaming', { detail: { streaming: true } }));
     abortRef.current = new AbortController();
     let acc = '';
     try {
@@ -191,8 +345,33 @@ export function ChatPanel() {
       }
     } finally {
       setStreaming(false);
+      window.dispatchEvent(new CustomEvent('mvp:chat-streaming', { detail: { streaming: false } }));
       abortRef.current = null;
     }
+  };
+
+  // Submit the pasted AI Mode answer into the assistant message that
+  // is currently awaiting paste. Runs `parseProposedEdits` indirectly
+  // via the existing MessageBubble render path — no special handling
+  // needed, the message content goes through the same markdown +
+  // proposed-edit parsing as a streamed reply.
+  const submitPasteAnswer = () => {
+    if (!currentDocumentId || !awaitingPaste) return;
+    const text = pasteDraft.trim();
+    if (!text) return;
+    updateLastAssistant(currentDocumentId, text);
+    setPasteDraft('');
+    setAwaitingPaste(null);
+    setLastAiModeUrl(null);
+  };
+
+  // Cancel the paste flow without filling the assistant message. The
+  // placeholder assistant message remains in the chat as an empty
+  // bubble (rendered as nothing) so the user can see what happened.
+  const cancelPasteAnswer = () => {
+    setAwaitingPaste(null);
+    setPasteDraft('');
+    setLastAiModeUrl(null);
   };
 
   const handleStop = () => {
@@ -329,11 +508,12 @@ export function ChatPanel() {
     });
   };
 
-  // Stream a follow-up assistant reply after the user has submitted their
-  // batched rejection comments. Mirrors the streaming logic in handleSend
-  // but is keyed off an already-appended user message instead of the
-  // textarea contents. Returns when the stream ends; errors are surfaced via
-  // the same `error` state.
+  // Stream a follow-up assistant reply after the user has submitted
+  // a batched message (rejection comments OR a comment-batch send from
+  // the editor's CommentTray). Mirrors the streaming logic in
+  // handleSend but is keyed off an already-appended user message
+  // instead of the textarea contents. Returns when the stream ends;
+  // errors are surfaced via the same `error` state.
   const runAssistantReplyAfterCommit = async (userMsg: ChatMessage) => {
     if (!currentDocumentId) return;
     const docSnap = useStore.getState().documents.find(
@@ -350,6 +530,7 @@ export function ChatPanel() {
     const history = [...historyFromStore, userMsg, assistantMsg];
     setStreaming(true);
     setError(null);
+    window.dispatchEvent(new CustomEvent('mvp:chat-streaming', { detail: { streaming: true } }));
     abortRef.current = new AbortController();
     let acc = '';
     try {
@@ -374,6 +555,7 @@ export function ChatPanel() {
       }
     } finally {
       setStreaming(false);
+      window.dispatchEvent(new CustomEvent('mvp:chat-streaming', { detail: { streaming: false } }));
       abortRef.current = null;
     }
   };
@@ -389,7 +571,9 @@ export function ChatPanel() {
         <span className="text-[15px] font-medium text-paper-ink dark:text-cyber-primary">
           Chat
         </span>
-        <span className="text-xs text-paper-inkSoft dark:text-cyber-muted font-mono truncate">{api.model}</span>
+        <span className="text-xs text-paper-inkSoft dark:text-cyber-muted font-mono truncate">
+          {isKeyless ? 'google-ai-mode' : api.model}
+        </span>
         <div className="flex-1" />
         <button
           className="text-xs text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-danger transition-colors"
@@ -428,6 +612,47 @@ export function ChatPanel() {
             onClearApplyAllSummary={() => clearApplyAllSummary(m.id)}
           />
         ))}
+        {/* Keyless-provider "AI Mode opened" notice. Rendered as a
+            sibling of the message bubbles so it scrolls with the chat
+            and sits at the bottom of the conversation, right above the
+            paste textarea. We deliberately do NOT make this part of
+            the message list — it is transient UI tied to the
+            awaitingPaste state, not a chat message. */}
+        {isKeyless && awaitingPaste && (
+          <div className="rounded border border-cyber-clay/40 dark:border-cyber-cyan/40 bg-cyber-clay/5 dark:bg-cyber-cyan/10 p-3 space-y-2 text-xs">
+            <p className="text-paper-ink dark:text-cyber-primary font-medium">
+              Google AI Mode opened in a new tab.
+            </p>
+            <p className="text-paper-inkSoft dark:text-cyber-muted">
+              Read the answer on that page, then copy it and paste it into
+              the box below. Any <code className="font-mono text-[11px]">proposed-edit</code>{' '}
+              fences inside the pasted answer become track-changes cards
+              you can accept or reject one by one.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {lastAiModeUrl && (
+                <button
+                  type="button"
+                  className="btn-cyan-sm"
+                  onClick={() =>
+                    window.open(lastAiModeUrl, '_blank', 'noopener,noreferrer')
+                  }
+                  title="Re-open the AI Mode tab if you closed it before copying the answer"
+                >
+                  Re-open AI Mode tab
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={cancelPasteAnswer}
+                title="Discard the empty placeholder assistant message"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         {error && (
           <div className="text-xs text-cyber-danger bg-cyber-danger/10 border border-cyber-danger/40 rounded p-2 whitespace-pre-wrap">
             {error}
@@ -436,56 +661,110 @@ export function ChatPanel() {
       </div>
 
       <div className="border-t border-paper-hairline dark:border-cyber-border p-3 space-y-2 bg-paper-panel dark:bg-ape-panel">
-        <div className="flex items-center gap-2 text-xs text-paper-inkSoft dark:text-cyber-muted">
-          <label className="flex items-center gap-1 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={includeSelection}
-              onChange={(e) => setIncludeSelection(e.target.checked)}
-              className="accent-cyber-clay dark:accent-cyber-cyan"
+        {isKeyless && awaitingPaste ? (
+          // Keyless + a paste is pending: replace the regular chat
+          // input with a "paste the answer here" textarea. The user's
+          // next action is to paste, not to send another prompt. They
+          // can dismiss with Cancel to return to the regular input.
+          <>
+            <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan uppercase tracking-wide">
+              Paste the AI Mode answer
+            </label>
+            <textarea
+              value={pasteDraft}
+              onChange={(e) => setPasteDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  submitPasteAnswer();
+                }
+              }}
+              placeholder="Paste the answer from the Google AI Mode tab here…"
+              className="w-full h-32 p-2 text-sm ape-field resize-none font-sans"
             />
-            include selection
-          </label>
-          {selection && (
-            <button
-              className="px-1.5 py-0.5 rounded border border-cyber-clay/40 dark:border-cyber-cyan/40 text-cyber-clay dark:text-cyber-cyan hover:bg-cyber-clay/5 dark:hover:bg-cyber-cyan/10 transition-colors"
-              onClick={handleSendSelection}
-              title="Paste the selection into the input"
-            >
-              paste selection ({selection.length})
-            </button>
-          )}
-        </div>
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              void handleSend();
-            }
-          }}
-          placeholder="Ask, or ⌘/Ctrl+Enter to send…"
-          className="w-full h-24 p-2 text-sm ape-field resize-none font-sans"
-        />
-        <div className="flex justify-end gap-2">
-          {streaming ? (
-            <button
-              className="text-sm px-3 py-1.5 rounded bg-cyber-danger text-white font-semibold hover:bg-cyber-danger/80 transition-colors"
-              onClick={handleStop}
-            >
-              Stop
-            </button>
-          ) : (
-            <button
-              className="btn-fire"
-              onClick={handleSend}
-              disabled={!input.trim() || !currentDocumentId}
-            >
-              Send
-            </button>
-          )}
-        </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={cancelPasteAnswer}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-fire"
+                onClick={submitPasteAnswer}
+                disabled={!pasteDraft.trim()}
+              >
+                Submit
+              </button>
+            </div>
+          </>
+        ) : (
+          // Regular chat input (keyed providers, or keyless when no
+          // paste is in flight).
+          <>
+            <div className="flex items-center gap-2 text-xs text-paper-inkSoft dark:text-cyber-muted">
+              <label className="flex items-center gap-1 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeSelection}
+                  onChange={(e) => setIncludeSelection(e.target.checked)}
+                  className="accent-cyber-clay dark:accent-cyber-cyan"
+                />
+                include selection
+              </label>
+              {selection && (
+                <button
+                  className="px-1.5 py-0.5 rounded border border-cyber-clay/40 dark:border-cyber-cyan/40 text-cyber-clay dark:text-cyber-cyan hover:bg-cyber-clay/5 dark:hover:bg-cyber-cyan/10 transition-colors"
+                  onClick={handleSendSelection}
+                  title="Paste the selection into the input"
+                >
+                  paste selection ({selection.length})
+                </button>
+              )}
+            </div>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  void handleSend();
+                }
+              }}
+              placeholder={
+                isKeyless
+                  ? 'Ask, or ⌘/Ctrl+Enter to open in Google AI Mode…'
+                  : 'Ask, or ⌘/Ctrl+Enter to send…'
+              }
+              className="w-full h-24 p-2 text-sm ape-field resize-none font-sans"
+            />
+            <div className="flex justify-end gap-2">
+              {streaming ? (
+                <button
+                  className="text-sm px-3 py-1.5 rounded bg-cyber-danger text-white font-semibold hover:bg-cyber-danger/80 transition-colors"
+                  onClick={handleStop}
+                >
+                  Stop
+                </button>
+              ) : (
+                <button
+                  className="btn-fire"
+                  onClick={handleSend}
+                  disabled={!input.trim() || !currentDocumentId}
+                  title={
+                    isKeyless
+                      ? 'Opens Google AI Mode in a new tab with this prompt pre-filled'
+                      : undefined
+                  }
+                >
+                  {isKeyless ? 'Open in AI Mode' : 'Send'}
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
       </aside>
     </div>

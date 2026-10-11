@@ -5,6 +5,8 @@ import type {
   ApiConfig,
   ApiProvider,
   ChatMessage,
+  Comment,
+  CommentOp,
   DocumentRecord,
   Prompt,
   Revision,
@@ -12,6 +14,7 @@ import type {
 } from '@/types';
 import { getProvider } from '@/config/providers';
 import { applyThemeClass } from '@/utils/theme';
+import { COMMENT_UNDO_STACK_LIMIT } from '@/utils/comments';
 import {
   clamp,
   MIN_SIDEBAR_WIDTH,
@@ -33,8 +36,15 @@ const DEFAULT_SYSTEM_MESSAGE =
 // defaults from the matching preset. VITE_DEFAULT_PROVIDER lets a
 // hosting environment (e.g. an OpenAI-keyed production deploy) ship
 // with a different default than the in-repo "minimax" default.
+// `google-ai-mode` is also accepted as a build-time default — the
+// settings modal will still need to be opened once so the user
+// acknowledges the keyless workflow.
 const initialProvider: ApiProvider =
-  import.meta.env.VITE_DEFAULT_PROVIDER === 'openai' ? 'openai' : 'minimax';
+  import.meta.env.VITE_DEFAULT_PROVIDER === 'openai'
+    ? 'openai'
+    : import.meta.env.VITE_DEFAULT_PROVIDER === 'google-ai-mode'
+      ? 'google-ai-mode'
+      : 'minimax';
 const initialPreset = getProvider(initialProvider);
 
 const defaultApiConfig: ApiConfig = {
@@ -166,6 +176,25 @@ export interface StoreState {
    */
   editorFocus: Record<string, EditorFocusState>;
 
+  /**
+   * Per-document inline comments, keyed by documentId. Each entry is a
+   * list ordered by `(start, end)` position in the document — the
+   * comment margin re-numbers badges by document order on every render
+   * rather than by creation order, so the ordering here is canonical
+   * and the comment component sorts before assigning badge numbers.
+   *
+   * Persisted.
+   */
+  comments: Record<string, Comment[]>;
+
+  /**
+   * Per-session undo stack for comment operations (add / update-body /
+   * delete). Capped at `COMMENT_UNDO_STACK_LIMIT` entries —
+   * older entries are dropped FIFO. Not persisted (a fresh reload
+   * starts with an empty stack by design).
+   */
+  commentUndoStack: CommentOp[];
+
   // Actions
   createDocument: (title?: string) => string;
   renameDocument: (id: string, title: string) => void;
@@ -210,6 +239,16 @@ export interface StoreState {
     documentId: string,
     info: { focused: boolean; selectionStart: number; selectionEnd: number }
   ) => void;
+
+  // Comment actions. All operate on a single document and never mutate
+  // the input `Comment` — each `set(...)` builds a new array so React
+  // re-renders fire correctly.
+  addComment: (comment: Comment) => void;
+  updateCommentBody: (id: string, body: string) => void;
+  markCommentsSent: (ids: string[]) => void;
+  deleteComment: (id: string) => void;
+  replaceCommentsForDocument: (documentId: string, comments: Comment[]) => void;
+  undoLastCommentOp: () => CommentOp | null;
 }
 
 const initialDocs: DocumentRecord[] = [
@@ -222,46 +261,59 @@ browser.
 
 ## 1. 🔑 Connect an AI
 
-**Open Settings (top right ⚙) and paste your API key.** That's the
-only setup. The chat panel on the right can now answer questions and
-rewrite passages, streaming the response as it arrives.
+**Open Settings (gear, top right) and paste your API key.** That's
+the only setup. Or choose **Google AI Mode (no key)** in Settings if
+you prefer opening Google AI Mode in a new tab instead. The chat
+panel on the right can then answer questions and rewrite passages.
 
 ## 2. ✍️ Just write
 
-**Type on the left.** Markdown renders live on the right. Use the
-**View** dropdown to switch to **Preview** or **Split**.
+**Type in Write.** Markdown renders live in Preview. Use the editor
+view dropdown to switch **Write**, **Preview**, or **Split**.
 
-## 3. 💾 Save a snapshot
+## 3. 💬 Comment on a passage
 
-**Click Save in the toolbar** when you like a draft. ApEditor stores
-a snapshot you can diff against later (\`⌘/Ctrl + h\`) and restore
-in one click.
+**Select text → click Comment in the editor toolbar → write your
+note.** A highlight and a numbered margin badge mark the passage.
+Open a badge to **Edit** or **Delete** any comment (including after
+send). When ready, click **Send to AI** under the editor to send the
+article plus every comment as one batch. \`⌘/Ctrl + Z\` undoes the
+last comment change. Comments that can no longer be found show as
+**Outdated**.
 
-## 4. 💬 Use a saved prompt
+## 4. 💾 Save a snapshot
 
-**Press \`⌘/Ctrl + ,\`** to open the prompt library. Click any
-prompt to drop it into the chat input, or write your own and ask the
-AI to rewrite / shorten / expand the selection.
+**Click Save in the editor toolbar** when you like a draft. Open
+**Revision history** (clock, top bar) later to diff and restore
+(\`⌘/Ctrl + h\`).
 
-## 5. 📝 Accept or reject AI edits
+## 5. 📚 Use a saved prompt
 
-**AI rewrites show up as cards next to your text.** Click **Accept**
-or **Reject** on each one to handle them one by one, or use the
-**Apply All** button in the chat footer to take every edit in a
-message at once.
+**Open Prompt library** (bookmark, top bar) or press \`⌘/Ctrl + ,\`.
+Click any prompt to drop it into the chat input, or write your own
+and ask the AI to rewrite / shorten / expand the selection. Check
+**include selection** in the chat panel when you want the selected
+text sent with your message.
 
-## 6. ✨ Get sentence suggestions while writing
+## 6. ✅ Apply or Reject AI edits
 
-**Press \`Tab\` to accept** the suggestion that appears under your
-text, \`Esc\` to dismiss, or click the **Predict** button (or
-\`⌘/Ctrl + \\\`) to ask for one on demand.
+**AI rewrites show up as cards.** Click **Apply** or **Reject** on
+each one. For several changes in one reply, use **Apply N changes**
+in the chat footer. If a quote no longer matches the document, click
+in the editor and use **Force-apply…**.
 
-## 7. 📷 Read text from photos or PDFs
+## 7. ✨ Get sentence suggestions while writing
 
-**Click Import photos / PDFs in the editor toolbar.** Pick an image
-or a PDF. Recognition stays in the browser; the extracted text is
-then rewritten as readable Markdown by your configured model before
-it is inserted at your caret.`
+**Press \`Tab\` or click Accept** for the suggestion under your text,
+\`Esc\` or **Reject** to dismiss, or click **Predict** (or
+\`⌘/Ctrl + \\\`) to turn predictions on and request one.
+
+## 8. 📷 Import text from photos or PDFs
+
+**Click Import text from photos or PDFs in the editor toolbar.** Pick
+an image or a PDF. Recognition stays in the browser; the extracted
+text is rewritten as readable Markdown by your configured model
+before it is inserted at your caret.`
   ),
   makeDoc(
     'Ideas',
@@ -294,6 +346,8 @@ export const useStore = create<StoreState>()(
         previewSizes: {},
       },
       editorFocus: {},
+      comments: {},
+      commentUndoStack: [],
 
       createDocument: (title) => {
         const doc = makeDoc(title?.trim() || 'Untitled');
@@ -316,10 +370,13 @@ export const useStore = create<StoreState>()(
           delete chats[id];
           const revisions = { ...s.revisions };
           delete revisions[id];
+          const comments = { ...s.comments };
+          delete comments[id];
           return {
             documents: docs,
             chats,
             revisions,
+            comments,
             currentDocumentId:
               s.currentDocumentId === id
                 ? docs[0]?.id ?? null
@@ -456,6 +513,138 @@ export const useStore = create<StoreState>()(
             },
           },
         })),
+
+      // ---- Comment actions ----
+      //
+      // Every action does the same shape: build a new `comments` slice
+      // for the affected documentId, push a `CommentOp` onto the undo
+      // stack (capped), and never mutate the input `Comment`. The
+      // editor component handles its own re-anchor pass on doc edits
+      // via `replaceCommentsForDocument` so this slice is the single
+      // source of truth for the comment UI.
+      addComment: (comment) =>
+        set((s) => {
+          const existing = s.comments[comment.documentId] ?? [];
+          return {
+            comments: {
+              ...s.comments,
+              [comment.documentId]: [...existing, comment],
+            },
+            commentUndoStack: pushUndoOp(s.commentUndoStack, {
+              kind: 'add',
+              comment,
+            }),
+          };
+        }),
+      updateCommentBody: (id, body) =>
+        set((s) => {
+          const entry = findCommentEntry(s.comments, id);
+          if (!entry) return s;
+          const next = {
+            ...entry.comment,
+            body,
+            updatedAt: Date.now(),
+          };
+          return {
+            comments: replaceComment(s.comments, id, next),
+            commentUndoStack: pushUndoOp(s.commentUndoStack, {
+              kind: 'update-body',
+              before: entry.comment,
+              after: next,
+            }),
+          };
+        }),
+      markCommentsSent: (ids) =>
+        set((s) => {
+          if (ids.length === 0) return s;
+          const idSet = new Set(ids);
+          let changed = false;
+          const next: Record<string, Comment[]> = { ...s.comments };
+          for (const [docId, list] of Object.entries(next)) {
+            const updated = list.map((c) => {
+              if (!idSet.has(c.id) || c.sent) return c;
+              changed = true;
+              return { ...c, sent: true };
+            });
+            if (changed) next[docId] = updated;
+          }
+          if (!changed) return s;
+          return { comments: next };
+        }),
+      deleteComment: (id) =>
+        set((s) => {
+          const entry = findCommentEntry(s.comments, id);
+          if (!entry) return s;
+          // Sent comments remain deletable.
+          const docComments = (s.comments[entry.comment.documentId] ?? []).filter(
+            (c) => c.id !== id
+          );
+          return {
+            comments: {
+              ...s.comments,
+              [entry.comment.documentId]: docComments,
+            },
+            commentUndoStack: pushUndoOp(s.commentUndoStack, {
+              kind: 'delete',
+              comment: entry.comment,
+            }),
+          };
+        }),
+      replaceCommentsForDocument: (documentId, next) =>
+        set((s) => ({
+          comments: { ...s.comments, [documentId]: next },
+        })),
+      undoLastCommentOp: () => {
+        // Read the current stack snapshot from inside `set` so we can
+        // return the popped op to the caller without referencing
+        // `useStore` directly (which is still being initialized at the
+        // point this closure is defined and would cause a recursive
+        // type error).
+        let popped: CommentOp | null = null;
+        set((s) => {
+          const stack = s.commentUndoStack;
+          if (stack.length === 0) return s;
+          const op = stack[stack.length - 1];
+          popped = op;
+          const rest = stack.slice(0, -1);
+          switch (op.kind) {
+            case 'add': {
+              // Inverse: remove the added comment.
+              const docComments = (
+                s.comments[op.comment.documentId] ?? []
+              ).filter((c: Comment) => c.id !== op.comment.id);
+              return {
+                comments: {
+                  ...s.comments,
+                  [op.comment.documentId]: docComments,
+                },
+                commentUndoStack: rest,
+              };
+            }
+            case 'delete': {
+              // Inverse: re-add the deleted comment. The UI sorts by
+              // document position, so appending is good enough for
+              // undo to look correct.
+              const docComments = s.comments[op.comment.documentId] ?? [];
+              return {
+                comments: {
+                  ...s.comments,
+                  [op.comment.documentId]: [...docComments, op.comment],
+                },
+                commentUndoStack: rest,
+              };
+            }
+            case 'update-body': {
+              // Inverse: restore the `before` comment.
+              return {
+                comments: replaceComment(s.comments, op.before.id, op.before),
+                commentUndoStack: rest,
+              };
+            }
+          }
+        });
+        return popped;
+      },
     }),
     {
       name: STORAGE_KEY,
@@ -478,6 +667,9 @@ export const useStore = create<StoreState>()(
         theme: s.theme,
         api: s.api,
         layout: s.layout,
+        comments: s.comments,
+        // commentUndoStack is intentionally NOT persisted — see the
+        // StoreState interface comment.
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.theme) {
@@ -502,6 +694,38 @@ export const useStore = create<StoreState>()(
           // field on ApiConfig. Default to 'minimax' so the existing
           // endpoint/model keep working unchanged.
           if (state.api && typeof state.api === 'object' && !('provider' in state.api)) {
+            (state.api as ApiConfig).provider = 'minimax';
+            repaired = true;
+          }
+          // Migration for v0.4.0: older payloads predate the
+          // `comments` slice. Default to `{}` so the editor never has
+          // to special-case `undefined`. Any comment with missing
+          // fields is also normalized defensively.
+          if (typeof state.comments !== 'object' || state.comments === null) {
+            state.comments = {};
+            repaired = true;
+          } else {
+            for (const [docId, list] of Object.entries(state.comments)) {
+              if (!Array.isArray(list)) {
+                delete (state.comments as Record<string, Comment[]>)[docId];
+                repaired = true;
+              }
+            }
+          }
+          // Migration for the `google-ai-mode` provider: any persisted
+          // value not in the closed union (corrupted localStorage, a
+          // typo from a future build, an experimental id we later
+          // removed) is coerced back to the safe default. This keeps
+          // the Settings dropdown and the chat panel from crashing on
+          // an unknown provider id.
+          if (
+            state.api &&
+            typeof state.api === 'object' &&
+            'provider' in state.api &&
+            (state.api as ApiConfig).provider !== 'minimax' &&
+            (state.api as ApiConfig).provider !== 'openai' &&
+            (state.api as ApiConfig).provider !== 'google-ai-mode'
+          ) {
             (state.api as ApiConfig).provider = 'minimax';
             repaired = true;
           }
@@ -534,6 +758,7 @@ export const useStore = create<StoreState>()(
                 api: state.api,
                 debugMode: state.debugMode,
                 uiFontSize: state.uiFontSize,
+                comments: state.comments,
               });
             } catch {
               /* ignore */
@@ -550,4 +775,54 @@ export function useCurrentDocument(): DocumentRecord | null {
   return useStore((s) =>
     s.documents.find((d) => d.id === s.currentDocumentId) ?? null
   );
+}
+
+// ---- Internal helpers for the comment actions ----
+
+/**
+ * Append a `CommentOp` to the undo stack, capping the stack at
+ * `COMMENT_UNDO_STACK_LIMIT` by dropping the oldest entries first.
+ */
+function pushUndoOp(stack: CommentOp[], op: CommentOp): CommentOp[] {
+  const next = [...stack, op];
+  if (next.length <= COMMENT_UNDO_STACK_LIMIT) return next;
+  return next.slice(next.length - COMMENT_UNDO_STACK_LIMIT);
+}
+
+/**
+ * Locate a comment by id across all documents. Returns `{ documentId,
+ * comment }` so the caller can route the change back to the right slice.
+ */
+function findCommentEntry(
+  comments: Record<string, Comment[]>,
+  id: string
+): { documentId: string; comment: Comment } | null {
+  for (const [documentId, list] of Object.entries(comments)) {
+    const found = list.find((c) => c.id === id);
+    if (found) return { documentId, comment: found };
+  }
+  return null;
+}
+
+/**
+ * Build a new comments slice with the comment identified by `id`
+ * replaced by `next`. Returns the original slice unchanged when no
+ * comment with that id exists (caller is expected to have guarded).
+ */
+function replaceComment(
+  comments: Record<string, Comment[]>,
+  id: string,
+  next: Comment
+): Record<string, Comment[]> {
+  const out: Record<string, Comment[]> = {};
+  for (const [documentId, list] of Object.entries(comments)) {
+    let touched = false;
+    const updated = list.map((c) => {
+      if (c.id !== id) return c;
+      touched = true;
+      return next;
+    });
+    out[documentId] = touched ? updated : list;
+  }
+  return out;
 }

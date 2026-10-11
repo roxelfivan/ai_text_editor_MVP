@@ -1,3 +1,37 @@
+## v0.4.0 — Comment + Send to AI, Google AI Mode, Predict label
+
+Major feature release on top of [v0.3.4](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.4).
+
+### Added
+
+- **Comment in the editor.** Select any passage in **Write** (or the Write side of **Split**) → click **Comment** in the editor toolbar → write your note. Saving paints a soft highlight behind the text and adds a numbered badge in the margin (document order).
+- **Edit / Delete anytime.** Open a margin badge for **Edit** / **Delete** / **Save** / **Cancel** — including after the comment has been sent. Body edits and deletes push onto a 20-deep in-memory undo stack; `⌘/Ctrl + Z` reverses the last comment change (toast: Comment removed / restored / edit undone).
+- **Re-anchoring + Outdated.** When you edit the document, comments stay attached via a multi-strategy re-anchor pass. Only when all strategies fail does a comment flip to **Outdated** (still **Edit** / **Delete** from the badge).
+- **Send to AI.** A tray under the editor appears whenever the document has ≥ 1 comment. **Send to AI** (or **Sending…** while streaming) dispatches the article plus every sendable comment as one chat turn. Outdated comments are excluded from the count. The chat API injects a system note so the model emits one `proposed-edit` fence per comment.
+- **Google AI Mode (no key).** New Settings provider **Google AI Mode (no key)**. Chat opens Google AI Mode in a new tab with the prompt pre-filled; paste the answer back into the chat panel. Proposed-edit cards (**Apply** / **Reject** / **Apply N changes**) still work. **Predict** is unavailable for this provider (no streaming API).
+- **Composer safeguards.** Soft cap of 2,000 chars with a live counter; hard cap of 4,000. `⌘/Ctrl + Enter` saves; `Escape` cancels.
+- **Persistence.** Comments survive reload via `localStorage` under the existing `ai-text-editor-mvp` key.
+
+### Changed
+
+- **Predict** toolbar label is title case (`Predict`), not all-caps via CSS `uppercase`.
+- **Welcome** seed document rewritten as an 8-step quick start using the same labels users see in the UI (**Write** / **Preview** / **Split**, **Comment**, **Send to AI**, **Outdated**, **Revision history**, **Prompt library**, **include selection**, **Apply** / **Reject** / **Apply N changes** / **Force-apply…**, **Predict**, **Import text from photos or PDFs**, **Google AI Mode (no key)**).
+- Mirror scroll sync rebinds when the editor view mode changes so **Write** / **Split** keep text scrolling with the textarea after leaving **Preview**.
+
+### Internal
+
+- New `src/utils/comments.ts` — re-anchoring, batch serialization, selection-rect measurement.
+- New `src/utils/googleAiMode.ts` — Google AI Mode deep-link builder.
+- New components: `CommentLayer`, `CommentMargin`, `CommentComposer`, `CommentPopover`, `CommentTray`.
+- `src/store/useStore.ts` — `comments` slice (persisted) + `commentUndoStack` (session-local); v0.4.0 rehydration migration.
+- `src/api/chat.ts` — comment-batch system note for `[id] "..." Comment:` payloads.
+- `src/components/ChatPanel.tsx` — `mvp:send-comments` / `mvp:chat-streaming` events; Google AI Mode paste flow.
+- `src/index.css` — `.cm-*` styles for highlights, margin, composer, popover, tray, undo toast.
+
+### Verification
+
+- `npm run build` — clean.
+
 ## v0.3.2 — Debug Mode, mobile-friendly editor, manual Predict
 
 Polish + UX release on top of [v0.3.1](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.1).

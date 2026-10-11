@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
-import { PROVIDERS, getProvider } from '@/config/providers';
+import { PROVIDERS, getProvider, requiresApiKey } from '@/config/providers';
 import type { ApiProvider } from '@/types';
 
 // Project default for the global UI font size. Mirrored in
@@ -101,71 +101,89 @@ export function SettingsModal({ open, onClose }: Props) {
             </select>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
-              API key
-            </label>
-            <div className="flex gap-2">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={preset.apiKeyPlaceholder}
-                className="flex-1 ape-field font-mono"
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <button
-                className="btn-cyan-sm"
-                onClick={() => setShowKey((v) => !v)}
-              >
-                {showKey ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            <p className="mt-1 text-xs text-paper-inkSoft dark:text-cyber-muted">
-              Stored only in this browser's localStorage (never uploaded to
-              this app's servers — there are none). Sent as
-              <code className="mx-1 px-1 rounded bg-paper-elevated dark:bg-ape-elevated text-cyber-clay dark:text-cyber-cyan font-mono text-[11px]">
-                Authorization: Bearer …
-              </code>
-              to the HTTPS endpoint below. Do not use a shared computer
-              without clearing site data afterward.
-            </p>
-          </div>
+          {requiresApiKey(provider) ? (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
+                  API key
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={preset.apiKeyPlaceholder}
+                    className="flex-1 ape-field font-mono"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <button
+                    className="btn-cyan-sm"
+                    onClick={() => setShowKey((v) => !v)}
+                  >
+                    {showKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-paper-inkSoft dark:text-cyber-muted">
+                  Stored only in this browser's localStorage (never uploaded to
+                  this app's servers — there are none). Sent as
+                  <code className="mx-1 px-1 rounded bg-paper-elevated dark:bg-ape-elevated text-cyber-clay dark:text-cyber-cyan font-mono text-[11px]">
+                    Authorization: Bearer …
+                  </code>
+                  to the HTTPS endpoint below. Do not use a shared computer
+                  without clearing site data afterward.
+                </p>
+              </div>
 
-          <div>
-            <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
-              API endpoint
-            </label>
-            <input
-              value={apiEndpoint}
-              onChange={(e) => setApiEndpoint(e.target.value)}
-              placeholder={preset.defaultEndpoint}
-              className="ape-field font-mono text-xs"
-              spellCheck={false}
-            />
-            <p className="mt-1 text-xs text-paper-inkSoft dark:text-cyber-muted">{preset.helpText}</p>
-          </div>
+              <div>
+                <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
+                  API endpoint
+                </label>
+                <input
+                  value={apiEndpoint}
+                  onChange={(e) => setApiEndpoint(e.target.value)}
+                  placeholder={preset.defaultEndpoint}
+                  className="ape-field font-mono text-xs"
+                  spellCheck={false}
+                />
+                <p className="mt-1 text-xs text-paper-inkSoft dark:text-cyber-muted">{preset.helpText}</p>
+              </div>
 
-          <div>
-            <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
-              Model
-            </label>
-            <div className="flex gap-2">
-              <input
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                list="mvp-model-list"
-                className="flex-1 ape-field"
-                spellCheck={false}
-              />
-              <datalist id="mvp-model-list">
-                {preset.modelPresets.map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
+              <div>
+                <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">
+                  Model
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    list="mvp-model-list"
+                    className="flex-1 ape-field"
+                    spellCheck={false}
+                  />
+                  <datalist id="mvp-model-list">
+                    {preset.modelPresets.map((m) => (
+                      <option key={m} value={m} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+            </>
+          ) : (
+            // Keyless provider (google-ai-mode): the three keyed fields
+            // above are irrelevant. Show a single explanatory block
+            // instead, plus a visible note that the System message
+            // below will be folded into the prompt that gets sent to
+            // the AI Mode tab.
+            <div className="rounded border border-paper-hairline dark:border-cyber-border bg-paper-elevated/40 dark:bg-ape-elevated/40 p-3 space-y-1.5">
+              <p className="text-sm text-paper-ink dark:text-cyber-primary">
+                No API key needed.
+              </p>
+              <p className="text-xs text-paper-inkSoft dark:text-cyber-muted">
+                {preset.helpText}
+              </p>
             </div>
-          </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan mb-1 uppercase tracking-wide">

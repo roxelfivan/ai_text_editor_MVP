@@ -8,6 +8,7 @@ import { RevisionHistory } from '@/components/RevisionHistory';
 import { SettingsModal } from '@/components/SettingsModal';
 import { EdgeAnchor } from '@/components/EdgeAnchor';
 import { applyThemeClass } from '@/utils/theme';
+import { requiresApiKey } from '@/config/providers';
 
 // Inputs that are safe to treat as "the user is typing" for the purpose
 // of deferring global shortcuts. Lifted to module scope so the regex
@@ -167,14 +168,18 @@ export default function App() {
     document.documentElement.style.fontSize = `${uiFontSize}px`;
   }, [uiFontSize]);
 
-  // If there's no API key, gently prompt the user once on first load.
+  // If the active provider needs an API key and there isn't one, gently
+  // prompt the user once on first load. The keyless `google-ai-mode`
+  // provider is intentionally excluded from this auto-pop so first-time
+  // users who already chose the no-key path are not interrupted with a
+  // settings modal asking for a key.
   useEffect(() => {
     const flagged = localStorage.getItem('ai-text-editor-mvp:onboarded');
-    if (!flagged && !api.apiKey) {
+    if (!flagged && requiresApiKey(api.provider) && !api.apiKey) {
       setSettingsOpen(true);
       localStorage.setItem('ai-text-editor-mvp:onboarded', '1');
     }
-  }, [api.apiKey]);
+  }, [api.apiKey, api.provider]);
 
   // Hotkey: ⌘/Ctrl + . opens settings; ⌘/Ctrl + , opens prompts;
   // ⌘/Ctrl + h opens history; ⌘/Ctrl + b toggles the sidebar;

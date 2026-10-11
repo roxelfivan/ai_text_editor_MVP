@@ -467,3 +467,580 @@ html.dark .edge-anchor {
 html.dark .edge-anchor:hover {
   box-shadow: 0 0 12px rgba(111, 191, 153, 0.45), 0 1px 4px rgba(0, 0, 0, 0.4);
 }
+
+/* =========================================================================
+   Inline commenting — v0.4.0
+   -------------------------------------------------------------------------
+   The textarea's text is hidden; a mirror overlay (`CommentLayer`)
+   renders the same content behind it with `<mark>` spans at every
+   comment's anchor. The textarea + mirror share identical font /
+   padding / wrap settings so the lines line up exactly. The mirror
+   is `pointer-events: none` and `aria-hidden` so it never interferes
+   with typing or selection.
+
+   The `.comment-textarea` selector is applied by `Editor.tsx` to the
+   textarea so the textarea's text is invisible and only the mirror's
+   text shows through. CSS variables drive both classes for parity.
+   ========================================================================= */
+
+.comment-textarea {
+  /* Mirror inherits these via the shared font/padding/wrap below.
+     `!important` on `background` and `color` is required so this rule
+     beats Tailwind's `bg-paper-base / dark:bg-ape-base` and
+     `text-paper-ink / dark:text-cyber-primary` utilities — those
+     rules have higher specificity (`.dark\:bg-ape-base` is
+     `.dark .bg-ape-base`, i.e. 0,2,0) than a plain `.comment-textarea`
+     (0,1,0) and would otherwise win the cascade. */
+  color: transparent !important;
+  caret-color: #e85d3b;
+  background: transparent !important;
+}
+html.dark .comment-textarea {
+  caret-color: #00e5ff;
+}
+
+.cm-mirror {
+  /* Identical geometry to the textarea — see the rule that
+     `.cm-mirror, .comment-textarea` shares padding, font, line-height
+     and wrap. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: inherit;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 16px;
+  /* Sit behind the textarea. */
+  position: absolute;
+  inset: 0;
+  /* The mirror and the textarea are the same size; the mirror is
+     scroll-synced to the textarea in `Editor.tsx`. `overflow: hidden`
+     on the mirror prevents its long content from bleeding past the
+     wrapper when the textarea is scrolled to the top — without
+     this, the user sees the first 532px of the document regardless
+     of how far they scrolled. */
+  overflow: hidden;
+  /* The mirror's text is what the user actually sees — the textarea's
+     own text is forced to `transparent` by `.comment-textarea` so
+     the user types "through" the mirror. */
+  color: #171617; /* paper-ink */
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+html.dark .cm-mirror {
+  color: #f5f1e6; /* cyber-primary */
+}
+
+/* Shared padding / font rules so textarea + mirror line up. Any
+   geometric mismatch here (padding, border, box-sizing, tab-size,
+   letter-spacing) accumulates into a vertical selection drift that
+   grows further down a long document. */
+.comment-textarea,
+.cm-mirror {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  padding: 16px;
+  box-sizing: border-box;
+  border: 0;
+  margin: 0;
+  tab-size: 4;
+  -moz-tab-size: 4;
+  letter-spacing: normal;
+}
+
+/* The actual highlight tint. Two stacked tints are additive — the
+   browser blends their `rgba` backgrounds so overlapping comments
+   visually stack instead of one hiding the other. */
+.cm-highlight {
+  background: rgba(255, 213, 0, 0.22);
+  border-radius: 2px;
+  /* No border / underline / shadow so the highlight reads as a soft
+     band, not a decorative element. A real CSS `border` would change
+     the mark's box and desync the mirror's line boxes from the
+     textarea's, so outdated marks use an outline instead. */
+  color: inherit;
+  border: 0;
+}
+.cm-highlight--outdated {
+  background: rgba(232, 93, 59, 0.18);
+  outline: 1px dashed rgba(232, 93, 59, 0.6);
+  outline-offset: -1px;
+}
+html.dark .cm-highlight {
+  background: rgba(232, 93, 59, 0.18);
+}
+html.dark .cm-highlight--outdated {
+  background: rgba(232, 93, 59, 0.28);
+  outline-color: rgba(232, 93, 59, 0.8);
+}
+
+/* The textarea needs to sit *above* the mirror so its caret and
+   selection rectangles paint over the highlight. */
+.comment-textarea {
+  position: relative;
+  z-index: 1;
+}
+
+/* Right-margin comment column. Sits between the write pane and the
+   chat panel; never overlaps editor text. */
+.cm-margin {
+  width: 36px;
+  flex-shrink: 0;
+  position: relative;
+  border-left: 1px solid #e5dfd3; /* paper-hairline */
+  background: #f7f2e7; /* paper-surface */
+}
+html.dark .cm-margin {
+  border-left-color: #2a2825; /* cyber-border */
+  background: #1c1a17; /* ape-panel */
+}
+
+.cm-margin__badge {
+  position: absolute;
+  left: 50%;
+  /* Visible badge is a 16×16 pill. The hit area is enlarged via
+     an absolutely-positioned `::before` pseudo-element so the
+     click target stays around 28×28 even though the visible dot
+     is small. */
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  margin-top: -8px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #e85d3b; /* cyber-clay */
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 9px;
+  line-height: 1;
+  border: 1px solid transparent;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: box-shadow 120ms ease, background 120ms ease;
+}
+/* The hit-target area is the `::before` pseudo-element so the
+   visual circle stays small while the click region is 28×28. */
+.cm-margin__badge::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+}
+.cm-margin__badge:hover,
+.cm-margin__badge:focus-visible {
+  outline: none;
+  /* No `transform` here: the badge must stay still on hover, only
+     the highlight (box-shadow + slight background brighten) changes. */
+  box-shadow: 0 0 0 3px rgba(232, 93, 59, 0.25);
+  background: #d44a2a;
+}
+.cm-margin__badge--outdated {
+  background: transparent;
+  color: #e85d3b;
+  border: 1px dashed #e85d3b;
+}
+.cm-margin__badge--sent {
+  opacity: 0.6;
+}
+html.dark .cm-margin__badge {
+  background: #00e5ff; /* cyber-cyan */
+  color: #0d0c0a;
+}
+html.dark .cm-margin__badge--outdated {
+  background: transparent;
+  color: #00e5ff;
+  border-color: #00e5ff;
+}
+
+.cm-margin__badge-num {
+  display: block;
+  line-height: 1;
+}
+
+/* Composer / popover shared shell. The same primitives work on
+   desktop and mobile; the `--sheet` modifier switches to a
+   bottom-sheet layout on `< sm` viewports. */
+.cm-composer,
+.cm-popover {
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: #ffffff;
+  border: 1px solid #e5dfd3;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(23, 22, 20, 0.12);
+  padding: 12px;
+  z-index: 50;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+}
+html.dark .cm-composer,
+html.dark .cm-popover {
+  background: #16140f;
+  border-color: #2a2825;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  color: #f5f1e6;
+}
+
+.cm-composer__textarea,
+.cm-popover__textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 8px;
+  border: 1px solid #e5dfd3;
+  border-radius: 4px;
+  background: #f7f2e7;
+  resize: vertical;
+  min-height: 80px;
+  color: inherit;
+}
+.cm-composer__textarea:focus,
+.cm-popover__textarea:focus {
+  outline: none;
+  border-color: #e85d3b;
+  box-shadow: 0 0 0 3px rgba(232, 93, 59, 0.2);
+}
+.cm-composer__textarea--warn,
+.cm-popover__textarea--warn {
+  border-color: #c97a1a;
+}
+.cm-composer__textarea--error,
+.cm-popover__textarea--error {
+  border-color: #c0392b;
+}
+html.dark .cm-composer__textarea,
+html.dark .cm-popover__textarea {
+  background: #1c1a17;
+  border-color: #2a2825;
+}
+html.dark .cm-composer__textarea:focus,
+html.dark .cm-popover__textarea:focus {
+  border-color: #00e5ff;
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.2);
+}
+
+.cm-composer__footer,
+.cm-popover__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.cm-composer__counter,
+.cm-popover__counter {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+  color: #7a7062;
+}
+.cm-composer--warn .cm-composer__counter {
+  color: #c97a1a;
+}
+.cm-composer--error .cm-composer__counter {
+  color: #c0392b;
+}
+html.dark .cm-composer__counter,
+html.dark .cm-popover__counter {
+  color: #9a9181;
+}
+
+.cm-composer__actions,
+.cm-popover__footer {
+  display: flex;
+  gap: 8px;
+}
+
+.cm-composer__btn,
+.cm-popover__btn {
+  min-height: 36px;
+  min-width: 64px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #e5dfd3;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cm-composer__btn--primary,
+.cm-popover__btn--primary {
+  background: #e85d3b;
+  color: #ffffff;
+  border-color: #e85d3b;
+}
+.cm-composer__btn--primary:disabled,
+.cm-popover__btn--primary:disabled {
+  background: #e5dfd3;
+  color: #b8ad9a;
+  border-color: #e5dfd3;
+  cursor: not-allowed;
+}
+.cm-composer__btn--ghost:hover,
+.cm-popover__btn--ghost:hover {
+  background: #f7f2e7;
+}
+html.dark .cm-composer__btn,
+html.dark .cm-popover__btn {
+  background: #1c1a17;
+  border-color: #2a2825;
+}
+html.dark .cm-composer__btn--primary,
+html.dark .cm-popover__btn--primary {
+  background: #00e5ff;
+  color: #0d0c0a;
+  border-color: #00e5ff;
+}
+html.dark .cm-composer__btn--primary:disabled,
+html.dark .cm-popover__btn--primary:disabled {
+  background: #2a2825;
+  color: #5a554a;
+  border-color: #2a2825;
+}
+
+.cm-popover__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.cm-popover__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #e85d3b;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+}
+html.dark .cm-popover__index {
+  background: #00e5ff;
+  color: #0d0c0a;
+}
+.cm-popover__title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #7a7062;
+}
+.cm-popover--outdated .cm-popover__title {
+  color: #c0392b;
+}
+.cm-popover--sent .cm-popover__title {
+  color: #6fbf99;
+}
+html.dark .cm-popover__title {
+  color: #9a9181;
+}
+.cm-popover__close {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: inherit;
+}
+.cm-popover__close:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+html.dark .cm-popover__close:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cm-popover__banner {
+  background: rgba(192, 57, 43, 0.1);
+  border: 1px solid rgba(192, 57, 43, 0.4);
+  color: #c0392b;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+html.dark .cm-popover__banner {
+  background: rgba(192, 57, 43, 0.2);
+  color: #ff7864;
+}
+
+.cm-popover__body {
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.cm-popover__empty {
+  color: #9a9181;
+}
+
+/* Tray at the bottom of the write pane. */
+.cm-tray {
+  border-top: 1px solid #e5dfd3;
+  background: #f7f2e7;
+  padding: 10px 14px;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+}
+html.dark .cm-tray {
+  border-top-color: #2a2825;
+  background: #1c1a17;
+}
+.cm-tray__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cm-tray__label {
+  font-size: 13px;
+  font-weight: 500;
+  flex: 1;
+  color: #514a3e;
+}
+html.dark .cm-tray__label {
+  color: #c8c2b3;
+}
+.cm-tray__btn {
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #e5dfd3;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  color: inherit;
+}
+.cm-tray__btn--primary {
+  background: #e85d3b;
+  color: #ffffff;
+  border-color: #e85d3b;
+  font-weight: 600;
+}
+.cm-tray__btn--primary:disabled {
+  background: #e5dfd3;
+  color: #b8ad9a;
+  border-color: #e5dfd3;
+  cursor: not-allowed;
+}
+/* Dim while a chat reply is streaming so the previous batch is
+   visibly in-flight. */
+.cm-tray__btn--sending,
+.cm-tray__btn--sending:disabled {
+  background: #f0e7d6;
+  color: #8a8070;
+  border-color: #e5dfd3;
+  cursor: progress;
+  opacity: 0.6;
+}
+html.dark .cm-tray__btn--sending,
+html.dark .cm-tray__btn--sending:disabled {
+  background: #1f1d1a;
+  color: #6a6358;
+  border-color: #2a2825;
+  opacity: 0.6;
+}
+html.dark .cm-tray__btn {
+  background: #1c1a17;
+  border-color: #2a2825;
+}
+html.dark .cm-tray__btn--primary {
+  background: #00e5ff;
+  color: #0d0c0a;
+  border-color: #00e5ff;
+}
+html.dark .cm-tray__btn--primary:disabled {
+  background: #2a2825;
+  color: #5a554a;
+  border-color: #2a2825;
+}
+
+/* Undo toast. Surfaces after a comment op is undone (delete / body
+   edit). Auto-clears after 4 s; click-to-dismiss. */
+.cm-undo-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #16140f;
+  color: #f5f1e6;
+  border: 1px solid #2a2825;
+  border-radius: 6px;
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 60;
+  cursor: default;
+}
+html.dark .cm-undo-toast {
+  background: #16140f;
+  color: #f5f1e6;
+  border-color: #2a2825;
+}
+/* Light theme override: render the toast on a dark surface so it's
+   readable on top of either theme's editor background. */
+.cm-undo-toast {
+  background: #16140f;
+  color: #f5f1e6;
+  border-color: #2a2825;
+}
+.cm-undo-toast__btn {
+  background: transparent;
+  color: #00e5ff;
+  border: 1px solid #00e5ff;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cm-undo-toast__btn:hover {
+  background: rgba(0, 229, 255, 0.1);
+}
+
+/* Bottom-sheet variant for the composer / popover on `< sm`. */
+@media (max-width: 639px) {
+  .cm-composer--sheet,
+  .cm-popover--sheet {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    max-height: 60vh;
+    overflow-y: auto;
+    transform: none;
+  }
+  .cm-margin {
+    /* On small viewports the margin becomes a horizontal chip lane
+       below the textarea. The Editor component is responsible for
+       actually rendering the lane; this rule just suppresses the
+       column layout. */
+    width: auto;
+    border-left: none;
+    border-top: 1px solid #e5dfd3;
+    background: #f7f2e7;
+    height: 44px;
+  }
+  html.dark .cm-margin {
+    border-top-color: #2a2825;
+    background: #1c1a17;
+  }
+}

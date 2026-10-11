@@ -8,20 +8,30 @@ A minimal, local-first AI markdown editor. Everything runs in the browser — no
 ## Features
 
 - **Documents** — sidebar with create / rename / delete / switch.
-- **Markdown editor** — plain `<textarea>` (write mode), live
-  `react-markdown` preview, or split view.
+- **Markdown editor** — plain `<textarea>` in **Write**, live
+  `react-markdown` **Preview**, or **Split**.
 - **AI chat** — right-side panel with streaming responses, system prompt,
-  model picker, "send selection" toggle, and ⌘/Ctrl+Enter to send.
-- **Prompt library** — seed prompts plus your own.
-- **Revision history** — snapshot any document, view line diffs against
-  the current version, restore old revisions.
-- **Photo & PDF import** — drop in images or PDFs and have the text
-  recognized entirely in-browser (PaddleOCR + ONNX Runtime, zero
-  network calls). Recognized text is inserted at the caret.
-- **Two themes** — cyberpunk dark (default) and Muji-style light
-  (warm cream, kraft panels, sumi-ink text). The full design system
-  (design tokens, theme-aware component classes, logo wordmark) lives
-  in `tailwind.config.cjs` and `src/index.css`.
+  model picker, **include selection** checkbox, and ⌘/Ctrl+Enter to send.
+- **Comment (v0.4.0)** — select a passage → click **Comment** in the
+  editor toolbar → write your note. The passage gets a highlight and a
+  numbered margin badge. Open a badge to **Edit** or **Delete**
+  (including after send). Click **Send to AI** under the editor to
+  dispatch the article plus every comment as one batch; the reply
+  arrives as the same proposed-edit cards used for chat rewrites.
+  `⌘/Ctrl + Z` undoes the last comment change; comments re-anchor when
+  the document is edited (**Outdated** when they cannot).
+- **Prompt library** — seed prompts plus your own (top-bar bookmark /
+  `⌘/Ctrl + ,`).
+- **Revision history** — **Save** a snapshot from the editor toolbar,
+  then open **Revision history** (top-bar clock / `⌘/Ctrl + h`) to
+  diff and restore.
+- **Import text from photos or PDFs** — in-browser OCR (PaddleOCR +
+  ONNX Runtime), then Markdown rewrite via your configured model
+  before insert at the caret.
+- **Predict** — toolbar control that turns inline sentence suggestions
+  on/off (`Tab` / **Accept**, `Esc` / **Reject**, or `⌘/Ctrl + \`).
+- **Two themes** — cyberpunk dark and Muji-style light. Design tokens
+  live in `tailwind.config.cjs` and `src/index.css`.
 
 Everything (documents, chats, revisions, prompts, settings) is persisted
 in `localStorage` via `zustand/middleware`. Nothing leaves your browser
@@ -48,6 +58,31 @@ works too).
 Open **Settings** (⚙ button, top right) and paste your key on first run.
 You can also set `VITE_DEFAULT_API_ENDPOINT` / `VITE_DEFAULT_MODEL` in
 `.env` to override the defaults at build time.
+
+### Third option: Google AI Mode (no API key)
+
+The Settings provider dropdown has a third option,
+`Google AI Mode (no key)`, that does **not** require an API key and
+does **not** call any external API from the editor itself. When this
+provider is selected, clicking *Send* in the chat panel:
+
+1. Builds a Google AI Mode deep-link (`https://www.google.com/search?udm=50`)
+   pre-filled with your current prompt (system instructions, the open
+   document, and the chat history are folded into the query).
+2. Opens that URL in a new browser tab.
+3. Shows a "Paste the AI Mode answer" textarea back in the chat panel.
+
+You read the answer on the Google AI Mode page, copy it, and paste it
+back into the editor. The pasted answer is appended to the chat as a
+normal assistant message — any `proposed-edit` fenced blocks inside it
+become the same proposed-edit cards you get with the OpenAI-compatible
+providers, so **Apply** / **Reject** / **Apply N changes** all keep working.
+
+This option exists for users who don't want to set up an API key. It
+deliberately does **not** scrape or automate Google AI Mode — the user
+is always the one copying the answer back. The inline sentence
+completion feature in the editor toolbar is automatically disabled
+when this provider is active (it has no streaming API to call).
 
 ## Quick start
 
@@ -81,7 +116,9 @@ src/
 ├── store/
 │   └── useStore.ts       # zustand store + localStorage persistence.
 ├── utils/
+│   ├── comments.ts       # Comment re-anchor, batch format, selection rect.
 │   ├── diff.ts           # Line-diff helper for revisions.
+│   ├── googleAiMode.ts   # Google AI Mode deep-link builder.
 │   ├── ocr.ts            # PaddleOCR pipeline for image import.
 │   ├── pdf.ts            # pdfjs-dist wrapper for PDF text / render.
 │   └── proposedEdit.ts   # Proposed-edit parsing + formatting.
@@ -89,61 +126,70 @@ src/
     ├── Sidebar.tsx
     ├── Editor.tsx
     ├── ChatPanel.tsx
+    ├── CommentLayer.tsx      # Mirror overlay (highlights under textarea).
+    ├── CommentMargin.tsx     # Numbered margin badges.
+    ├── CommentComposer.tsx   # Floating composer after Comment.
+    ├── CommentPopover.tsx    # Edit / Delete popover on a badge.
+    ├── CommentTray.tsx       # Send to AI tray under the editor.
     ├── PromptLibrary.tsx
-    ├── ProposedEditCard.tsx  # Track-changes card for AI diffs.
+    ├── ProposedEditCard.tsx  # Apply / Reject cards for AI diffs.
     ├── RevisionHistory.tsx
     ├── SettingsModal.tsx
-    ├── PhotoImportButton.tsx # Image / PDF import picker.
+    ├── ImportMediaButton.tsx # Import text from photos or PDFs.
     ├── EdgeAnchor.tsx        # Side / top edge-anchor toggle.
     └── ResizeHandle.tsx
 ```
 
-## Track Changes — Reviewing AI Edits
+## Comment — feedback on a passage
 
-When the AI proposes changes to your document (e.g., rewording a paragraph, fixing a section, or suggesting a deletion), they appear as **Proposed Edit Cards** embedded directly in the editor pane.
+1. Select text in **Write** (or the Write side of **Split**).
+2. Click **Comment** in the editor toolbar and write your note.
+3. The passage is highlighted; a numbered badge appears in the margin.
+4. Click a badge to **Edit** or **Delete**. **Outdated** means the
+   anchored text could not be found after edits.
+5. Click **Send to AI** under the editor when you want the model to
+   address every comment in one chat turn.
+
+## Reviewing AI edits
+
+When the AI proposes changes, they appear as cards in the chat reply
+(and as track-changes style diffs).
 
 ### How it works
 
-1. **Trigger a proposal** — Select text in the editor and ask the AI to "rewrite this" or "shorten this" via the chat panel. The AI's proposed replacement comes back as a structured diff.
-2. **Inline cards appear** — Each proposal renders as a `ProposedEditCard` showing:
-   - The **original text** (red, struck through)
-   - The **proposed new text** (green, highlighted)
-   - A one-line **explanation** of why the AI made that change
-3. **Accept or reject** — Click **Accept** to apply the change to the document, or **Reject** to discard it and keep the original.
-4. **Batch review** — Multiple proposals can coexist. Accept or reject them one by one in order, or jump to the next card using the **Navigate** buttons on each card.
+1. **Trigger a proposal** — Select text, check **include selection** in
+   the chat panel, and ask to rewrite / shorten / expand. Or use
+   **Comment** + **Send to AI**.
+2. **Cards appear** — each card shows the original vs proposed text.
+3. **Apply or Reject** — click **Apply** to write the change into the
+   document, or **Reject** to discard it. Use **Reject with feedback**
+   to stage a reason for a follow-up chat turn.
+4. **Several changes** — use **Apply N changes** in the chat footer to
+   apply every anchored edit from that reply. If a quote is missing,
+   click in the editor and use **Force-apply…**.
 
 ### Hands-on example
 
 ```
 1. Open a document with some markdown content.
 2. Highlight a paragraph you want the AI to improve.
-3. In the Chat panel, enable "Send selection" (toggle button).
-4. Type: "Make this more concise" and press ⌘+Enter.
+3. In the chat panel, check include selection.
+4. Type: "Make this more concise" and press ⌘/Ctrl+Enter.
 5. The AI streams back a proposed edit.
-6. Switch back to the editor — a blue-outlined card now floats
-   at the position of your selection.
-7. Read the diff (original → proposed), then click Accept.
+6. Read the diff, then click Apply.
    The document updates instantly.
 ```
-
-### Keyboard shortcut
-
-| Key              | Action                              |
-| ---------------- | ----------------------------------- |
-| ⌘ / Ctrl + y    | Accept focused proposal             |
-| ⌘ / Ctrl + n    | Reject focused proposal / next card |
 
 ### Under the hood
 
 - `utils/proposedEdit.ts` — parses the AI's diff payload into structured `ProposedEdit` objects (type defined in `types.ts`).
-- `components/ProposedEditCard.tsx` — renders the accept/reject UI with diff highlighting.
-- The store (`useStore.ts`) holds the active proposal queue; accepting/rejecting pops items and applies or discards the patch.
+- `components/ProposedEditCard.tsx` — renders the **Apply** / **Reject** UI with diff highlighting.
 
-## Import photos & PDFs
+## Import text from photos or PDFs
 
-The editor toolbar has an **Import photos / PDFs** button that recognizes
-text from one or more dropped images or PDF files and inserts the result
-at your caret. Everything runs locally — no upload, no third-party API.
+The editor toolbar has an **Import text from photos or PDFs** button that
+recognizes text from one or more images or PDF files and inserts the
+result at your caret. OCR runs locally — no upload for recognition.
 
 ### What it accepts
 
@@ -182,8 +228,8 @@ recognitions.
 
 1. Open (or create) a document and place the caret where the imported
    text should land.
-2. Click **Import photos / PDFs** in the editor toolbar.
-3. Pick the language(s), then click **Choose Import File(s)**.
+2. Click **Import text from photos or PDFs** in the editor toolbar.
+3. Pick the language(s), then choose your file(s).
 4. Select one or more images / PDFs. A small progress chip
    (`reading… 2/5`) appears while the engine works.
 5. When recognition finishes, the extracted text is sent to your
@@ -208,14 +254,31 @@ recognitions.
 
 ## Hotkeys
 
-| Key               | Action                |
-| ----------------- | --------------------- |
-| ⌘ / Ctrl + .     | Open Settings         |
-| ⌘ / Ctrl + ,     | Open Prompt library   |
-| ⌘ / Ctrl + h      | Open Revision history |
-| ⌘ / Ctrl + Enter | Send chat message     |
+| Key                      | Action                                   |
+| ------------------------ | ---------------------------------------- |
+| ⌘ / Ctrl + .            | Open Settings                            |
+| ⌘ / Ctrl + ,            | Open Prompt library                      |
+| ⌘ / Ctrl + h            | Open Revision history                    |
+| ⌘ / Ctrl + Enter        | Send chat message                        |
+| ⌘ / Ctrl + Z            | Undo last comment op (delete / edit)     |
 
 ## Release notes
+
+### v0.4.0 — Comment + Send to AI, Google AI Mode, Predict label
+
+- **Comment** — select a passage → **Comment** → highlight + numbered
+  margin badge. Badge popover: **Edit** / **Delete** (including after
+  send). **Send to AI** under the editor batches the article and every
+  comment. **Outdated** when re-anchoring fails. `⌘/Ctrl + Z` undoes
+  the last comment change.
+- **Google AI Mode (no key)** — Settings provider that opens Google AI
+  Mode in a new tab; paste the answer back into chat. Proposed-edit
+  cards (**Apply** / **Reject**) still work. **Predict** stays off for
+  this provider (no streaming API).
+- **Predict** toolbar label is title case (`Predict`, not `PREDICT`).
+- **Welcome** quick start rewritten to match on-screen labels
+  (**Write** / **Preview** / **Split**, **include selection**,
+  **Apply N changes**, **Import text from photos or PDFs**, etc.).
 
 ### v0.3.4 — Import → Markdown, OCR works under CSP, security hardening, topbar icons
 

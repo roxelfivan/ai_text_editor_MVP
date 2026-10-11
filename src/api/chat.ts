@@ -211,5 +211,42 @@ export function buildRequestMessages(
       });
     }
   }
+
+  // If the most recent user message is a comment batch (the format
+  // emitted by `formatCommentBatch` in `src/utils/comments.ts`), inject
+  // a one-shot system note that tells the model how to address each
+  // `[id]` block. We detect the format by looking for the `[cN] "..."
+  // Comment: ...` pattern that `formatCommentBatch` always produces.
+  const lastUser = [...history].reverse().find((m) => m.role === 'user');
+  if (lastUser && looksLikeCommentBatch(lastUser.content)) {
+    out.push({
+      id: `${lastUser.id}-comments-batch`,
+      role: 'system',
+      content:
+        `The user's latest message contains a batch of inline comments on ` +
+        `the open document. Each block has the shape:\n\n` +
+        `  [id] "<verbatim quoted text>"\n` +
+        `  Comment: <user's comment text>\n\n` +
+        `Address each [id] independently. For each one, either:\n` +
+        `  - Emit a proposed-edit fence with the concrete fix, OR\n` +
+        `  - Briefly explain why no concrete edit is possible.\n\n` +
+        `Keep comments tied to their [id] throughout your reply so the user ` +
+        `can match your response back to each specific comment.`,
+      createdAt: 0,
+    });
+  }
+
   return out;
+}
+
+/**
+ * Detect the comment-batch format emitted by `formatCommentBatch` in
+ * `src/utils/comments.ts`. We require at least one `[id] "..."
+ * Comment: ...` block. Matches `c1`, `c2`, … which is what the
+ * serializer uses.
+ */
+function looksLikeCommentBatch(content: string): boolean {
+  if (!content) return false;
+  // At least one `[cN] "..."` block followed by a `Comment:` line.
+  return /\[c\d+\] "[^"]*"\s*\n\s*Comment:/.test(content);
 }

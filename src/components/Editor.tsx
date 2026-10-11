@@ -1,10 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { v4 as uuid } from 'uuid';
 import { useStore, useCurrentDocument } from '@/store/useStore';
 import { ImportMediaButton } from '@/components/ImportMediaButton';
 import { useInlineCompletion } from '@/hooks/useInlineCompletion';
 import { useDragResize } from '@/hooks/useDragResize';
 import { remarkPlugins, rehypePlugins } from '@/utils/markdown';
+import { requiresApiKey } from '@/config/providers';
+import {
+  getSelectionRect,
+  reanchorAll,
+  clampCommentBody,
+} from '@/utils/comments';
+import type { Comment } from '@/types';
+import { CommentLayer } from '@/components/CommentLayer';
+import { CommentMargin } from '@/components/CommentMargin';
+import { CommentComposer } from '@/components/CommentComposer';
+import { CommentPopover } from '@/components/CommentPopover';
+import { CommentTray } from '@/components/CommentTray';
 
 /**
  * After any code path that updates the controlled textarea's value
@@ -67,8 +80,74 @@ export function Editor() {
   const setEditorFocus = useStore((s) => s.setEditorFocus);
   const api = useStore((s) => s.api);
   const debugMode = useStore((s) => s.debugMode);
+  // Comments — read the per-document list and the actions. We subscribe
+  // to `comments[currentDocumentId]` so re-renders fire only when the
+  // current document's comments change, not when comments on another
+  // document change.
+  const currentComments = useStore(
+    (s) => (doc ? s.comments[doc.id] ?? [] : [])
+  );
+  const addComment = useStore((s) => s.addComment);
+  const updateCommentBody = useStore((s) => s.updateCommentBody);
+  const deleteComment = useStore((s) => s.deleteComment);
+  const replaceCommentsForDocument = useStore(
+    (s) => s.replaceCommentsForDocument
+  );
+  const undoLastCommentOp = useStore((s) => s.undoLastCommentOp);
+  // `commentUndoStack` is read for the Undo affordance in the tray.
+  const commentUndoDepth = useStore((s) => s.commentUndoStack.length);
+  // Subscribe to the current document's focus state so the toolbar
+  // "Comment" button can enable/disable itself when the user
+  // changes the selection. The store keeps `selectionStart` and
+  // `selectionEnd` updated from the textarea's `select` / `keyup`
+  // events.
+  const editorFocusState = useStore(
+    (s) => (doc ? s.editorFocus[doc.id] : undefined)
+  );
+  const hasSelection = !!(
+    doc &&
+    editorFocusState &&
+    editorFocusState.selectionEnd > editorFocusState.selectionStart
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const writePaneRef = useRef<HTMLDivElement>(null);
+  // Mirror overlay ref — used by `getSelectionRect` to measure the
+  // selection's y-offset for the floating composer + the margin badges.
+  const mirrorRef = useRef<HTMLDivElement>(null);
+  // UI state for the comment feature.
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerPosition, setComposerPosition] = useState<{
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+  } | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<{
+    start: number;
+    end: number;
+  } | null>(null);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [popoverPosition, setPopoverPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
+  // Mirrors the chat panel's `streaming` state via a window event so
+  // the "Send to AI" button in `CommentTray` can dim itself while a
+  // chat reply is still being generated. See `mvp:chat-streaming`
+  // dispatch in `ChatPanel.tsx`.
+  const [chatStreaming, setChatStreaming] = useState(false);
+  useEffect(() => {
+    const onStream = (e: Event) => {
+      const detail = (e as CustomEvent<{ streaming: boolean }>).detail;
+      setChatStreaming(Boolean(detail?.streaming));
+    };
+    window.addEventListener('mvp:chat-streaming', onStream);
+    return () => window.removeEventListener('mvp:chat-streaming', onStream);
+  }, []);
+  const [undoToast, setUndoToast] = useState<{
+    message: string;
+    at: number;
+  } | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
 
@@ -125,7 +204,12 @@ export function Editor() {
   };
 
   // Inline sentence completion. Auto-disabled when no API key is configured.
-  const apiConfigured = Boolean(api.apiKey && api.apiEndpoint);
+  // The keyless `google-ai-mode` provider is also treated as "not
+  // configured" for inline completion because there is no streaming
+  // API the hook could call — the user explicitly chose the
+  // keyless path knowing it is chat-only.
+  const apiConfigured =
+    requiresApiKey(api.provider) && Boolean(api.apiKey && api.apiEndpoint);
   // User-controlled on/off toggle for the inline-completion feature.
   // Defaults to ON when the API is configured; the user toggles it
   // by clicking the Predict button in the toolbar.
@@ -324,6 +408,430 @@ export function Editor() {
       selectionEnd: end,
     });
   };
+
+  // ---- Inline commenting ----
+  // Select text → toolbar "Comment" → composer → margin badge.
+  // Badge opens the popover (edit / delete). "Send to AI" batches
+  // comments into the chat panel.
+
+  // Debounced re-anchor: when the document content changes, every
+  // comment is re-located via `reanchorAll`. We debounce by 150 ms so
+  // fast typing doesn't thrash the store.
+  const reanchorTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!doc) return;
+    if (currentComments.length === 0) return;
+    if (reanchorTimerRef.current !== null) {
+      window.clearTimeout(reanchorTimerRef.current);
+    }
+    reanchorTimerRef.current = window.setTimeout(() => {
+      const { next } = reanchorAll(doc.content, currentComments);
+      // Skip the store update if nothing actually changed (the common
+      // case when the user types outside any comment's range).
+      const same =
+        next.length === currentComments.length &&
+        next.every(
+          (c, i) =>
+            c.start === currentComments[i].start &&
+            c.end === currentComments[i].end &&
+            c.outdated === currentComments[i].outdated
+        );
+      if (!same) {
+        replaceCommentsForDocument(doc.id, next);
+      }
+    }, 150);
+    return () => {
+      if (reanchorTimerRef.current !== null) {
+        window.clearTimeout(reanchorTimerRef.current);
+      }
+    };
+  }, [doc?.content, doc?.id, currentComments, replaceCommentsForDocument]);
+
+  // Sync the mirror overlay's `scrollTop` to the textarea's so the
+  // highlights track the visible text. Also keep the mirror's
+  // content width equal to the textarea's *clientWidth* (the area
+  // excluding the scrollbar) — otherwise the mirror wraps text
+  // differently, `scrollHeight` diverges, and the selection
+  // highlight drifts further down the document.
+  // Re-bind when `viewMode` changes: Preview unmounts the write pane,
+  // so without this dep the scroll listener stays on a detached
+  // textarea and the mirror stops tracking scroll after switching back.
+  useEffect(() => {
+    const ta = textareaRef.current;
+    const mirror = mirrorRef.current;
+    if (!ta || !mirror) return;
+    const syncWidth = () => {
+      // Textarea's clientWidth is the content area inside its
+      // scrollbar. The mirror is `position: absolute; inset: 0` so
+      // by default it spans the full wrapper (including the
+      // scrollbar gutter). Cap the mirror's right edge so its
+      // wrap width matches the textarea's wrap width.
+      const sb = Math.max(0, ta.offsetWidth - ta.clientWidth);
+      mirror.style.right = `${sb}px`;
+    };
+    const handler = () => {
+      mirror.scrollTop = ta.scrollTop;
+      mirror.scrollLeft = ta.scrollLeft;
+    };
+    syncWidth();
+    handler();
+    ta.addEventListener('scroll', handler, { passive: true });
+    window.addEventListener('resize', syncWidth);
+    // Re-sync when the scrollbar appears/disappears (content grows).
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        syncWidth();
+        handler();
+      });
+      ro.observe(ta);
+    }
+    return () => {
+      ta.removeEventListener('scroll', handler);
+      window.removeEventListener('resize', syncWidth);
+      if (ro) ro.disconnect();
+    };
+  }, [doc?.id, viewMode]);
+
+  // Live measurement of each comment's first-line y-offset for the
+  // right-margin badges. Recomputes on content / comments / scroll.
+  const [badgePositions, setBadgePositions] = useState<
+    Record<string, number>
+  >({});
+  // Editor-pane bounds in the same pane-local coordinate space the
+  // composer / popover use. Updated on mount + on window resize so
+  // the floating boxes always clamp to the live container size
+  // (rather than the size at the moment the box was first opened).
+  const [paneBounds, setPaneBounds] = useState<{
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+  } | null>(null);
+  useEffect(() => {
+    const pane = writePaneRef.current;
+    if (!pane) return;
+    // Measure the *wrapper* (the inner div holding the textarea +
+    // mirror) rather than the pane. The composer / popover are
+    // `position: absolute` inside the wrapper, so they should
+    // clamp to the wrapper's bounds — not the pane's, which
+    // includes the right-margin column (where the badges live).
+    const wrapper = pane.querySelector<HTMLElement>(
+      '[data-cm-wrapper]'
+    );
+    if (!wrapper) return;
+    const update = () => {
+      const r = wrapper.getBoundingClientRect();
+      // Wrapper-local coords (the wrapper is at (0, 0) of itself).
+      setPaneBounds({ left: 0, top: 0, right: r.width, bottom: r.height });
+    };
+    update();
+    const ro =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    if (ro) ro.observe(wrapper);
+    window.addEventListener('resize', update);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [doc?.id]);
+  useEffect(() => {
+    if (!doc) {
+      setBadgePositions({});
+      return;
+    }
+    const compute = () => {
+      const mirror = mirrorRef.current;
+      const ta = textareaRef.current;
+      const pane = writePaneRef.current;
+      if (!mirror || !ta || !pane) return;
+      const taRect = ta.getBoundingClientRect();
+      // The badge lives in the right-margin column, which is a
+      // flex sibling of the wrapper, so its viewport top matches
+      // the wrapper's. The badge's `top` (in margin-local coords)
+      // equals `rect.top - marginTop` because the margin column
+      // itself does not scroll — only the textarea inside the
+      // wrapper scrolls. Adding `ta.scrollTop` (the previous
+      // implementation) double-counted the scroll and made the
+      // badge drift as the user scrolled.
+      const margin = pane.querySelector<HTMLElement>('.cm-margin');
+      const marginRect = margin?.getBoundingClientRect();
+      const next: Record<string, number> = {};
+      for (const c of currentComments) {
+        const rect = getSelectionRect(
+          doc.content,
+          mirror,
+          c.start,
+          c.end
+        );
+        if (!rect) continue;
+        // Translate from viewport coords to the margin column's
+        // coord space. The badge is `position: absolute` inside
+        // `.cm-margin`, which is a flex sibling of `data-cm-wrapper`
+        // and does **not** scroll with the textarea. So the
+        // badge's `top` simply equals the line's viewport y minus
+        // the margin column's viewport top. Adding `ta.scrollTop`
+        // (the previous formula) double-counted the scroll and
+        // made the badge drift as the user scrolled.
+        const marginTop = marginRect?.top ?? taRect.top;
+        const top = rect.top - marginTop;
+        // Clamp so the badge stays inside the pane even when scrolled
+        // far above / below the comment's actual line.
+        next[c.id] = Math.max(0, Math.min(top, pane.clientHeight - 32));
+      }
+      setBadgePositions(next);
+    };
+    compute();
+    const ta = textareaRef.current;
+    if (ta) ta.addEventListener('scroll', compute, { passive: true });
+    window.addEventListener('resize', compute);
+    return () => {
+      if (ta) ta.removeEventListener('scroll', compute);
+      window.removeEventListener('resize', compute);
+    };
+  }, [doc, currentComments]);
+
+  /**
+   * Translate a viewport-coords rect into the wrapper-local
+   * coord system that the composer + popover use. The wrapper
+   * (`data-cm-wrapper`) is the `position: relative` ancestor the
+   * floating boxes resolve their `left/top` against; using pane
+   * coords instead caused the popover to render far outside the
+   * editor area when the margin column was visible.
+   *
+   * When the wrapper isn't mounted yet (e.g. the very first
+   * render), we fall back to pane-local coords (subtracting
+   * `paneRect.left / .top`) so the box still appears in a sensible
+   * spot — the clamp will catch any small drift.
+   */
+  // Translate a viewport rect into wrapper-local coords. The composer
+  // / popover are `position: absolute` inside the non-scrolling
+  // wrapper, so `top` is the selection's viewport distance from the
+  // wrapper top — never document-scroll offset.
+  const toWrapperLocal = useCallback(
+    (rect: { left: number; top: number; right: number; bottom: number }) => {
+      const pane = writePaneRef.current;
+      if (!pane) return null;
+      const paneRect = pane.getBoundingClientRect();
+      const wrapper = pane.querySelector<HTMLElement>('[data-cm-wrapper]');
+      const wrapperRect = wrapper?.getBoundingClientRect();
+      const baseLeft = wrapperRect?.left ?? paneRect.left;
+      const baseTop = wrapperRect?.top ?? paneRect.top;
+      return {
+        left: rect.left - baseLeft,
+        top: rect.top - baseTop,
+        right: rect.right - baseLeft,
+        bottom: rect.bottom - baseTop,
+      };
+    },
+    []
+  );
+
+  // Global `⌘/Ctrl + Z` undo for comment ops — intercepts only when
+  // the textarea is focused so we don't steal the editor's native
+  // undo for plain text changes.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.shiftKey) return;
+      if (e.key.toLowerCase() !== 'z') return;
+      const ta = textareaRef.current;
+      if (document.activeElement !== ta) return;
+      const op = undoLastCommentOp();
+      if (!op) return; // empty; let the textarea's native undo run
+      e.preventDefault();
+      setUndoToast({
+        message:
+          op.kind === 'add'
+            ? 'Comment removed'
+            : op.kind === 'delete'
+              ? 'Comment restored'
+              : 'Comment edit undone',
+        at: Date.now(),
+      });
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [undoLastCommentOp]);
+
+  // Auto-clear the undo toast after 4 seconds.
+  useEffect(() => {
+    if (!undoToast) return;
+    const t = window.setTimeout(() => setUndoToast(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [undoToast]);
+
+  // Opens the floating composer anchored to the current text
+  // selection. Strict: returns without opening when the selection
+  // is empty. The toolbar button reflects this by disabling itself
+  // when there is no selection.
+  const openComposer = useCallback(() => {
+    if (!doc) return false;
+    const ta = textareaRef.current;
+    if (!ta) return false;
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    if (start === end) return false;
+    const mirror = mirrorRef.current;
+    if (!mirror) return false;
+    const rect = getSelectionRect(doc.content, mirror, start, end);
+    if (!rect) return false;
+    const local = toWrapperLocal(rect);
+    if (!local) return false;
+    setComposerPosition(local);
+    setPendingSelection({ start, end });
+    setComposerOpen(true);
+    ta.focus({ preventScroll: true });
+    return true;
+  }, [doc, toWrapperLocal]);
+
+  // Handler: save a brand-new comment.
+  const handleSaveComment = useCallback(
+    (body: string) => {
+      if (!doc || !pendingSelection) return;
+      const text = clampCommentBody(body);
+      if (!text.trim()) return;
+      const snippet = doc.content.slice(
+        pendingSelection.start,
+        pendingSelection.end
+      );
+      if (!snippet) return;
+      const now = Date.now();
+      const comment: Comment = {
+        id: uuid(),
+        documentId: doc.id,
+        start: pendingSelection.start,
+        end: pendingSelection.end,
+        snippet,
+        body: text,
+        createdAt: now,
+        updatedAt: now,
+        outdated: false,
+        sent: false,
+      };
+      addComment(comment);
+      setComposerOpen(false);
+      setComposerPosition(null);
+      setPendingSelection(null);
+    },
+    [doc, pendingSelection, addComment]
+  );
+
+  // Handler: open a comment in the popover (from margin badge or
+  // popover-from-anchor). The popover is anchored to the margin
+  // badge's y-offset so it doesn't overlap the editor.
+  //
+  // The popover renders `position: absolute` inside the
+  // `data-cm-wrapper` div (the inner wrapper around the textarea +
+  // mirror), so its `left` / `top` are in **wrapper-local** coords,
+  // not viewport coords. We translate the badge's right edge from
+  // viewport coords to wrapper-local here so the popover anchors to
+  // the correct spot — without this translation, the popover would
+  // be positioned `wrapperRect.left` pixels to the right of where it
+  // should be (effectively outside the editor pane).
+  const handleSelectComment = useCallback(
+    (commentId: string) => {
+      if (!doc) return;
+      setActiveCommentId(commentId);
+      const y = badgePositions[commentId];
+      const pane = writePaneRef.current;
+      if (typeof y !== 'number' || !pane) return;
+      const paneRect = pane.getBoundingClientRect();
+      const wrapper = pane.querySelector<HTMLElement>('[data-cm-wrapper]');
+      const wrapperRect = wrapper?.getBoundingClientRect();
+      // We anchor the popover to the badge's right edge. The badge
+      // lives in the margin column (sibling of the wrapper); its
+      // x is approximately `paneRect.right - 12` (a few px inside
+      // the pane's right edge). The popover renders in the
+      // wrapper's coord space, so we subtract `wrapperRect.left` to
+      // translate the anchor into wrapper-local.
+      const anchorViewportX = paneRect.right - 12;
+      const anchorViewportY = y + paneRect.top - 16;
+      setPopoverPosition({
+        left: wrapperRect
+          ? anchorViewportX - wrapperRect.left
+          : anchorViewportX - paneRect.left,
+        top: wrapperRect
+          ? anchorViewportY - wrapperRect.top
+          : anchorViewportY - paneRect.top,
+      });
+    },
+    [doc, badgePositions]
+  );
+
+  // Handler: send the comments batch to the AI.
+  const handleSendToAi = useCallback(() => {
+      if (!doc) return;
+      // Build the message body and dispatch via a custom event the
+      // ChatPanel listens for. This keeps the editor / chat coupling
+      // one-way (chat listens; editor dispatches) and avoids a direct
+      // import of the chat's internals.
+      const sendable = currentComments.filter((c) => !c.outdated);
+      if (sendable.length === 0) return;
+      window.dispatchEvent(
+        new CustomEvent('mvp:send-comments', {
+          detail: {
+            commentIds: sendable.map((c) => c.id),
+          },
+        })
+      );
+    },
+    [doc, currentComments]
+  );
+
+  // Close the popover / composer when clicking outside.
+  useEffect(() => {
+    if (!composerOpen && !activeCommentId) return;
+    const handler = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('.cm-composer')) return;
+      if (target.closest('.cm-popover')) return;
+      if (target.closest('.cm-margin__badge')) return;
+      // Click on the textarea is fine — that just updates the
+      // selection; the pill / popover close via their own logic.
+      if (target.tagName === 'TEXTAREA') return;
+      setComposerOpen(false);
+      setActiveCommentId(null);
+      setPopoverPosition(null);
+    };
+    // Use pointerdown for unified mouse + touch handling.
+    const pointerHandler = (e: PointerEvent) => handler(e);
+    window.addEventListener('pointerdown', pointerHandler);
+    return () => window.removeEventListener('pointerdown', pointerHandler);
+  }, [composerOpen, activeCommentId]);
+
+  // Listen for `mvp:mark-comments-sent` events from the chat panel so
+  // the editor can flip the comments to their `sent` state.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ ids: string[] }>).detail;
+      if (detail && Array.isArray(detail.ids)) {
+        // The store's `markCommentsSent` is the single source of
+        // truth; the chat panel calls it directly. We just listen
+        // here so we can clear the active popover if the user sends
+        // the comment that's currently open.
+        if (activeCommentId && detail.ids.includes(activeCommentId)) {
+          setActiveCommentId(null);
+          setPopoverPosition(null);
+        }
+      }
+    };
+    window.addEventListener('mvp:mark-comments-sent', handler);
+    return () => window.removeEventListener('mvp:mark-comments-sent', handler);
+  }, [activeCommentId]);
+
+  // Sorted comments for the margin (document order).
+  const sortedComments = useMemo(
+    () => [...currentComments].sort((a, b) => a.start - b.start),
+    [currentComments]
+  );
+
+  // Active comment object (or null) for the popover.
+  const activeComment = useMemo(
+    () => currentComments.find((c) => c.id === activeCommentId) ?? null,
+    [currentComments, activeCommentId]
+  );
 
   // Inline-format helper. Wraps the current textarea selection (or
   // inserts a pair at the caret if there is no selection) with the
@@ -593,6 +1101,34 @@ export function Editor() {
             U
           </button>
         </div>
+        {/* Add comment for the current text selection. onMouseDown
+            preventDefault keeps the textarea selection from
+            collapsing before the click handler reads it. */}
+        <button
+          type="button"
+          className="h-9 px-3 inline-flex items-center gap-1.5 rounded border border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel text-[15px] text-paper-inkSoft dark:text-cyber-muted hover:border-cyber-clay dark:hover:border-cyber-cyan hover:text-cyber-clay dark:hover:text-cyber-cyan disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-paper-hairline disabled:hover:text-paper-inkSoft dark:disabled:hover:border-cyber-border dark:disabled:hover:text-cyber-muted transition-colors"
+          onClick={() => openComposer()}
+          onMouseDown={(e) => e.preventDefault()}
+          disabled={!hasSelection}
+          aria-label="Add comment"
+          title="Add comment to the selected text"
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 12 12"
+            className="h-3.5 w-3.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {/* Speech bubble glyph with a small + inside. */}
+            <path d="M2 2.5 h7 a1 1 0 0 1 1 1 v4 a1 1 0 0 1 -1 1 h-3 l-2 2 v-2 h-2 a1 1 0 0 1 -1 -1 v-4 a1 1 0 0 1 1 -1 z" />
+            <path d="M6 4.2 v2.4 M4.8 5.4 h2.4" />
+          </svg>
+          Comment
+        </button>
         {/* Inline-completion status pill. Gated by `debugMode`; the
             state machine that drives the pill keeps running
             regardless (see `debugMode` in useStore.ts). */}
@@ -659,13 +1195,15 @@ export function Editor() {
           aria-label={`Predict ${inlineOn ? 'on' : 'off'}. Click to ${inlineOn ? 'turn off' : 'turn on'}.`}
           title={
             !apiConfigured
-              ? 'Configure an API key in Settings to enable prediction'
+              ? !requiresApiKey(api.provider)
+                ? 'Inline prediction needs an API key. Use Google AI Mode for full chat replies.'
+                : 'Configure an API key in Settings to enable prediction'
               : inlineOn
                 ? 'Click to stop inline predictions'
                 : 'Click to start inline predictions'
           }
           className={[
-            'inline-flex items-center gap-1.5 h-9 px-2.5 rounded border text-[15px] font-mono uppercase tracking-wider transition-colors select-none',
+            'inline-flex items-center gap-1.5 h-9 px-2.5 rounded border text-[15px] font-mono tracking-wider transition-colors select-none',
             !apiConfigured
               ? 'border-paper-hairline dark:border-cyber-border bg-paper-surface/40 dark:bg-ape-panel/40 text-paper-inkSoft/40 dark:text-cyber-muted/40 cursor-not-allowed'
               : inlineOn
@@ -739,8 +1277,36 @@ export function Editor() {
       <div className="flex-1 flex min-h-0">
         {showWrite && (
           <div ref={writePaneRef} className={`relative flex-1 min-w-0 flex flex-col ${showPreview ? 'border-r border-paper-hairline dark:border-cyber-border' : ''}`}>
-            <textarea
-              ref={textareaRef}
+            <div className="flex-1 flex min-h-0 relative">
+              {/* Textarea + mirror overlay. The mirror sits *behind*
+                  the textarea so the highlights paint under the user's
+                  text. The mirror and the textarea share identical
+                  font / padding / wrap settings (see `.cm-mirror` /
+                  `.comment-textarea` in src/index.css). */}
+              <div
+                className="relative flex-1 min-w-0 flex flex-col"
+                data-cm-wrapper
+                style={{
+                  fontSize: `${editorFontSize}px`,
+                  lineHeight: 1.55,
+                  // `isolation: isolate` forces this wrapper to
+                  // establish its own stacking context, so the
+                  // composer's / popover's `z-index: 50` paints
+                  // above the mirror + textarea (and the tray
+                  // below) rather than competing with z-indices
+                  // set elsewhere in the editor toolbar.
+                  isolation: 'isolate',
+                }}
+              >
+                {doc && (
+                  <CommentLayer
+                    ref={mirrorRef}
+                    content={doc.content}
+                    comments={sortedComments}
+                  />
+                )}
+                <textarea
+                  ref={textareaRef}
               value={doc.content}
               onChange={(e) => {
                 updateContent(doc.id, e.target.value);
@@ -780,12 +1346,106 @@ export function Editor() {
               }}
               onSelect={() => reportCaret(true)}
               onKeyUp={() => reportCaret(true)}
+              onMouseUp={() => reportCaret(true)}
               onClick={() => reportCaret(true)}
               style={{ fontSize: `${editorFontSize}px`, lineHeight: 1.55 }}
-              className="flex-1 p-4 outline-none resize-none font-mono bg-paper-base dark:bg-ape-base text-paper-ink dark:text-cyber-primary caret-cyber-clay dark:caret-cyber-cyan placeholder:text-paper-inkSoft/60 dark:placeholder:text-cyber-muted/60"
+              className="comment-textarea flex-1 outline-none resize-none bg-paper-base dark:bg-ape-base text-paper-ink dark:text-cyber-primary caret-cyber-clay dark:caret-cyber-cyan placeholder:text-paper-inkSoft/60 dark:placeholder:text-cyber-muted/60"
               placeholder="Start writing in Markdown…"
               spellCheck={false}
-            />
+                />
+                {/* Floating composer — anchored to the selection. */}
+                {composerOpen && pendingSelection && composerPosition && (
+                  <CommentComposer
+                    position={composerPosition}
+                    containerBounds={paneBounds}
+                    onSave={handleSaveComment}
+                    onCancel={() => {
+                      setComposerOpen(false);
+                      setComposerPosition(null);
+                      setPendingSelection(null);
+                    }}
+                  />
+                )}
+                {/* Popover for the active comment. Anchored to the
+                    margin column's right edge at the comment's first-
+                    line y-offset. */}
+                {activeComment && popoverPosition && (
+                  <CommentPopover
+                    comment={activeComment}
+                    index={
+                      sortedComments.findIndex(
+                        (c) => c.id === activeComment.id
+                      ) + 1
+                    }
+                    position={popoverPosition}
+                    containerBounds={paneBounds}
+                    onSaveBody={(id, body) => updateCommentBody(id, body)}
+                    onDelete={(id) => deleteComment(id)}
+                    onClose={() => {
+                      setActiveCommentId(null);
+                      setPopoverPosition(null);
+                    }}
+                  />
+                )}
+              </div>
+              {/* Right-margin column. Renders one numbered badge per
+                  comment, positioned by `badgePositions`. On `< sm`
+                  viewports the CSS switches this to a horizontal
+                  chip lane. */}
+              <CommentMargin
+                comments={sortedComments}
+                badgePositions={badgePositions}
+                onSelect={handleSelectComment}
+              />
+            </div>
+            {/* Comment tray (sticky bar). Visible only when the doc
+                has ≥ 1 comment. The Send button dispatches a
+                `mvp:send-comments` event the ChatPanel handles. */}
+            {currentComments.length > 0 && (
+              <CommentTray
+                count={currentComments.length}
+                outdatedCount={
+                  currentComments.filter((c) => c.outdated).length
+                }
+                sending={chatStreaming}
+                onSend={handleSendToAi}
+              />
+            )}
+            {/* Undo toast. Auto-clears after 4s; click to manually
+                dismiss. */}
+            {undoToast && (
+              <div
+                className="cm-undo-toast"
+                role="status"
+                aria-live="polite"
+                onClick={() => setUndoToast(null)}
+              >
+                <span>{undoToast.message}</span>
+                {commentUndoDepth > 0 && (
+                  <button
+                    type="button"
+                    className="cm-undo-toast__btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const op = undoLastCommentOp();
+                      if (op) {
+                        setUndoToast({
+                          message:
+                            op.kind === 'add'
+                              ? 'Comment removed'
+                              : op.kind === 'delete'
+                                ? 'Comment restored'
+                                : 'Comment edit undone',
+                          at: Date.now(),
+                        });
+                      }
+                    }}
+                  >
+                    Undo
+                  </button>
+                )}
+              </div>
+            )}
             {/* Bottom suggestion panel. Renders only when a ghost is
                 shown or a request is streaming. Its height grows
                 automatically with the number of lines in the
