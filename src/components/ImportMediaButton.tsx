@@ -213,7 +213,7 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
   const strategyLabel = `${langs.size} language${langs.size === 1 ? '' : 's'} checked (single pass; multilingual model)`;
 
   return (
-    <div ref={anchorRef} className="relative inline-block">
+    <div ref={anchorRef} className="relative inline-flex items-center">
       <button
         type="button"
         data-import-media-toggle

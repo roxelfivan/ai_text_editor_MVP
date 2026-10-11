@@ -1101,17 +1101,17 @@ export function Editor() {
             U
           </button>
         </div>
-        {/* Add comment for the current text selection. onMouseDown
-            preventDefault keeps the textarea selection from
-            collapsing before the click handler reads it. */}
+        {/* Add comment for the current text selection. Icon-only;
+            onMouseDown preventDefault keeps the textarea selection
+            from collapsing before the click handler reads it. */}
         <button
           type="button"
-          className="h-9 px-3 inline-flex items-center gap-1.5 rounded border border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel text-[15px] text-paper-inkSoft dark:text-cyber-muted hover:border-cyber-clay dark:hover:border-cyber-cyan hover:text-cyber-clay dark:hover:text-cyber-cyan disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-paper-hairline disabled:hover:text-paper-inkSoft dark:disabled:hover:border-cyber-border dark:disabled:hover:text-cyber-muted transition-colors"
+          className="w-9 h-9 inline-flex items-center justify-center rounded border border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel text-paper-inkSoft dark:text-cyber-muted hover:border-cyber-clay dark:hover:border-cyber-cyan hover:text-cyber-clay dark:hover:text-cyber-cyan disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-paper-hairline disabled:hover:text-paper-inkSoft dark:disabled:hover:border-cyber-border dark:disabled:hover:text-cyber-muted transition-colors"
           onClick={() => openComposer()}
           onMouseDown={(e) => e.preventDefault()}
           disabled={!hasSelection}
-          aria-label="Add comment"
-          title="Add comment to the selected text"
+          aria-label="Comment"
+          title="Comment — add a comment to the selected text"
         >
           <svg
             aria-hidden="true"
@@ -1127,7 +1127,6 @@ export function Editor() {
             <path d="M2 2.5 h7 a1 1 0 0 1 1 1 v4 a1 1 0 0 1 -1 1 h-3 l-2 2 v-2 h-2 a1 1 0 0 1 -1 -1 v-4 a1 1 0 0 1 1 -1 z" />
             <path d="M6 4.2 v2.4 M4.8 5.4 h2.4" />
           </svg>
-          Comment
         </button>
         {/* Inline-completion status pill. Gated by `debugMode`; the
             state machine that drives the pill keeps running
@@ -1203,7 +1202,10 @@ export function Editor() {
                 : 'Click to start inline predictions'
           }
           className={[
-            'inline-flex items-center gap-1.5 h-9 px-2.5 rounded border text-[15px] font-mono tracking-wider transition-colors select-none',
+            // Same type scale as the Comment control (text-[15px], no
+            // mono / uppercase) so Predict sits in the same visual
+            // family as the rest of the editor toolbar.
+            'inline-flex items-center gap-1.5 h-9 px-3 rounded border text-[15px] leading-none transition-colors select-none',
             !apiConfigured
               ? 'border-paper-hairline dark:border-cyber-border bg-paper-surface/40 dark:bg-ape-panel/40 text-paper-inkSoft/40 dark:text-cyber-muted/40 cursor-not-allowed'
               : inlineOn
@@ -1220,7 +1222,7 @@ export function Editor() {
           <svg
             aria-hidden="true"
             viewBox="0 0 12 12"
-            className="h-3 w-3"
+            className="h-3.5 w-3.5"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.4"
@@ -1233,35 +1235,38 @@ export function Editor() {
           </svg>
           Predict
         </button>
-        {/* Spacer: pushes the action cluster to the right when the row
-            fits on one line. With flex-wrap on the outer row this
-            flex-1 collapses cleanly when items wrap to a new line. */}
-        <div className="flex-1 basis-full sm:basis-auto" aria-hidden />
-        <ImportMediaButton />
-        <button
-          type="button"
-          aria-label="Save current content as a revision"
-          className="btn-icon-square"
-          onClick={() => saveRevision(doc.id)}
-          title="Save current content as a revision"
-        >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 16 16"
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        {/* Spacer pushes Import / Save to the trailing edge without
+            forcing a full-row wrap (`basis-full` used to drop them
+            onto a second line). All toolbar controls stay on one
+            horizontal band when width allows. */}
+        <div className="flex-1 min-w-2" aria-hidden />
+        <div className="inline-flex items-center gap-2 shrink-0">
+          <ImportMediaButton />
+          <button
+            type="button"
+            aria-label="Save current content as a revision"
+            className="btn-icon-square"
+            onClick={() => saveRevision(doc.id)}
+            title="Save current content as a revision"
           >
-            {/* Classic floppy-disk icon. Reads as "save" across
-                platforms and keeps the toolbar compact. */}
-            <path d="M3 3 L11 3 L13 5 L13 13 L3 13 Z" />
-            <path d="M5 3 L5 6 L10 6 L10 3" />
-            <path d="M5 9 L11 9 L11 12 L5 12 Z" />
-          </svg>
-        </button>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 16 16"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {/* Classic floppy-disk icon. Reads as "save" across
+                  platforms and keeps the toolbar compact. */}
+              <path d="M3 3 L11 3 L13 5 L13 13 L3 13 Z" />
+              <path d="M5 3 L5 6 L10 6 L10 3" />
+              <path d="M5 9 L11 9 L11 12 L5 12 Z" />
+            </svg>
+          </button>
+        </div>
       </div>
       <div className="px-4 pt-3 pb-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 bg-paper-base dark:bg-ape-base">
         <h2 className="font-semibold text-paper-ink dark:text-cyber-primary truncate text-base min-w-0">
