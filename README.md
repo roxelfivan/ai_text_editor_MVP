@@ -264,6 +264,30 @@ recognitions.
 
 ## Release notes
 
+### v0.4.1 — Comment / Send to AI: whole-document consistency, fewer tokens
+
+- **Whole-document consistency is now explicit.** The system note
+  pushed alongside a **Send to AI** comment batch no longer says
+  "address each `[id]` independently" — every replacement must now
+  stay consistent in voice, terminology, character names, facts,
+  numbers, and style with the rest of the document, and the model
+  must emit additional `proposed-edit` fences when a fix logically
+  requires a corresponding change elsewhere.
+- **Per-comment blocks carry local context.** Each `[cN]` in the
+  user message now also carries the paragraph index, the byte
+  offset, and a 120-character context window on each side of the
+  verbatim snippet. The model no longer has to fuzzy-match the
+  snippet back into the full document.
+- **Document is delivered as a structural outline, not a verbatim
+  blob.** The `sys-current-doc` system message now emits one
+  `[pN] offset S–E: <first 60 chars>` line per paragraph instead
+  of the entire document body. On a comment-batch turn the
+  verbatim document is no longer inlined at all, which typically
+  saves 70%+ of the per-turn prompt on long documents.
+- **Proposed-edit fence schema is its own system message** so the
+  rules stay a stable contract independent of the document and
+  the user's customizable system prompt.
+
 ### v0.4.0 — Comment + Send to AI, Google AI Mode, Predict label
 
 - **Comment** — select a passage → **Comment** → highlight + numbered

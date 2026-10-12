@@ -140,15 +140,35 @@ export function reanchorAll(doc: string, comments: Comment[]): {
 }
 
 /**
+ * Number of characters of surrounding context included on each side
+ * of a commented passage in the user message. Tuned to be small
+ * enough to keep the per-comment cost low (~30 tokens) but large
+ * enough that the model can resolve the snippet's position in the
+ * document without re-reading the whole thing. Trimmed to the
+ * nearest paragraph / sentence boundary when feasible so we never
+ * cut a word in half.
+ */
+const CONTEXT_WINDOW_CHARS = 120;
+
+/**
  * Build the user-message body sent to the LLM when the user clicks
  * "Send to AI" in the comment tray.
  *
- * The format pairs each comment's verbatim `[id]` block with the user's
- * body text; the AI is told (via a one-shot system note in
- * `buildRequestMessages`) to emit one `proposed-edit` fence per `[id]`
- * so the resulting track-changes cards can be matched back to the
- * comments.
+ * Each comment emits a self-contained block carrying:
+ *   - a short model-friendly id (`c1`, `c2`, …) in document order,
+ *   - the paragraph index inside the document (so the model can
+ *     place the snippet without re-locating it via fuzzy match),
+ *   - the byte-offset range,
+ *   - the verbatim snippet (kept byte-exact — `proposed-edit.original`
+ *     matches against this),
+ *   - a small context window before/after the snippet, and
+ *   - the user's comment body.
  *
+ * The full document is *not* inlined here; `buildRequestMessages`
+ * emits it as a system message (outline + only the referenced
+ * paragraphs) so the per-turn prompt is cheap even on long docs.
+ * `looksLikeCommentBatch` in `src/api/chat.ts` matches the block
+ * shape produced here — keep the two in sync.
  */
 export function formatCommentBatch(
   doc: string,
@@ -157,26 +177,100 @@ export function formatCommentBatch(
   // Sort by document position so the user (and the AI) can read the
   // batch top-to-bottom in the same order the passages appear.
   const sorted = [...comments].sort((a, b) => a.start - b.start);
+
+  // Pre-compute paragraph boundaries once. `paragraphs[i]` is the
+  // start offset of the i-th paragraph (0-based), and the document
+  // length acts as the implicit end of the last paragraph. We treat
+  // both `\n\n` and single `\n` as paragraph breaks because the
+  // editor accepts hard-wrapped single newlines as paragraph
+  // separators in practice (textarea + markdown rendering).
+  const paragraphStarts: number[] = [0];
+  for (let i = 0; i < doc.length; i++) {
+    if (doc.charCodeAt(i) === 10 /* \n */) {
+      const next = i + 1;
+      if (next < doc.length && paragraphStarts[paragraphStarts.length - 1] !== next) {
+        paragraphStarts.push(next);
+      }
+    }
+  }
+  const totalParagraphs = paragraphStarts.length;
+
   const lines: string[] = [];
-  lines.push(
-    'I have comments on specific passages of the open document. Please ' +
-      'revise accordingly. Each [id] block below identifies one passage; ' +
-      'address every one of them.',
-    ''
-  );
+
   sorted.forEach((c, i) => {
-    // Use a short, model-friendly id (c1, c2, ...) so the AI doesn't
-    // get confused by full UUIDs in its reply. The numeric index is
-    // already document-order thanks to the sort above.
     const id = `c${i + 1}`;
-    lines.push(`[${id}] "${c.snippet}"`, `Comment: ${c.body}`, '');
+    const paraIndex = paragraphIndexFor(paragraphStarts, c.start);
+    const before = contextBefore(doc, c.start, CONTEXT_WINDOW_CHARS);
+    const after = contextAfter(doc, c.end, CONTEXT_WINDOW_CHARS);
+    lines.push(
+      `[${id}] (paragraph ${paraIndex + 1}/${totalParagraphs}, doc offset ${c.start}–${c.end})`,
+      `"${c.snippet}"`,
+      `Context before: ${JSON.stringify(before)}`,
+      `Context after:  ${JSON.stringify(after)}`,
+      `Comment: ${c.body}`,
+      ''
+    );
   });
-  // Reference `doc` is intentionally unused in the body — the AI
-  // already receives the full document via the `sys-current-doc` system
-  // message injected by `buildRequestMessages`. Including it here
-  // would double the token cost.
-  void doc;
+
   return lines.join('\n').trimEnd() + '\n';
+}
+
+/**
+ * Find which paragraph (0-based) contains the given document offset.
+ * `paragraphStarts` is the precomputed array of paragraph start
+ * offsets, sorted ascending. Returns the largest index whose start
+ * is `<= offset`.
+ */
+function paragraphIndexFor(paragraphStarts: number[], offset: number): number {
+  // Linear scan is fine — paragraph counts are O(doc/avg-paragraph)
+  // which is at most a few hundred for any realistic document, and
+  // we do this once per comment.
+  let idx = 0;
+  for (let i = 0; i < paragraphStarts.length; i++) {
+    if (paragraphStarts[i] <= offset) idx = i;
+    else break;
+  }
+  return idx;
+}
+
+/**
+ * Up to `max` characters of context immediately preceding `start` in
+ * `doc`, trimmed to the nearest word/paragraph boundary when
+ * possible so the slice doesn't begin mid-word.
+ */
+function contextBefore(doc: string, start: number, max: number): string {
+  if (start <= 0) return '';
+  const lo = Math.max(0, start - max);
+  let slice = doc.slice(lo, start);
+  // If we didn't capture from the very start of a paragraph, push
+  // the slice forward to the first whitespace so we don't begin
+  // mid-word.
+  if (lo > 0) {
+    const sp = slice.indexOf(' ');
+    if (sp !== -1 && sp < slice.length - 1) {
+      slice = slice.slice(sp + 1);
+    }
+  }
+  return slice;
+}
+
+/**
+ * Up to `max` characters of context immediately following `end` in
+ * `doc`, trimmed to the nearest word/paragraph boundary when
+ * possible so the slice doesn't end mid-word.
+ */
+function contextAfter(doc: string, end: number, max: number): string {
+  if (end >= doc.length) return '';
+  const hi = Math.min(doc.length, end + max);
+  let slice = doc.slice(end, hi);
+  // If we didn't capture to the end of the document / paragraph,
+  // pull the slice back to the last whitespace so we don't end
+  // mid-word.
+  if (hi < doc.length) {
+    const sp = slice.lastIndexOf(' ');
+    if (sp > 0) slice = slice.slice(0, sp);
+  }
+  return slice;
 }
 
 /**

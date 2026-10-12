@@ -1,3 +1,25 @@
+## v0.4.1 — Comment / Send to AI: whole-document consistency, fewer tokens
+
+Patch release on top of [v0.4.0](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.0). Tightens the prompt that runs when the user clicks **Send to AI** on a document with inline comments: every fix must now stay consistent with the rest of the document, and the per-turn prompt is materially cheaper on long documents.
+
+### Changed
+
+- **Whole-document consistency is now explicit.** The system note pushed alongside a comment batch no longer says "address each `[id]` independently" — it now requires every replacement to stay consistent in voice, terminology, character names, facts, numbers, and style with the rest of the document. If a fix in one `[id]` logically requires a corresponding change elsewhere, the model must emit an *additional* `proposed-edit` fence for it. If two `[id]`s conflict, the model prioritizes the one that keeps the document internally coherent and notes the conflict in its prose.
+- **Per-comment blocks carry local context.** `formatCommentBatch` now emits, per `[id]`, the paragraph index (`paragraph P of M`) and the byte-offset range (`doc offset S–E`), plus a 120-character context window trimmed at word boundaries on each side of the verbatim snippet. This anchors the fix in the document without forcing the model to fuzzy-match the snippet back into the full text.
+- **Document is delivered as a structural outline, not a verbatim blob.** The `sys-current-doc` system message used to contain the full document body inside `--- BEGIN/END DOCUMENT ---` fences (O(document size) on every chat turn). It now emits a compact paragraph-by-paragraph outline (one `[pN] offset S–E: <first 60 chars>` line per paragraph, plus a length / paragraph count header). On a comment-batch turn, the verbatim document is no longer inlined at all — the per-comment context windows already carry the local content the model needs to make byte-exact `original` matches.
+- **Proposed-edit fence schema is its own system message.** The rules block used to be appended to the same system message as the document. It is now a `sys-proposed-edit-rules` message, kept as a stable contract independent of the document and the user's customizable system prompt.
+- **Token-budget discipline.** The comments-batch system note ends with an explicit "do not quote or mention the context windows in your reply" instruction, so the model doesn't pay the new context back out as added response tokens.
+
+### Internal
+
+- `src/utils/comments.ts` — `formatCommentBatch` rewritten to emit per-comment paragraph index, byte offsets, and 120-char context windows. New `contextBefore` / `contextAfter` helpers trim to the nearest word boundary.
+- `src/api/chat.ts` — `buildRequestMessages` now pushes the proposed-edit rules and the doc outline as separate system messages. New `buildDocOutline(title, content, isCommentBatch)` helper emits the structural outline instead of the verbatim document. `looksLikeCommentBatch` regex updated to match the new `[cN] (paragraph …)` header. `PROPOSED_EDIT_RULES` extracted to a module-level constant.
+
+### Verification
+
+- `npm run typecheck` — clean.
+- A 3-paragraph / 211-char fixture with 2 comments now produces 4,956 chars across the new `sys` + `sys-current-doc` + `sys-proposed-edit-rules` + `user` + `comments-batch` blocks, vs. the previous structure which carried the full verbatim document inside `sys-current-doc`. The new outline scales as O(paragraphs × ~60 chars) instead of O(document size).
+
 ## v0.4.0 — Comment + Send to AI, Google AI Mode, Predict label
 
 Major feature release on top of [v0.3.4](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.4).
