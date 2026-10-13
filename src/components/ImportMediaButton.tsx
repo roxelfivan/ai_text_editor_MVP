@@ -1,10 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
-import {
-  extractTextFromFiles,
-  type OcrLang,
-  type OcrProgress,
-} from '@/utils/ocr';
+// Type-only: keep pdfjs / PaddleOCR / OpenCV out of the initial app chunk.
+// The OCR module is loaded via dynamic import() when the user picks files.
+import type { OcrLang, OcrProgress } from '@/utils/ocr';
 import { formatOcrAsMarkdown } from '@/utils/ocrMarkdown';
 
 const VIEWPORT_PAD = 8;
@@ -172,6 +170,8 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
     setProgress({ done: 0, total: fileArray.length, label: 'starting…' });
     setOpen(false);
     try {
+      // Lazy-load OCR (+ pdfjs, PaddleOCR, OpenCV) only when importing.
+      const { extractTextFromFiles } = await import('@/utils/ocr');
       const results = await extractTextFromFiles(
         fileArray,
         langArray,

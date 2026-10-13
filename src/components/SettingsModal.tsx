@@ -1,5 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useStore, DEFAULT_SYSTEM_MESSAGE } from '@/store/useStore';
+import { useStore } from '@/store/useStore';
+import {
+  DEFAULT_SYSTEM_MESSAGE,
+  PROPOSED_EDIT_RULES_DEFAULT,
+  isCurrentRationaleRulesDefault,
+  isStaleRationaleRulesOverride,
+  isCurrentDefaultSystemMessage,
+  isStaleDefaultSystemMessage,
+  normalizeRationaleRulesOverride,
+  normalizeSystemMessage,
+} from '@/api/chat';
 import { PROVIDERS, getProvider, requiresApiKey } from '@/config/providers';
 import type { ApiProvider } from '@/types';
 import { ResizeHandle } from '@/components/ResizeHandle';
@@ -15,7 +25,6 @@ import {
   MAX_SETTINGS_TEXTAREA_HEIGHT,
   type ResizeHandle as HandleName,
 } from '@/hooks/useDragResize';
-import { PROPOSED_EDIT_RULES_DEFAULT } from '@/api/chat';
 
 // Project default for the global UI font size. Mirrored in
 // `useStore.ts`'s initial state and the `onRehydrateStorage` migration;
@@ -95,21 +104,22 @@ export function SettingsModal({ open, onClose }: Props) {
   const [apiKey, setApiKey] = useState(api.apiKey);
   const [apiEndpoint, setApiEndpoint] = useState(api.apiEndpoint);
   const [model, setModel] = useState(api.model);
-  const [systemMessage, setSystemMessage] = useState(api.systemMessage);
+  // Local mirror of the System Message. Seeded with the live
+  // built-in when the user has not customized it, so Settings always
+  // shows the active prompt and Save can normalize empty / built-in
+  // text back to "no override" (so future updates stay in sync).
+  const [systemMessage, setSystemMessage] = useState(
+    () => normalizeSystemMessage(api.systemMessage) ?? DEFAULT_SYSTEM_MESSAGE
+  );
   // Local mirror of the rationale-rules override so the user can
-  // edit it freely without committing until Save. We seed the
-  // initial value with the built-in default when the user has not
-  // customized it, so the textarea shows the active prompt (not an
-  // empty placeholder). The Save handler still writes
-  // `undefined` for the empty / default case so the runtime falls
-  // through to the built-in default via `buildRequestMessages`.
+  // edit it freely without committing until Save. Seeded with the
+  // live built-in when no override is in effect, so Settings always
+  // shows the active prompt and Save normalizes empty / built-in
+  // text back to "no override" (so future updates stay in sync).
   const [rationaleRulesOverride, setRationaleRulesOverride] = useState(
-    () => {
-      const stored = api.rationaleRulesOverride;
-      return typeof stored === 'string' && stored.trim()
-        ? stored
-        : PROPOSED_EDIT_RULES_DEFAULT;
-    }
+    () =>
+      normalizeRationaleRulesOverride(api.rationaleRulesOverride) ??
+      PROPOSED_EDIT_RULES_DEFAULT
   );
   const [temperature, setTemperature] = useState(api.temperature);
   const [showKey, setShowKey] = useState(false);
@@ -376,21 +386,33 @@ export function SettingsModal({ open, onClose }: Props) {
       setApiKey(api.apiKey);
       setApiEndpoint(api.apiEndpoint);
       setModel(api.model);
-      setSystemMessage(api.systemMessage);
-      // When the user has not customized the rationale rules, show
-      // the built-in default in the textarea so they can see what
-      // they're overriding. We still save `undefined` on Save so
-      // the runtime falls through to the default.
-      const storedOverride = api.rationaleRulesOverride;
-      const initialRationale =
-        typeof storedOverride === 'string' && storedOverride.trim()
-          ? storedOverride
-          : PROPOSED_EDIT_RULES_DEFAULT;
-      setRationaleRulesOverride(initialRationale);
+      setSystemMessage(
+        normalizeSystemMessage(api.systemMessage) ?? DEFAULT_SYSTEM_MESSAGE
+      );
+      // Drop a stored copy of the OLD writing-assistant default and
+      // sync the textarea with the current built-in.
+      if (isStaleDefaultSystemMessage(api.systemMessage)) {
+        setApi({ systemMessage: undefined });
+        setSystemMessage(DEFAULT_SYSTEM_MESSAGE);
+      }
+      // Show a real custom override, otherwise the live built-in
+      // default. Stale frozen copies of older built-ins are treated
+      // as "no override" so credit-risk cover-memo wording appears.
+      if (isStaleRationaleRulesOverride(api.rationaleRulesOverride)) {
+        // Clear so chat + Settings both pick up the current built-in
+        // without requiring an explicit Reset click.
+        setApi({ rationaleRulesOverride: undefined });
+        setRationaleRulesOverride(PROPOSED_EDIT_RULES_DEFAULT);
+      } else {
+        setRationaleRulesOverride(
+          normalizeRationaleRulesOverride(api.rationaleRulesOverride) ??
+            PROPOSED_EDIT_RULES_DEFAULT
+        );
+      }
       setTemperature(api.temperature);
       setUiFontSizeDraft(uiFontSize);
     }
-  }, [open, api, uiFontSize]);
+  }, [open, api, uiFontSize, setApi]);
 
   if (!open) return null;
 
@@ -402,8 +424,12 @@ export function SettingsModal({ open, onClose }: Props) {
       apiKey,
       apiEndpoint,
       model,
-      systemMessage,
-      rationaleRulesOverride: rationaleRulesOverride.trim() || undefined,
+      // Persist undefined when the textarea still matches the live
+      // built-in (or is empty) so future default updates stay in sync.
+      systemMessage: normalizeSystemMessage(systemMessage),
+      rationaleRulesOverride: normalizeRationaleRulesOverride(
+        rationaleRulesOverride
+      ),
       temperature,
     });
     setUiFontSize(uiFontSizeDraft);
@@ -559,7 +585,7 @@ export function SettingsModal({ open, onClose }: Props) {
                 type="button"
                 className="btn-cyan-sm"
                 onClick={() => setSystemMessage(DEFAULT_SYSTEM_MESSAGE)}
-                disabled={systemMessage === DEFAULT_SYSTEM_MESSAGE}
+                disabled={isCurrentDefaultSystemMessage(systemMessage)}
                 title="Restore the built-in default system message"
               >
                 Reset
@@ -613,7 +639,7 @@ export function SettingsModal({ open, onClose }: Props) {
                 onClick={() =>
                   setRationaleRulesOverride(PROPOSED_EDIT_RULES_DEFAULT)
                 }
-                disabled={rationaleRulesOverride === PROPOSED_EDIT_RULES_DEFAULT}
+                disabled={isCurrentRationaleRulesDefault(rationaleRulesOverride)}
                 title="Restore the built-in default rationale rules"
               >
                 Reset
@@ -649,9 +675,10 @@ export function SettingsModal({ open, onClose }: Props) {
               />
             </div>
             <p className="mt-1 text-[11px] text-paper-inkSoft dark:text-cyber-muted">
-              Rules the AI follows when writing the per-edit rationale shown
-              in each comment popover. Leave empty to use the built-in
-              default.
+              Rules the AI follows when writing the per-edit rationale
+              (credit-risk cover-memo Markdown, keywords
+              bold+underlined) shown in each comment popover. Leave
+              empty to use the built-in default.
             </p>
           </div>
 

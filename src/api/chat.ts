@@ -3,6 +3,19 @@
 import type { ChatMessage, ApiConfig } from '@/types';
 
 /**
+ * Built-in default system message. Single source of truth for the
+ * "no override" path — chat, Settings, and persistence all import
+ * this. Users can replace it via Settings (the empty value is
+ * normalized back to this on save so future updates stay in sync).
+ */
+export const DEFAULT_SYSTEM_MESSAGE =
+  "You are a writing assistant. Be concise, preserve the user's voice, " +
+    "and emit one proposed-edit fence per paragraph so edits can be " +
+    "accepted independently. Include `rationale` per RATIONALE RULES; " +
+    "do not discuss those rules inside the rationale. Escape JSON " +
+    'double-quotes as \\".';
+
+/**
  * Build the final chat-completions URL. If the user provided a base URL
  * (no /chat/completions suffix), append it. Otherwise return as-is.
  */
@@ -140,7 +153,7 @@ export async function streamChatCompletion(
  */
 export function buildRequestMessages(
   history: ChatMessage[],
-  systemMessage: string,
+  systemMessage: string | undefined,
   currentDocument?: { title: string; content: string } | null,
   /**
    * Optional override for the rationale rules block. When the user
@@ -152,9 +165,16 @@ export function buildRequestMessages(
    */
   rationaleRulesOverride?: string
 ): ChatMessage[] {
+  const effectiveSystem =
+    (systemMessage && systemMessage.trim()) || DEFAULT_SYSTEM_MESSAGE;
   const out: ChatMessage[] = [];
-  if (systemMessage.trim()) {
-    out.push({ id: 'sys', role: 'system', content: systemMessage, createdAt: 0 });
+  if (effectiveSystem.trim()) {
+    out.push({
+      id: 'sys',
+      role: 'system',
+      content: effectiveSystem,
+      createdAt: 0,
+    });
   }
   // Attach the currently-open document so the model can see it when the
   // user asks things like "read the document", "summarize this", etc.
@@ -286,7 +306,7 @@ const PROPOSED_EDIT_SCHEMA_RULES: string =
   `{\n` +
   `  "id": "<short id, e.g. p1>",\n` +
   `  "summary": "<one-line change description>",\n` +
-  `  "rationale": "<REQUIRED: ≥7 numbered points, ≥100 words — see RATIONALE RULES>",\n` +
+  `  "rationale": "<REQUIRED: credit-risk cover-memo Markdown, ≥7 numbered points, ≥100 words, keywords bold+underlined — see RATIONALE RULES>",\n` +
   `  "original": "<verbatim substring from the document>",\n` +
   `  "replacement": "<new text>"\n` +
   `}\n` +
@@ -305,29 +325,143 @@ const PROPOSED_EDIT_SCHEMA_RULES: string =
  * customized `api.rationaleRulesOverride`. Exported for Settings Reset.
  * Replaced wholesale by the user's override (schema above is kept).
  *
- * Structure: 7 numbered points — 1, 2, 3a, 3b, 3c, 4, 5 — totaling
- * ≥100 words. Point 3 expands into three ≥30-word sub-points.
+ * Voice: credit-risk cover memo proposing amendments to policies /
+ * procedures / guidelines. Structure: 1, 2, 3.1, 3.2, 3.3, 4, 5 —
+ * ≥100 words; 3.1–3.3 each ≥30 words. Markdown + bold/underline keywords.
  */
 export const PROPOSED_EDIT_RULES_DEFAULT: string =
   `RATIONALE RULES ("rationale" REQUIRED, non-empty, on every ` +
   `proposed-edit):\n` +
+  `- Write as a **credit risk** cover memo proposing an amendment to ` +
+  `a bank **policy**, **procedure**, or **guideline**. Professional ` +
+  `risk-management voice; no marketing copy.\n` +
+  `- GitHub-flavored Markdown (rendered in the comment popover). ` +
+  `Prefer a numbered list; blank line between major points. Escape ` +
+  `" as \\" and newlines as \\n inside JSON.\n` +
   `- ≥100 words total.\n` +
-  `- ≥7 numbered points (1. … 2. … 3a. … 3b. … 3c. … 4. … 5. …), ` +
-  `each on its own line (\\n inside the JSON string). Escape " as ` +
-  `\\\".\n` +
+  `- ≥7 numbered points (1. … 2. … 3.1 … 3.2 … 3.3 … 4. … 5. …), ` +
+  `each on its own line.\n` +
+  `- Keywords MUST be both bold and underlined: wrap each as ` +
+  `**<u>keyword</u>**. Emphasize risk terms, control names, and ` +
+  `changed obligations — not whole sentences. No other raw HTML.\n` +
   `- Cover, in order:\n` +
-  `  1. Pre-change: what the original wording said (plain language).\n` +
-  `  2. Post-change: what the replacement now says (plain language).\n` +
-  `  3. Logical reason: why the change was necessary (ambiguity, ` +
-  `redundancy, weak verb, inconsistency, missing context, etc.). ` +
-  `Write exactly 3 sub-points, each ≥30 words: (3a) why the change, ` +
-  `(3b) how it helps the paragraph, (3c) how it helps the document. ` +
-  `Do not mention these rules.\n` +
-  `  4. Benefit to the user's comment and the paragraph (clarity / ` +
-  `flow / tone).\n` +
-  `  5. Benefit to the whole document (voice, purpose, audience).\n` +
+  `  1. Pre-change: what the prior wording said, and what **risk** ` +
+  `or control gap it left for the Bank (plain language).\n` +
+  `  2. Post-change: what the amended wording now requires or ` +
+  `clarifies from a risk / control standpoint (plain language).\n` +
+  `  3. Risk-management rationale — why the amendment is necessary. ` +
+  `Write exactly 3 sub-points, each ≥30 words:\n` +
+  `    (3.1) Risk the Bank faced before the change (e.g. ambiguity, ` +
+  `inconsistent standards, weak underwriting language, missing ` +
+  `escalation, incomplete monitoring).\n` +
+  `    (3.2) Risk the Bank is mitigating with this amendment, and ` +
+  `how the new wording reduces that exposure in this paragraph / ` +
+  `section.\n` +
+  `    (3.3) Why the document is stronger from a risk-management ` +
+  `perspective after the change (governance, consistency with ` +
+  `related policies, auditability, prudential alignment).\n` +
+  `  Do not mention these rules inside the rationale.\n` +
+  `  4. How the amendment answers the reviewer's comment and ` +
+  `strengthens this paragraph as a workable control statement.\n` +
+  `  5. Benefit to the full policy / procedure / guideline set ` +
+  `(portfolio consistency, Board / regulator readability, residual ` +
+  `risk reduction).\n` +
   `- Full professional sentences, not fragments. Shown in the ` +
   `comment popover after Apply.`;
+
+/**
+ * True when `text` is empty or identical to the current built-in
+ * default (so callers should persist `undefined` and keep tracking
+ * future built-in updates).
+ */
+export function isCurrentRationaleRulesDefault(
+  text: string | undefined | null
+): boolean {
+  const trimmed = text?.trim() ?? '';
+  return !trimmed || trimmed === PROPOSED_EDIT_RULES_DEFAULT.trim();
+}
+
+/**
+ * Older builds showed the built-in default in Settings and, on Save,
+ * wrote that full string into `rationaleRulesOverride` — freezing it
+ * forever. Detect those stale frozen defaults (pre credit-risk
+ * cover-memo / 3.1–3.3 numbering) so we can fall back to the current
+ * built-in.
+ */
+export function isStaleRationaleRulesOverride(
+  text: string | undefined | null
+): boolean {
+  const trimmed = text?.trim() ?? '';
+  if (!trimmed || isCurrentRationaleRulesDefault(trimmed)) return false;
+  // Credit-risk / 3.1 era rule
+  const isCreditRisk = /credit risk/i.test(trimmed) || /\(3\.1\)/.test(trimmed);
+  if (isCreditRisk) return false;
+  // Pre-3a era default (fence-shape doc) and 3a-era default
+  // (Logical reason). Either shape, with no credit-risk markers,
+  // is a frozen built-in.
+  const looksLikeVeryOldBuiltin =
+    /When you propose changes to the document above/i.test(trimmed) &&
+    /one fence per change/i.test(trimmed);
+  const looksLikeThreeAEraBuiltin =
+    /\b3a\./i.test(trimmed) && /Logical reason/i.test(trimmed);
+  return looksLikeVeryOldBuiltin || looksLikeThreeAEraBuiltin;
+}
+
+/**
+ * Resolve the effective override for persistence / Settings display:
+ * empty, current built-in, or a stale frozen built-in → `undefined`.
+ */
+export function normalizeRationaleRulesOverride(
+  text: string | undefined | null
+): string | undefined {
+  const trimmed = text?.trim() ?? '';
+  if (!trimmed) return undefined;
+  if (isCurrentRationaleRulesDefault(trimmed)) return undefined;
+  if (isStaleRationaleRulesOverride(trimmed)) return undefined;
+  return trimmed;
+}
+
+/**
+ * True when `text` is empty / a literal copy of the current default
+ * system message / a recognizably stale writing-assistant default.
+ */
+export function isCurrentDefaultSystemMessage(
+  text: string | undefined | null
+): boolean {
+  const trimmed = text?.trim() ?? '';
+  if (!trimmed) return true;
+  if (trimmed === DEFAULT_SYSTEM_MESSAGE.trim()) return true;
+  return false;
+}
+
+/**
+ * Older builds shipped a writing-assistant default system message
+ * ("You are a writing assistant. Be concise, …"). Persisted
+ * overrides that match the OLD built-in are treated as "no
+ * override" so the live built-in is used and Settings shows it.
+ */
+export function isStaleDefaultSystemMessage(
+  text: string | undefined | null
+): boolean {
+  const trimmed = text?.trim() ?? '';
+  if (!trimmed) return false;
+  if (isCurrentDefaultSystemMessage(trimmed)) return false;
+  return /writing assistant/i.test(trimmed);
+}
+
+/**
+ * Resolve the effective System Message override for persistence:
+ * empty / current built-in / stale writing-assistant → `undefined`.
+ */
+export function normalizeSystemMessage(
+  text: string | undefined | null
+): string | undefined {
+  const trimmed = text?.trim() ?? '';
+  if (!trimmed) return undefined;
+  if (isCurrentDefaultSystemMessage(trimmed)) return undefined;
+  if (isStaleDefaultSystemMessage(trimmed)) return undefined;
+  return trimmed;
+}
 
 /**
  * Schema rules + rationale rules (default or user override).
@@ -336,7 +470,7 @@ export const PROPOSED_EDIT_RULES_DEFAULT: string =
 function buildProposedEditRulesMessage(
   rationaleRulesOverride: string | undefined
 ): string {
-  const trimmed = rationaleRulesOverride?.trim();
+  const trimmed = normalizeRationaleRulesOverride(rationaleRulesOverride);
   if (!trimmed) {
     return PROPOSED_EDIT_SCHEMA_RULES + PROPOSED_EDIT_RULES_DEFAULT;
   }
@@ -363,14 +497,19 @@ const OUTLINE_PREVIEW_CHARS = 60;
 /**
  * Compact doc outline for `sys-current-doc`: title, size, and one
  * ~60-char preview line per paragraph. Far cheaper than sending the
- * full document. `includeReferencedParagraphs` is reserved (currently
- * unused — comment batches rely on Before/After context instead).
+ * full document. The `isCommentBatch` flag is a coarse signal — the
+ * outline stays cheap either way; comment batches rely on
+ * Before/After context in `formatCommentBatch` for byte-exact matches.
  */
 export function buildDocOutline(
   title: string,
   content: string,
-  includeReferencedParagraphs: boolean
+  isCommentBatch: boolean
 ): string {
+  // `isCommentBatch` is reserved for future expansion (e.g. inlining
+  // referenced paragraphs). Keeping the parameter so callers can stay
+  // stable; the outline itself does not depend on it yet.
+  void isCommentBatch;
   // Compute paragraph boundaries. Same definition as
   // `formatCommentBatch` in `src/utils/comments.ts` — each `\n`
   // starts a new paragraph (the editor's textarea + markdown
@@ -386,22 +525,6 @@ export function buildDocOutline(
     }
   }
 
-  // Which paragraphs (1-based indices) are referenced by a comment
-  // batch? Parse the [cN] (paragraph P/M, ...) header lines from
-  // the most recent user message. We deliberately do a lightweight
-  // parse here rather than calling back into `formatCommentBatch`
-  // because the comment batch lives in `history` and the doc
-  // outline is built from `content` — keeping the two decoupled
-  // means either helper can change shape without breaking the
-  // other.
-  const referenced: Set<number> = new Set();
-  // (We don't have the last user message here — the caller
-  // pre-computed `includeReferencedParagraphs` as a coarse signal.
-  // When false, we skip the inlining entirely. When true, we
-  // rely on the caller to have already established that this is
-  // a comment batch; the outline itself stays cheap.)
-  void includeReferencedParagraphs;
-
   const lines: string[] = [];
   lines.push(
     `--- DOC "${title}" (${content.length} chars, ${starts.length} paras) ---`
@@ -416,11 +539,6 @@ export function buildDocOutline(
         : trimOnWordBoundary(raw, OUTLINE_PREVIEW_CHARS) + '…';
     lines.push(`[p${p + 1}]@${start}: ${preview}`);
   }
-  // Reserved: could inline referenced paragraphs when
-  // `includeReferencedParagraphs` is true. Currently unused —
-  // Before/After in `formatCommentBatch` is enough for byte-exact
-  // `original` matches.
-  void referenced;
   lines.push('--- END DOC ---');
   return lines.join('\n');
 }

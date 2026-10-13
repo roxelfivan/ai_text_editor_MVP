@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import ReactMarkdown from 'react-markdown';
 import type { Comment, CommentRound, ProposedEditRationale } from '@/types';
 import {
   COMMENT_HARD_CAP,
@@ -13,6 +14,7 @@ import {
   clampToContainer,
 } from '@/utils/comments';
 import { lineDiff } from '@/utils/diff';
+import { remarkPlugins, rehypePlugins } from '@/utils/markdown';
 import { ResizeHandle } from '@/components/ResizeHandle';
 import {
   useDragResize,
@@ -644,7 +646,14 @@ function RationaleEntry({ entry }: { entry: ProposedEditRationale }) {
         </span>
       </div>
       {entry.rationale ? (
-        <p className="cm-popover__rationale-body">{entry.rationale}</p>
+        <div className="cm-popover__rationale-body prose-md">
+          <ReactMarkdown
+            remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePlugins}
+          >
+            {entry.rationale}
+          </ReactMarkdown>
+        </div>
       ) : (
         <p className="cm-popover__rationale-body cm-popover__rationale-body--empty">
           <em>No rationale was provided for this change.</em>

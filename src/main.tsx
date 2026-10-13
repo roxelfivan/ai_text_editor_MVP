@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+void App;
 import type { Theme } from './types';
 import { applyThemeClass } from './utils/theme';
 

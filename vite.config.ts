@@ -103,4 +103,12 @@ export default defineConfig({
       '@techstark/opencv-js',
     ],
   },
+  build: {
+    // PaddleOCR's OpenCV dependency and its worker entry are ~10–11 MB
+    // each and are only loaded via dynamic import() when the user runs
+    // Import (photos/PDFs). Raising the limit avoids a false-alarm
+    // warning for those intentional lazy chunks; the app entry stays
+    // under 500 kB after OCR/pdfjs are code-split out.
+    chunkSizeWarningLimit: 12000,
+  },
 });
