@@ -1,0 +1,40 @@
+# Keyboard shortcuts
+
+On Windows and Linux use **Ctrl**. On Mac use **⌘**.
+
+Global shortcuts are ignored while you are typing in a text field, so they do not fight Bold or Chat send. Edge-anchor tooltips still mention the panel shortcuts.
+
+## App
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+.` / `⌘.` | Open Settings |
+| `Ctrl+,` / `⌘,` | Open Prompt library |
+| `Ctrl+H` / `⌘H` | Open Revision history |
+| `Ctrl+B` / `⌘B` | Show or hide the Documents sidebar (not while the editor is focused) |
+| `Ctrl+Shift+C` / `⌘Shift+C` | Show or hide Chat |
+
+## Editor
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+B` / `⌘B` | Bold (while writing) |
+| `Ctrl+I` / `⌘I` | Italic |
+| `Ctrl+U` / `⌘U` | Underline |
+| `Ctrl+Z` / `⌘Z` | Undo the last **comment** add/edit/delete (while the editor is focused) |
+| `Ctrl+\` / `⌘\` | Turn **Predict** on and request a suggestion (when enabled) |
+| `Tab` | Accept a Predict suggestion |
+| `Esc` | Dismiss a Predict suggestion |
+
+## Chat
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+Enter` / `⌘Enter` | Send (or **Open in AI Mode** / submit a pasted Google answer) |
+
+## Comments
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+Enter` / `⌘Enter` | Save in the composer or popover |
+| `Esc` | Cancel the composer, or close the popover |
