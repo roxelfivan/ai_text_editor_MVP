@@ -265,11 +265,18 @@ export function formatCommentBatch(
     const paraIndex = paragraphIndexFor(paragraphStarts, c.start);
     const before = contextBefore(doc, c.start, CONTEXT_WINDOW_CHARS);
     const after = contextAfter(doc, c.end, CONTEXT_WINDOW_CHARS);
+    // Raw triple-quote block for Before/After — was previously
+    // JSON.stringify-wrapped, which added ~12 chars per side per
+    // comment for no semantic gain (the model never needs valid
+    // JSON here, just the prose). Trimmed for ~5-10 % saving on
+    // long comment batches. The `[id] -> docs` cross-reference map
+    // (added in chat.ts) instructs the model NOT to quote Before/
+    // After back, so the raw form is the right read affordance.
     lines.push(
       `[${id}] (paragraph ${paraIndex + 1}/${totalParagraphs}, doc offset ${c.start}–${c.end})`,
       `"${c.snippet}"`,
-      `Before: ${JSON.stringify(before)}`,
-      `After: ${JSON.stringify(after)}`,
+      `Before: """${before}"""`,
+      `After: """${after}"""`,
       `Comment: ${c.body}`,
       ''
     );

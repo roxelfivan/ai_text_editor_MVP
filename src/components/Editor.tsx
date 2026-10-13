@@ -849,12 +849,19 @@ export function Editor() {
     // Gather @-document references attached to each comment's
     // latest round. Forwarded to the chat panel so the prompt can
     // include the referenced docs alongside the comment batch.
+    // Attach the comment's id as `referrerId` on each mention so the
+    // prompt builder can emit a per-comment
+    // `[comment -> referenced docs]` cross-reference map. Existing
+    // mentions without a reason get `'context'` for the same reason.
     const mentionsByCommentId: Record<string, MentionToken[]> = {};
     for (const c of sendable) {
       const last = c.rounds[c.rounds.length - 1];
-      if (last?.mentions && last.mentions.length > 0) {
-        mentionsByCommentId[c.id] = last.mentions;
-      }
+      if (!last?.mentions || last.mentions.length === 0) continue;
+      mentionsByCommentId[c.id] = last.mentions.map((m) => ({
+        ...m,
+        referrerId: m.referrerId ?? c.id,
+        reason: m.reason ?? 'context',
+      }));
     }
     window.dispatchEvent(
       new CustomEvent('mvp:send-comments', {

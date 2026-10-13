@@ -208,10 +208,19 @@ export function ChatPanel() {
           buildRequestMessages(
             history,
             api.systemMessage,
-            docSnap ? { title: docSnap.title, content: docSnap.content } : null,
+            docSnap
+              ? { title: docSnap.title, content: docSnap.content, id: docSnap.id }
+              : null,
             api.rationaleRulesOverride,
             mergedMentions,
-            documentLookup
+            documentLookup,
+            // Pass through the per-comment mapping so the prompt
+            // builder can emit the `[comment -> referenced docs]`
+            // cross-reference map. Prefer the fresh payload, fall
+            // back to the round-stored mentions (same merge logic
+            // as `mergedMentions` above so the two arrays stay in
+            // sync — first-emission wins per mention id).
+            payload
           ),
           api,
           {
@@ -383,10 +392,16 @@ export function ChatPanel() {
         buildRequestMessages(
           history,
           api.systemMessage,
-          docSnap ? { title: docSnap.title, content: docSnap.content } : null,
+          docSnap
+            ? { title: docSnap.title, content: docSnap.content, id: docSnap.id }
+            : null,
           api.rationaleRulesOverride,
           mentions,
-          documentLookup
+          documentLookup,
+          // Chat messages have no per-comment bucket — pass
+          // `undefined` so the cross-reference map (comment-batch
+          // only) is silently dropped.
+          undefined
         ),
         api,
         {
@@ -693,10 +708,16 @@ export function ChatPanel() {
         buildRequestMessages(
           history,
           api.systemMessage,
-          docSnap ? { title: docSnap.title, content: docSnap.content } : null,
+          docSnap
+            ? { title: docSnap.title, content: docSnap.content, id: docSnap.id }
+            : null,
           api.rationaleRulesOverride,
           effectiveMentions,
-          documentLookup
+          documentLookup,
+          // The staged-rejection path has no per-comment grouping
+          // by design (one rejection body covers many edits in a
+          // single user message). Drop the cross-reference map.
+          undefined
         ),
         api,
         {

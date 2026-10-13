@@ -3,10 +3,13 @@
 // can edit prose around it; the chip is painted by an absolutely-
 // positioned overlay in <MentionInput>. The sentinel format is:
 //
-//   "\u200B[[mention:<id>|<kind>|<title>|<paragraphCSV>|<docId>]]\u200B"
+//   "\u200B[[mention:<id>|<kind>|<title>|<paragraphCSV>|<docId>|<reason>|<referrerId>]]\u200B"
 //
 // where the embedded fields are pipe-escaped (`|` inside a field is
-// escaped as `\|` and `\` is escaped as `\\`). The outer zero-width
+// escaped as `\|` and `\` is escaped as `\\`). The two trailing
+// fields (`reason`, `referrerId`) were added in v0.4.5; legacy
+// sentinels with only 5 fields keep parsing, the missing fields are
+// silently dropped. The outer zero-width
 // spaces are defensive — they make the sentinel survive most editors'
 // whitespace handling and keep the chip's bounding box from collapsing
 // when nothing else lives on the line.
@@ -48,9 +51,17 @@ function decodeField(s: string): string {
 /** Build the sentinel string for a mention. */
 export function buildSentinel(t: MentionToken): string {
   const paragraphCSV = t.paragraphIndexes.join(',');
+  // Field 6 = optional `reason` (MentionReason). Empty string when not
+  // set so legacy 5-field sentinels keep parsing. Field 7 = optional
+  // `referrerId` (Comment/ChatMessage id). Empty string when not set.
+  // Adding fields at the tail keeps existing 5-field sentinels valid
+  // — `parseSentinelBody` accepts 5, 6, or 7 fields.
+  const reason = t.reason ?? '';
+  const referrerId = t.referrerId ?? '';
   const body =
     `${t.id}|${t.kind}|${encodeField(t.documentTitle)}|` +
-    `${paragraphCSV}|${encodeField(t.documentId)}`;
+    `${paragraphCSV}|${encodeField(t.documentId)}|` +
+    `${encodeField(reason)}|${encodeField(referrerId)}`;
   return MENTION_SENTINEL_OPEN + body + MENTION_SENTINEL_CLOSE;
 }
 
@@ -167,7 +178,12 @@ export function parseMentionsWithRanges(
 }
 
 function parseSentinelBody(body: string): MentionToken | null {
-  // Split into exactly 5 fields, respecting escaped pipes.
+  // Split into 5, 6, or 7 fields, respecting escaped pipes. The
+  // original format had 5 fields; in v0.4.5 we added optional fields
+  // 6 (`reason`) and 7 (`referrerId`) at the tail. Legacy 5-field
+  // sentinels keep working — `reason` and `referrerId` become
+  // `undefined`, which `buildReferencedDocMessage` resolves to
+  // `'context'` and `null` respectively.
   const fields: string[] = [];
   let cur = '';
   for (let i = 0; i < body.length; i++) {
@@ -188,8 +204,9 @@ function parseSentinelBody(body: string): MentionToken | null {
     cur += c;
   }
   fields.push(cur);
-  if (fields.length !== 5) return null;
-  const [id, kind, titleRaw, paragraphCSV, docIdRaw] = fields;
+  if (fields.length < 5 || fields.length > 7) return null;
+  const [id, kind, titleRaw, paragraphCSV, docIdRaw, reasonRaw, referrerIdRaw] =
+    fields;
   if (!id) return null;
   if (kind !== 'doc' && kind !== 'doc-section') return null;
   const documentTitle = decodeField(titleRaw);
@@ -201,7 +218,10 @@ function parseSentinelBody(body: string): MentionToken | null {
           .split(',')
           .map((s) => Number(s))
           .filter((n) => Number.isInteger(n) && n >= 0);
-  return {
+  // Field 6 / 7 are optional and may be empty strings for older
+  // sentinels — drop the key in that case so the chip carries only
+  // the fields it actually has.
+  const out: MentionToken = {
     id,
     kind,
     documentId,
@@ -209,6 +229,19 @@ function parseSentinelBody(body: string): MentionToken | null {
     paragraphIndexes,
     createdAt: 0,
   };
+  const reason = reasonRaw ? decodeField(reasonRaw) : '';
+  if (
+    reason === 'context' ||
+    reason === 'style' ||
+    reason === 'facts' ||
+    reason === 'terminology' ||
+    reason === 'compare'
+  ) {
+    out.reason = reason;
+  }
+  const referrerId = referrerIdRaw ? decodeField(referrerIdRaw) : '';
+  if (referrerId) out.referrerId = referrerId;
+  return out;
 }
 
 /**

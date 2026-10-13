@@ -229,13 +229,12 @@ Controls how the model fills the `rationale` field on each
 The fence JSON schema is always sent separately and is not
 overridden here.
 
-Default rules: credit-risk cover-memo voice (policy / procedure /
-guideline amendments); GitHub-flavored Markdown; ≥100 words; ≥7
-numbered points (`1`, `2`, `3.1`, `3.2`, `3.3`, `4`, `5`); `3.1`–
-`3.3` each ≥30 words covering pre-change bank risk, risk mitigated,
-and why risk management is stronger; **keywords bold and
-underlined** as `**<u>keyword</u>**`. Edit or **Reset** in
-**Settings** → **Rationale Rules**.
+Default rules: a structured rationale format with GitHub-flavored
+Markdown, a fixed minimum word count, a numbered point list with
+sub-points, and **bold + underlined keywords** rendered as
+`**<u>keyword</u>**`. Edit or **Reset** in **Settings** →
+**Rationale Rules** to match your own writing style — voice,
+length, structure, and emphasis are all yours to define.
 
 ### Temperature
 
@@ -285,11 +284,12 @@ the editor parses into a track-changes style card:
 
 - `original` is a byte-for-byte copy of a substring in the document.
   No paraphrasing. If no exact match exists, that change is skipped.
-- `rationale` is required Markdown in a **credit-risk cover-memo**
-  style. Format is controlled by **Settings → Rationale Rules**
-  (default: ≥7 points including `3.1`–`3.3` risk sub-points, ≥100
-  words, keywords as `**<u>…</u>**` — see above). Rendered as
-  markdown in the comment popover after Apply.
+- `rationale` is required Markdown following the format defined in
+  **Settings → Rationale Rules** (default: a structured numbered
+  list with sub-points, a minimum word count, and keywords rendered
+  as `**<u>…</u>**` — see above). Edit the default to match your
+  own writing style. Rendered as markdown in the comment popover
+  after Apply.
 - Multiple fences in one reply are allowed; one per change.
 - `original` should be as short as possible while still uniquely
   locating the text.
@@ -626,7 +626,7 @@ per-release notes also ship on the GitHub release pages.
 | Version | Highlights |
 | --- | --- |
 | [v0.4.7](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.7) | `@`-document references in chat, comments (new + re-edit), and rejection feedback. Whole-doc or section-scoped. Persisted on comment rounds. Dark-mode contrast for the rejection textarea. |
-| [v0.4.6](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6) | Auto-snapshot on Send / Apply All, credit-risk cover-memo Rationale Rules with bold+underlined keywords, ProposedEditCard Split as Preview-style markdown, draggable Write / Preview divider, Revision history Preview pane, live-default Settings sync. |
+| [v0.4.6](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6) | Auto-snapshot on Send / Apply All, structured Rationale Rules with bold+underlined keywords, ProposedEditCard Split as Preview-style markdown, draggable Write / Preview divider, Revision history Preview pane, live-default Settings sync. |
 | [v0.4.5](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.5) | Comment **rounds** + **rationales**, Settings Rationale Rules, Apply re-anchors to replacement, leaner prompts, **Predict** off by default. |
 | [v0.4.1](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.1) | **Send to AI** whole-document consistency; per-comment context; doc outline instead of verbatim document. |
 | [v0.4.0](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.0) | **Comment** + **Send to AI**, **Google AI Mode (no key)**, title-case **Predict**, Welcome quick start. |

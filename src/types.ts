@@ -8,6 +8,16 @@ export interface ChatMessage {
   content: string;
   // Optional context included at send time (e.g. selected text from the editor).
   selection?: string;
+  /**
+   * Optional provider-specific metadata attached at request-assembly
+   * time. Currently used to thread Anthropic / OpenAI prompt-
+   * cache `cache_control` breakpoints through the messages array;
+   * the request layer (`streamChatCompletion`) does NOT forward
+   * this field on its own — it has to be deliberately read and
+   * routed. Kept generic so future fields (e.g. `priority`) can
+   * ride along without a type change.
+   */
+  metadata?: Record<string, unknown>;
   createdAt: number;
 }
 
@@ -265,6 +275,20 @@ export type CommentOp =
  */
 export type MentionKind = 'doc' | 'doc-section';
 
+/**
+ * Semantic reason for why a document was `@`-mentioned. Lets the
+ * prompt builder emit a per-doc focus hint so the LLM can prioritize
+ * the most relevant passages instead of re-reading the whole
+ * referenced doc. Defaults to `'context'` when the picker does not
+ * set it; existing chips therefore keep working unchanged.
+ */
+export type MentionReason =
+  | 'context' // general background reading
+  | 'style' // user wants voice / tone match
+  | 'facts' // user wants to fact-check / reuse numbers / entities
+  | 'terminology' // user wants consistent vocabulary / definitions
+  | 'compare'; // user is asking the model to compare with this doc
+
 export interface MentionToken {
   /** Local uuid used as the textarea sentinel id and the React key. */
   id: string;
@@ -283,4 +307,21 @@ export interface MentionToken {
    */
   paragraphIndexes: number[];
   createdAt: number;
+  /**
+   * Optional semantic intent for this mention. Defaults to
+   * `'context'` when omitted. Stored and round-tripped through the
+   * textarea sentinel so a chip's intent survives reload. Picker
+   * can leave it unset; existing chips keep working.
+   */
+  reason?: MentionReason;
+  /**
+   * Optional id of the `Comment`/`ChatMessage` that introduced this
+   * mention. Chat messages use their own id; comments use the comment
+   * id. Used by `buildRequestMessages` to emit a per-comment
+   * `[comment -> referenced docs]` cross-reference map so the model
+   * knows WHY each referenced doc was pulled in for that comment.
+   * Null for legacy mentions (the cross-reference map is silently
+   * omitted in that case).
+   */
+  referrerId?: string | null;
 }

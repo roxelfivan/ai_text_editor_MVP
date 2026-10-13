@@ -159,11 +159,27 @@ export async function streamChatCompletion(
  * outline (whole-doc mentions) or the verbatim paragraph text
  * (section-scoped mentions). Tokens whose source document is
  * missing from the lookup are dropped silently.
+ *
+ * Token-saving strategies applied here:
+ *   1. Whole-doc mention that targets the *currently open* doc is
+ *      suppressed — the doc is already in `sys-current-doc`.
+ *   2. Composite dedupe key `(documentId, paragraphIndexes)` so a
+ *      section + whole-doc combo on the same doc keeps the section
+ *      instead of being silently overwritten.
+ *   3. Turn-wide char cap on referenced-doc payload; once exhausted,
+ *      trailing docs downgrade from verbatim to outline-only.
+ *   4. Per-comment `[comment -> docs]` cross-reference map so the
+ *      LLM knows which doc maps to which comment instead of
+ *      re-reading everything.
+ *   5. Optional `cache_control` metadata on stable system messages
+ *      (Anthropic + OpenAI prompt-cache compatible); gated on
+ *      `enableCacheControl` so proxies that reject unknown fields
+ *      don't fail.
  */
 export function buildRequestMessages(
   history: ChatMessage[],
   systemMessage: string | undefined,
-  currentDocument?: { title: string; content: string } | null,
+  currentDocument?: { title: string; content: string; id?: string } | null,
   /**
    * Optional override for the rationale rules block. When the user
    * has customized `api.rationaleRulesOverride` in Settings, the
@@ -181,17 +197,46 @@ export function buildRequestMessages(
    * (i.e. always for chat; tests may skip it).
    */
   referencedDocuments?: MentionToken[],
-  documentLookup?: (id: string) => DocumentRecord | null
+  documentLookup?: (id: string) => DocumentRecord | null,
+  /**
+   * Per-comment grouping of mentions. Lets the prompt builder emit a
+   * `[comment -> referenced docs]` cross-reference map so the LLM
+   * can resolve each comment to its relevant doc(s) without
+   * re-reading the whole referenced payload. Only emitted when the
+   * current user turn is a comment batch AND the map has 2+ entries
+   * (single-mention batches are obvious from the comment body
+   * itself).
+   */
+  mentionsByCommentId?: Record<string, MentionToken[]>,
+  /**
+   * Set `true` to attach `cache_control` metadata on stable system
+   * messages (`sys`, `sys-current-doc`, `sys-proposed-edit-rules`)
+   * so providers that support prompt caching (Anthropic, OpenAI)
+   * can cache them. Defaults to `false` so the default
+   * OpenAI-compatible request shape is unchanged and unrecognized
+   * proxies don't reject unknown fields.
+   */
+  enableCacheControl = false
 ): ChatMessage[] {
   const effectiveSystem =
     (systemMessage && systemMessage.trim()) || DEFAULT_SYSTEM_MESSAGE;
   const out: ChatMessage[] = [];
+  const stableMeta = enableCacheControl ? CACHE_CONTROL_META : undefined;
+  // Stable-system-message helper: assigns `createdAt: 0` so the
+  // ChatMessage shape is consistent with the rest of the system
+  // blocks; threads `cache_control` metadata through `metadata`
+  // when caching is enabled. Untyped callers don't have to know
+  // about either detail.
+  const push = (message: Omit<ChatMessage, 'createdAt'>) => {
+    const base: ChatMessage = { ...message, createdAt: 0 };
+    if (stableMeta) base.metadata = stableMeta;
+    out.push(base);
+  };
   if (effectiveSystem.trim()) {
-    out.push({
+    push({
       id: 'sys',
       role: 'system',
       content: effectiveSystem,
-      createdAt: 0,
     });
   }
   // Attach the currently-open document so the model can see it when the
@@ -219,7 +264,7 @@ export function buildRequestMessages(
 
   if (currentDocument && currentDocument.content.trim()) {
     const title = currentDocument.title?.trim() || 'Untitled';
-    out.push({
+    push({
       id: 'sys-current-doc',
       role: 'system',
       content:
@@ -227,36 +272,100 @@ export function buildRequestMessages(
         `working text when the user refers to "the document" / ` +
         `"this text".\n\n` +
         buildDocOutline(title, currentDocument.content, isCommentBatch),
-      createdAt: 0,
     });
-    out.push({
+    push({
       id: 'sys-proposed-edit-rules',
       role: 'system',
       content: buildProposedEditRulesMessage(rationaleRulesOverride),
-      createdAt: 0,
     });
   }
 
   // Append @-referenced documents as separate system messages so the
   // model can address them by title in the reply. Each token is one
-  // message, numbered sequentially. We dedupe by documentId (the
-  // first-seen mention wins) and drop tokens whose source document
-  // is no longer available in the lookup.
+  // message, numbered sequentially.
+  // Dedupe key is (documentId, paragraphIndexes sort-key) so the
+  // same doc referenced as both a whole-doc and a section-scoped
+  // mention keeps the section (was being silently overwritten
+  // before this refactor). Tokens whose source document is no
+  // longer available in the lookup are dropped silently.
   if (referencedDocuments && referencedDocuments.length > 0) {
-    const seen = new Set<string>();
-    let counter = 0;
+    // First: build a per-doc focus map so each referenced-doc
+    // message can carry a `[context: c1+2 referenced as facts]`
+    // line. Only emits the map system message when the current turn
+    // is a comment batch AND there's more than one comment, since a
+    // single-mention batch is already obvious from the body.
+    const crossRefMap = isCommentBatch
+      ? buildCrossReferenceMap(mentionsByCommentId, currentDocument?.id)
+      : undefined;
+
+    // Composite dedupe: (documentId, sorted paragraphIndexes key).
+    const seen = new Map<string, MentionToken>();
+    const ordered: { token: MentionToken; doc: DocumentRecord }[] = [];
     for (const token of referencedDocuments) {
-      if (seen.has(token.documentId)) continue;
+      const key = dedupeKey(token);
+      if (seen.has(key)) continue;
       const doc = documentLookup?.(token.documentId);
       if (!doc || !doc.content.trim()) continue;
-      seen.add(token.documentId);
+      // Self-reference suppression: skipping whole-doc mentions of
+      // the doc already rendered in `sys-current-doc` saves the
+      // duplicate outline (~60 chars × paragraph-count chars).
+      // Section-scoped mentions are kept — their picked paragraphs
+      // are different from the outline and useful.
+      if (
+        currentDocument?.id &&
+        token.documentId === currentDocument.id &&
+        (token.kind === 'doc' || token.paragraphIndexes.length === 0)
+      ) {
+        seen.set(key, token);
+        continue;
+      }
+      seen.set(key, token);
+      ordered.push({ token, doc });
+    }
+
+    // Optionally emit the cross-reference map as its own system
+    // message BEFORE the per-doc ones, so the LLM sees the index
+    // first and knows which doc to pull from for which comment.
+    if (crossRefMap) {
+      push({
+        id: `${lastUser!.id}-comments-xref`,
+        role: 'system',
+        content: crossRefMap,
+      });
+    }
+
+    // Per-doc emitter. Tracks turn-wide char consumption so the
+    // global cap (`REFERENCED_DOCS_TOTAL_CHARS_CAP`) downgrades
+    // trailing docs to outline-only once exhausted.
+    let totalConsumed = 0;
+    let counter = 0;
+    for (const { token, doc } of ordered) {
+      const ctx: {
+        totalConsumed: number;
+        totalCap: number;
+        focus?: ReferencedDocContext;
+      } = {
+        totalConsumed,
+        totalCap: REFERENCED_DOCS_TOTAL_CHARS_CAP,
+      };
+      // Attach focus hint if any referrer pulls this doc in.
+      const focus = computeFocusForDoc(token, mentionsByCommentId);
+      if (focus) ctx.focus = focus;
+      const message = buildReferencedDocMessage(token, doc, ctx);
       counter++;
-      out.push({
+      push({
         id: `sys-referenced-doc-${counter}`,
         role: 'system',
-        content: buildReferencedDocMessage(token, doc),
-        createdAt: 0,
+        content: message,
       });
+      // Track the actual emitted length so the next doc's
+      // `totalConsumed` reflects what we've already spent.
+      totalConsumed += message.length;
+      if (totalConsumed >= REFERENCED_DOCS_TOTAL_CHARS_CAP) {
+        // Subsequent iterations will see the cap binding and
+        // downgrade to outline-only via `buildReferencedDocMessage`.
+        break;
+      }
     }
   }
   for (const m of history) {
@@ -284,8 +393,8 @@ export function buildRequestMessages(
         `Latest user message is an inline-comment batch. Each block:\n` +
         `  [id] (paragraph N/M, doc offset S–E)\n` +
         `  "<verbatim snippet>"\n` +
-        `  Before: "…"\n` +
-        `  After: "…"\n` +
+        `  Before: """…"""\n` +
+        `  After: """…"""\n` +
         `  Comment: <text>\n\n` +
         `Address every [id]: emit a proposed-edit fence, or briefly ` +
         `say why no edit is possible.\n` +
@@ -303,6 +412,115 @@ export function buildRequestMessages(
   }
 
   return out;
+}
+
+/**
+ * Build a composite dedupe key from a mention token. Two mentions
+ * with the same key (same doc + same paragraph indexes, in any
+ * order) collapse to one emission. Mentions with the same doc but
+ * different paragraph indexes remain distinct, so a section +
+ * whole-doc combo keeps both. Whole-doc tokens (`kind === 'doc'`
+ * OR empty `paragraphIndexes`) collide on `documentId` alone.
+ */
+function dedupeKey(token: MentionToken): string {
+  const paragraphs = [...token.paragraphIndexes].sort((a, b) => a - b);
+  return `${token.documentId}::${token.kind}::${paragraphs.join(',')}`;
+}
+
+/**
+ * For one doc, build the per-doc focus context — which comments
+ * pulled it in (and with what reason). Used by the prompt builder
+ * to enrich each `sys-referenced-doc-N` with a one-line
+ * `[context: c1+2 referenced as facts]` hint so the LLM knows which
+ * doc matters most for each commented passage.
+ *
+ * Returns `null` when no comment-level focus exists (chat-only
+ * mentions or all mentions came from the same comment with the
+ * default reason — no useful signal to emit).
+ */
+function computeFocusForDoc(
+  token: MentionToken,
+  mentionsByCommentId?: Record<string, MentionToken[]>
+): ReferencedDocContext | null {
+  if (!mentionsByCommentId) return null;
+  const docId = token.documentId;
+  const docTitle = token.documentTitle || 'Untitled';
+  const referrerIds: string[] = [];
+  const reasons = new Map<string, NonNullable<MentionToken['reason']>>();
+  for (const [commentId, tokens] of Object.entries(mentionsByCommentId)) {
+    for (const m of tokens) {
+      if (m.documentId !== docId) continue;
+      if (!referrerIds.includes(commentId)) {
+        referrerIds.push(commentId);
+        if (m.reason) reasons.set(commentId, m.reason);
+      }
+    }
+  }
+  if (referrerIds.length === 0) return null;
+  return { title: docTitle, referrerIds, reasons };
+}
+
+/**
+ * Build the per-comment `[comment -> referenced docs]` cross-
+ * reference map. Only emitted when:
+ *   - the current turn is a comment batch, AND
+ *   - the map has >1 comment (single-comment batches are obvious
+ *     from the body itself), AND
+ *   - at least one comment actually has a mention attached.
+ *
+ * Each line is `c1 -> "Doc Title"@[p3,p7] (facts)`. Output stays
+ * under ~400 chars on a 3-comment 2-doc map. The map itself does
+ * not know paragraph numbers per doc up-front (a comment can pull
+ * whole-doc or section-scoped), so we describe per-mention
+ * `kind` instead: `whole` for whole-doc, `@[pN,pM]` for section.
+ */
+function buildCrossReferenceMap(
+  mentionsByCommentId: Record<string, MentionToken[]> | undefined,
+  _currentDocumentId: string | undefined
+): string | undefined {
+  if (!mentionsByCommentId) return undefined;
+  const entries = Object.entries(mentionsByCommentId).filter(
+    ([, tokens]) => tokens && tokens.length > 0
+  );
+  if (entries.length < 2) return undefined;
+  const lines: string[] = [
+    `[comment -> referenced docs] Each line tells you which ` +
+      `referenced docs are most relevant to that comment. Use ` +
+      `this to focus attention — do NOT re-read every referenced ` +
+      `doc for every comment.`,
+  ];
+  for (const [commentId, tokens] of entries) {
+    const refs = tokens
+      .map((t) => describeMention(t))
+      .filter((s) => s.length > 0);
+    if (refs.length === 0) continue;
+    lines.push(`${commentId} -> ${refs.join(' ; ')}`);
+  }
+  // Final safety: a single line with no actual references would be
+  // pointless. Caller already requires >=2 comments; the
+  // `refs.length === 0` filter above prunes the no-mentions case.
+  if (lines.length <= 1) return undefined;
+  return lines.join('\n');
+}
+
+/**
+ * One-line description of a mention for the cross-reference map.
+ * `whole` for whole-doc mentions, `§[p3,p7]` for section-scoped.
+ * Truncates the title so a long doc title doesn't crowd the map.
+ */
+function describeMention(token: MentionToken): string {
+  const titleRaw = (token.documentTitle || '').trim() || 'Untitled';
+  const title =
+    titleRaw.length > 32 ? titleRaw.slice(0, 31) + '…' : titleRaw;
+  const where =
+    token.kind === 'doc' || token.paragraphIndexes.length === 0
+      ? 'whole'
+      : `§[${[...token.paragraphIndexes]
+          .map((p) => p + 1)
+          .sort((a, b) => a - b)
+          .join(',')}]`;
+  const reason = token.reason && token.reason !== 'context' ? ` (${token.reason})` : '';
+  return `"${title}"${where}${reason}`;
 }
 
 /**
@@ -607,67 +825,225 @@ function trimOnWordBoundary(s: string, max: number): string {
 const REFERENCED_SECTION_CHARS_CAP = 4000;
 
 /**
+ * Sum across all referenced-doc system messages in a single turn.
+ * Once exceeded, subsequent referenced docs downgrade from verbatim
+ * sections to outlines-only so the prompt stays bounded. Tuned so a
+ * 2-doc comment batch with section picks stays verbatim on both; a
+ * 3+ doc batch sees the trailing doc(s) downgrade. Mirrors the
+ * "CHUNK_SIZE = 6000" pattern from Obsidian Copilot's
+ * `src/constants.ts`, but per-turn instead of per-message because
+ * @-mention traffic is dense in this app.
+ */
+export const REFERENCED_DOCS_TOTAL_CHARS_CAP = 8000;
+
+/**
+ * Stable system messages (`sys`, `sys-current-doc`,
+ * `sys-proposed-edit-rules`) repeat verbatim across many turns and
+ * are prime candidates for the provider's prompt cache. The
+ * `cache_control` metadata field is honored by Anthropic and
+ * OpenAI's prompt-caching APIs. Feature-flagged via
+ * `enableCacheControl` in `buildRequestMessages` so proxies that
+ * reject unknown fields do not break.
+ */
+export const CACHE_CONTROL_META: Record<string, unknown> = {
+  cache_control: { type: 'ephemeral' },
+};
+
+/**
+ * Context threaded through the referenced-doc emitter. The accumulator
+ * lets the builder downgrade a doc to outline-only when the turn-wide
+ * cap is exhausted; `referrerMap` lets it emit a per-doc focus hint
+ * (which `Comment` referenced this doc, and with what reason) so the
+ * LLM can prioritize the most relevant passage.
+ */
+export interface ReferencedDocContext {
+  /** Title of the doc — cached so the focus hint can address it
+   * without re-resolving. */
+  title: string;
+  /** Set of comment ids that pulled this doc in. Empty for
+   * chat-only mentions. Sorted/deduped at the call site. */
+  referrerIds: string[];
+  /** Map of comment id -> reason for this doc; populated only when
+   * distinct comments have distinct reasons. Falls back to
+   * the token's `reason` when no comment-specific reason exists. */
+  reasons: Map<string, NonNullable<MentionToken['reason']>>;
+}
+
+/**
  * Build the system message for a single @-referenced document.
  * Whole-doc mentions get the same compact outline used for the
  * current document (token-cheap, lets the model address the doc
  * by title without seeing the full text). Section-scoped mentions
  * get the verbatim paragraph text for the picked indexes (capped),
  * so the model can quote / propose edits against the exact passage.
+ *
+ * Public + shared so the Google AI Mode fallback in
+ * `src/utils/googleAiMode.ts` reuses the exact same outline-vs-
+ * sectioned logic instead of duplicating a raw-text truncation.
+ *
+ * @param token             the @-mention token for this doc
+ * @param doc               the resolved `DocumentRecord`
+ * @param ctx.totalConsumed  chars already spent on referenced docs
+ *                           in this turn (used to enforce
+ *                           `REFERENCED_DOCS_TOTAL_CHARS_CAP`)
+ * @param ctx.totalCap       per-turn cap on referenced-doc chars
+ * @param ctx.focus          optional per-doc focus hint
+ *                           (referrerIds / reasons), when the
+ *                           comment batch supplies a cross-
+ *                           reference map
  */
-function buildReferencedDocMessage(
+export function buildReferencedDocMessage(
   token: MentionToken,
-  doc: DocumentRecord
+  doc: DocumentRecord,
+  ctx: {
+    totalConsumed: number;
+    totalCap: number;
+    focus?: ReferencedDocContext;
+  } = { totalConsumed: 0, totalCap: REFERENCED_DOCS_TOTAL_CHARS_CAP }
 ): string {
   const title = (doc.title || token.documentTitle || 'Untitled').trim();
+  const reason = token.reason ?? 'context';
+
+  const focusLine = ctx.focus
+    ? buildReferencedDocFocusLine(ctx.focus, reason)
+    : '';
+
+  // Whole-doc mention — outline only.
   if (token.kind === 'doc' || token.paragraphIndexes.length === 0) {
     return (
       `Referenced document: "${title}". ` +
       `Treat the outline below as the working text when the user ` +
-      `refers to it by name.\n\n` +
+      `refers to it by name.` +
+      `${focusLine ? ` ${focusLine}` : ''}\n\n` +
       buildDocOutline(title, doc.content, false)
     );
   }
+
   const starts = splitParagraphs(doc.content);
   const picked: number[] = [];
   for (const idx of token.paragraphIndexes) {
     if (idx >= 0 && idx < starts.length) picked.push(idx);
   }
+  // Bad indexes (deleted paragraphs, drifted offsets) → fall back to
+  // outline so the prompt is never empty for this token.
   if (picked.length === 0) {
     return (
       `Referenced document: "${title}". ` +
       `The user picked sections, but none could be located; falling ` +
-      `back to the outline.\n\n` +
+      `back to the outline.` +
+      `${focusLine ? ` ${focusLine}` : ''}\n\n` +
       buildDocOutline(title, doc.content, false)
     );
   }
-  // Build the verbatim text and bail to outline + note if the total
-  // would blow the cap. Most sections will be far under the cap
-  // (a typical 200-word paragraph is ~1,200 chars).
-  const sections: string[] = [];
-  let used = 0;
-  for (const idx of picked) {
-    const start = starts[idx];
-    const end = idx + 1 < starts.length ? starts[idx + 1] : doc.content.length;
-    const slice = doc.content.slice(start, end);
-    if (used + slice.length > REFERENCED_SECTION_CHARS_CAP) {
-      return (
-        `Referenced document: "${title}". ` +
-        `Sections picked (truncated to fit the prompt budget; ` +
-        `outline below for orientation).\n\n` +
-        sections.join('') +
-        `\n…(remaining sections omitted)…\n\n` +
-        buildDocOutline(title, doc.content, false)
-      );
+
+  // Per-doc cap (= REFERENCED_SECTION_CHARS_CAP) keeps one doc from
+  // drowning the prompt on its own; turn-wide cap (=
+  // REFERENCED_DOCS_TOTAL_CHARS_CAP) prevents multi-doc fans from
+  // stacking up.
+  const remainingBudget = Math.max(
+    0,
+    Math.min(REFERENCED_SECTION_CHARS_CAP, ctx.totalCap - ctx.totalConsumed)
+  );
+  // Below the turn-wide budget — emit verbatim.
+  if (remainingBudget > 256) {
+    const sections: string[] = [];
+    let used = 0;
+    for (const idx of picked) {
+      const start = starts[idx];
+      const end =
+        idx + 1 < starts.length ? starts[idx + 1] : doc.content.length;
+      const slice = doc.content.slice(start, end);
+      if (used + slice.length > remainingBudget) {
+        // Per-doc cap was the binding constraint — emit the partial
+        // slice (truncation note appended below).
+        if (sections.length === 0) {
+          // First slice already exceeds the per-doc cap — emit a
+          // truncated version of just the first paragraph.
+          sections.push(
+            `[p${idx + 1}]\n` + truncateSliceOnWordBoundary(slice, remainingBudget)
+          );
+          return (
+            `Referenced document: "${title}". ` +
+            `Sections picked by the user (verbatim — quote / propose edits ` +
+            `against this exact text; remaining sections omitted to fit the ` +
+            `prompt budget).` +
+            `${focusLine ? ` ${focusLine}` : ''}\n\n` +
+            sections.join('') +
+            `\n…(remaining sections omitted)…`
+          );
+        }
+        return (
+          `Referenced document: "${title}". ` +
+          `Sections picked by the user (verbatim — quote / propose edits ` +
+          `against this exact text).\n\n` +
+          sections.join('') +
+          `\n…(remaining sections omitted — referenced-doc budget exhausted)…`
+        );
+      }
+      sections.push(`[p${idx + 1}]\n${slice}`);
+      used += slice.length;
     }
-    sections.push(`[p${idx + 1}]\n${slice}`);
-    used += slice.length;
+    return (
+      `Referenced document: "${title}". ` +
+      `Sections picked by the user (verbatim — quote / propose edits ` +
+      `against this exact text).` +
+      `${focusLine ? ` ${focusLine}` : ''}\n\n` +
+      sections.join('')
+    );
   }
+
+  // Turn-wide budget exhausted — downgrade to outline-only and
+  // annotate so the model still has orientation.
   return (
     `Referenced document: "${title}". ` +
-    `Sections picked by the user (verbatim — quote / propose edits ` +
-    `against this exact text):\n\n` +
-    sections.join('')
+    `Sections picked but truncated to fit the turn-wide prompt budget — ` +
+    `refer to the outline below for orientation.` +
+    `${focusLine ? ` ${focusLine}` : ''}\n\n` +
+    buildDocOutline(title, doc.content, false)
   );
+}
+
+/**
+ * Render a one-line focus hint for a referenced doc — which
+ * `Comment`(s) pulled it in and with what reason. Single line so
+ * the hint itself stays cheap (≤40 chars typically).
+ */
+function buildReferencedDocFocusLine(
+  focus: ReferencedDocContext,
+  fallbackReason: NonNullable<MentionToken['reason']>
+): string {
+  if (focus.referrerIds.length === 0) return '';
+  const reasons = focus.reasons;
+  // Resolve a single representative reason (most common, deterministic
+  // — earliest comment wins ties).
+  const representative =
+    focus.referrerIds
+      .map((id) => reasons.get(id) ?? fallbackReason)
+      .sort()
+      .reduce(
+        (best, cur) =>
+          cur === 'facts' || cur === 'compare' ? cur : best,
+        fallbackReason
+      ) ?? fallbackReason;
+  const idPreview =
+    focus.referrerIds.length === 1
+      ? `[${focus.referrerIds[0]}]`
+      : `[${focus.referrerIds[0]}+${focus.referrerIds.length - 1}]`;
+  return `[context: ${idPreview} referenced as ${representative}]`;
+}
+
+/**
+ * Trim `s` to at most `max` characters, ending on a word boundary
+ * when feasible. Used when a single paragraph would blow the
+ * per-doc cap so we keep the start of the passage verbatim instead
+ * of silently dropping it.
+ */
+function truncateSliceOnWordBoundary(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const sliced = s.slice(0, max);
+  const sp = sliced.lastIndexOf(' ');
+  if (sp > max / 2) return sliced.slice(0, sp) + ' …';
+  return sliced + ' …';
 }
 
 /**

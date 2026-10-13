@@ -1,4 +1,5 @@
 import type { MentionToken, ProposedEdit } from '@/types';
+import { parseMentions as parseMentionsFromSentinels } from '@/components/mentions/parseMentions';
 
 export type ProposedEditSegment =
   | { kind: 'text'; payload: string }
@@ -508,34 +509,14 @@ export function formatRejectionBatch(items: RejectionItem[]): string {
 }
 
 /**
- * Strip @-mention sentinels from a comment string. Pure / no React
- * imports so it stays tree-shakeable. Duplicated here (rather than
- * imported from `components/mentions/parseMentions.ts`) to keep the
- * `utils/` layer free of UI dependencies — the source of truth for
- * the sentinel format is the OPEN / CLOSE constants below.
+ * Strip @-mention sentinels from a comment string. Thin wrapper
+ * around the canonical parser in `components/mentions/parseMentions.ts`
+ * so there is a single source of truth for the sentinel format.
+ * The `components/mentions/parseMentions.ts` module is pure (no
+ * React / DOM imports), so the `utils/` layer can depend on it
+ * without dragging in UI tree-shake weight.
  */
-const MENTION_OPEN = '\u200B[[mention:';
-const MENTION_CLOSE = ']]\u200B';
 export function cleanCommentForPrompt(text: string): string {
   if (!text) return '';
-  let out = '';
-  let i = 0;
-  while (i < text.length) {
-    const open = text.indexOf(MENTION_OPEN, i);
-    if (open === -1) {
-      out += text.slice(i);
-      break;
-    }
-    out += text.slice(i, open);
-    const bodyStart = open + MENTION_OPEN.length;
-    const close = text.indexOf(MENTION_CLOSE, bodyStart);
-    if (close === -1) {
-      // Unterminated sentinel — keep the rest as plain text so the
-      // user does not silently lose typed content.
-      out += text.slice(open);
-      break;
-    }
-    i = close + MENTION_CLOSE.length;
-  }
-  return out;
+  return parseMentionsFromSentinels(text).plain;
 }
