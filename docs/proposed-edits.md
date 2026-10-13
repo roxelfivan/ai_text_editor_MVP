@@ -49,12 +49,13 @@ You will see **Applied all n change(s).** or **Applied x of y changes (z skipped
 
 Use this when you want the model to try again with your reason:
 
-1. Optionally fill **Comment (optional)** — *Why reject? (sent to the AI as revision feedback)*
+1. Optionally fill **Comment (optional)** — *Why reject? (sent to the AI as revision feedback) — type @ to reference a document*
+   - Type `@` to attach another document (or a specific paragraph of one) to the rejection reason. See [Reference other documents](reference-other-documents.md).
 2. Click **Reject with feedback**
 
-The reason is **staged**, not sent yet. The tip reads: *Staged. Click "Send rejection comments" in the message footer to send.* If you leave the box empty, you can still use plain **Reject**.
+The reason is **staged**, not sent yet. While staged, the comment is read-only but the attached chips (including any `@`-references) stay visible so you can review what you're about to send. The tip reads: *Staged. Click "Send rejection comments" in the message footer to send.* If you leave the box empty, you can still use plain **Reject**.
 
-In the message footer, **Send n rejection comments** sends every staged reason in one Chat turn. **Clear staged** drops them.
+In the message footer, **Send n rejection comments** sends every staged reason (with merged `@`-references) in one Chat turn. **Clear staged** drops them.
 
 ## Missing quotes and Force-apply
 

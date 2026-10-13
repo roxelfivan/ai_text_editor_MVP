@@ -12,7 +12,8 @@ If you have never sent a message, Chat shows: *Ask anything, or highlight text i
 
 ## Send a message (Minimax or OpenAI)
 
-1. Type in the box (*Ask, or ⌘/Ctrl+Enter to send…*).
+1. Type in the box (*Ask, or ⌘/Ctrl+Enter to send… type @ to reference a document*).
+   - Type `@` to attach another document (or a specific paragraph of one) to the message — see [Reference other documents](reference-other-documents.md).
 2. Optionally check **include selection** so the highlighted editor text is sent with the message.
 3. **paste selection (n)** inserts the highlight into the input if you would rather see it in the box.
 4. Click **Send** or press `Ctrl+Enter` / `⌘Enter`.

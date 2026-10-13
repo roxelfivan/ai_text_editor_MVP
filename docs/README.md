@@ -14,6 +14,7 @@ This guide is for people using the app. It covers every screen and everyday task
 - Save and restore **revisions**
 - Import text from photos or PDFs
 - Get optional inline **Predict** suggestions while you type
+- Reference other documents with `@` — type `@` in chat, comments, or rejection feedback to attach another doc (or a specific paragraph) to the outgoing turn. See [Reference other documents (`@`)](reference-other-documents.md).
 
 ## Start here
 

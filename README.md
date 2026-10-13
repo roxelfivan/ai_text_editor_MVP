@@ -499,6 +499,30 @@ the result at your caret.
 
 ---
 
+## User guide
+
+A longer, task-oriented walkthrough of every screen lives under
+[`docs/`](docs/). Start at the [table of contents](docs/README.md),
+or jump straight to one of the v0.4.7 pages:
+
+- [Getting started](docs/getting-started.md) — first launch, connect AI, first document
+- [Your workspace](docs/workspace.md) — layout, theme, panels
+- [Documents](docs/documents.md) — create, rename, switch, delete
+- [Writing](docs/writing.md) — editor, formatting, Predict
+- [Comments](docs/comments.md) — highlights, badges, Send to AI
+- [Chat](docs/chat.md) — messages, selection, Google AI Mode
+- [Proposed edits](docs/proposed-edits.md) — Apply, Reject, Force-apply
+- [Reference other documents (`@`)](docs/reference-other-documents.md) — attach a doc to any message *(v0.4.7)*
+- [Prompt library](docs/prompt-library.md) — saved prompts
+- [Revision history](docs/revisions.md) — snapshots and restore
+- [Import from photos or PDFs](docs/import.md)
+- [Settings](docs/settings.md)
+- [Keyboard shortcuts](docs/keyboard-shortcuts.md)
+- [Privacy and your data](docs/privacy.md)
+- [Troubleshooting](docs/troubleshooting.md)
+
+---
+
 ## Architecture
 
 ```
