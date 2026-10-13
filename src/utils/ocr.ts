@@ -20,12 +20,9 @@
 //      is retained in app state.
 
 import type { OcrResult, OcrRuntimeParamsInput } from '@paddleocr/paddleocr-js';
-import {
-  loadPdfFromBytes,
-  pageHasNativeText,
-  pageNativeText,
-  renderPageToCanvas,
-} from './pdf';
+// pdfjs-dist is large (~630KB minified). Load it only on the PDF path
+// so image-only imports (and the rest of the app) never pay that cost
+// up front. ImportMediaButton already dynamic-imports this whole module.
 
 /**
  * Subset of the PaddleOCR API we actually use. Whether PaddleOCR.create
@@ -205,6 +202,12 @@ async function extractFromPdfFile(
 ): Promise<string> {
   onProgress?.(`reading ${file.name}`);
   const bytes = await file.arrayBuffer();
+  const {
+    loadPdfFromBytes,
+    pageHasNativeText,
+    pageNativeText,
+    renderPageToCanvas,
+  } = await import('./pdf');
   const pdf = await loadPdfFromBytes(bytes);
   try {
     const pageTexts: string[] = [];

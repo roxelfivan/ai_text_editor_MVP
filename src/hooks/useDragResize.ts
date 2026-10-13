@@ -180,6 +180,10 @@ export const MIN_SIDEBAR_WIDTH = 160;
 export const MAX_SIDEBAR_WIDTH = 480;
 export const MIN_CHAT_WIDTH = 280;
 export const MAX_CHAT_WIDTH = 720;
+/** Write-pane share of the editor Split row (percent of row width). */
+export const MIN_EDITOR_SPLIT_PCT = 20;
+export const MAX_EDITOR_SPLIT_PCT = 80;
+export const DEFAULT_EDITOR_SPLIT_PCT = 50;
 export const MIN_CARD_WIDTH = 220;
 export const MIN_CARD_HEIGHT = 140;
 export const MAX_CARD_WIDTH = 800;

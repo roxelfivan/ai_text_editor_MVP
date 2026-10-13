@@ -11,6 +11,7 @@
 // search params can be updated in one place if Google changes the
 // public AI Mode deep-link in the future.
 import type { ChatMessage } from '@/types';
+import { DEFAULT_SYSTEM_MESSAGE } from '@/api/chat';
 
 // Base URL for Google's AI Mode deep-link. `udm=50` selects the
 // generative-AI tab on google.com/search. The query string is appended
@@ -43,9 +44,11 @@ const MAX_DOC_PREVIEW_CHARS = 2000;
  */
 export function buildGoogleAiModeUrl(
   messages: ChatMessage[],
-  systemMessage: string,
+  systemMessage: string | undefined,
   currentDocument: { title: string; content: string } | null | undefined
 ): string {
+  const effectiveSystem =
+    (systemMessage && systemMessage.trim()) || DEFAULT_SYSTEM_MESSAGE;
   const parts: string[] = [];
 
   // Selection / document context goes first so it is the first thing
@@ -65,8 +68,8 @@ export function buildGoogleAiModeUrl(
     );
   }
 
-  if (systemMessage.trim()) {
-    parts.push(`[System instructions]\n${systemMessage.trim()}\n[End]\n\n`);
+  if (effectiveSystem.trim()) {
+    parts.push(`[System instructions]\n${effectiveSystem.trim()}\n[End]\n\n`);
   }
 
   // Walk the chat history and concatenate the visible user/assistant

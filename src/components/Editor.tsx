@@ -4,7 +4,13 @@ import { v4 as uuid } from 'uuid';
 import { useStore, useCurrentDocument } from '@/store/useStore';
 import { ImportMediaButton } from '@/components/ImportMediaButton';
 import { useInlineCompletion } from '@/hooks/useInlineCompletion';
-import { useDragResize } from '@/hooks/useDragResize';
+import {
+  useDragResize,
+  clamp,
+  MIN_EDITOR_SPLIT_PCT,
+  MAX_EDITOR_SPLIT_PCT,
+  DEFAULT_EDITOR_SPLIT_PCT,
+} from '@/hooks/useDragResize';
 import { remarkPlugins, rehypePlugins } from '@/utils/markdown';
 import { requiresApiKey } from '@/config/providers';
 import {
@@ -18,6 +24,7 @@ import { CommentMargin } from '@/components/CommentMargin';
 import { CommentComposer } from '@/components/CommentComposer';
 import { CommentPopover } from '@/components/CommentPopover';
 import { CommentTray } from '@/components/CommentTray';
+import { ResizeHandle } from '@/components/ResizeHandle';
 
 /**
  * After any code path that updates the controlled textarea's value
@@ -74,6 +81,15 @@ export function Editor() {
   const viewMode = useStore((s) => s.viewMode);
   const setViewMode = useStore((s) => s.setViewMode);
   const editorFontSize = useStore((s) => s.editorFontSize);
+  const rawEditorSplitPct = useStore((s) => s.layout.editorSplitPct);
+  const editorSplitPct = clamp(
+    typeof rawEditorSplitPct === 'number'
+      ? rawEditorSplitPct
+      : DEFAULT_EDITOR_SPLIT_PCT,
+    MIN_EDITOR_SPLIT_PCT,
+    MAX_EDITOR_SPLIT_PCT
+  );
+  const setLayout = useStore((s) => s.setLayout);
   const bumpEditorFontSize = useStore((s) => s.bumpEditorFontSize);
   const updateContent = useStore((s) => s.updateDocumentContent);
   const saveRevision = useStore((s) => s.saveRevision);
@@ -111,6 +127,7 @@ export function Editor() {
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const writePaneRef = useRef<HTMLDivElement>(null);
+  const splitRowRef = useRef<HTMLDivElement>(null);
   // Mirror overlay ref — used by `getSelectionRect` to measure the
   // selection's y-offset for the floating composer + the margin badges.
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -197,6 +214,23 @@ export function Editor() {
     anchorRef.current = suggestionHeight;
     dragResize.start('top', e);
   };
+  // Drag the Write | Preview divider in Split mode. The write pane's
+  // share is stored as a percent of the row width so it survives
+  // window resizes.
+  const { start: beginSplitResize } = useDragResize({
+    mode: 'axis',
+    axis: 'horizontal',
+    onDelta: ({ absX }) => {
+      const row = splitRowRef.current;
+      if (!row) return;
+      const rect = row.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const pct = ((absX - rect.left) / rect.width) * 100;
+      setLayout({
+        editorSplitPct: clamp(pct, MIN_EDITOR_SPLIT_PCT, MAX_EDITOR_SPLIT_PCT),
+      });
+    },
+  });
   const clampSuggestionHeight = (px: number): number => {
     const pane = writePaneRef.current;
     const max = pane ? Math.max(120, pane.clientHeight * 0.6) : 600;
@@ -1030,6 +1064,8 @@ export function Editor() {
   const showWrite = viewMode === 'write' || viewMode === 'split';
   const showPreview = viewMode === 'preview' || viewMode === 'split';
 
+  const isSplit = showWrite && showPreview;
+
   return (
     <div
       className="flex-1 flex flex-col min-w-0 bg-paper-base dark:bg-ape-base"
@@ -1318,9 +1354,25 @@ export function Editor() {
           {savedLabel}
         </span>
       </div>
-      <div className="flex-1 flex min-h-0">
+      <div ref={splitRowRef} className="flex-1 flex min-h-0">
         {showWrite && (
-          <div ref={writePaneRef} className={`relative flex-1 min-w-0 flex flex-col ${showPreview ? 'border-r border-paper-hairline dark:border-cyber-border' : ''}`}>
+          <div
+            ref={writePaneRef}
+            className={`relative min-w-0 flex flex-col ${
+              isSplit
+                ? 'border-r border-paper-hairline dark:border-cyber-border'
+                : 'flex-1'
+            }`}
+            style={
+              isSplit
+                ? {
+                    flex: `0 0 ${editorSplitPct}%`,
+                    maxWidth: `${MAX_EDITOR_SPLIT_PCT}%`,
+                    minWidth: `${MIN_EDITOR_SPLIT_PCT}%`,
+                  }
+                : undefined
+            }
+          >
             <div className="flex-1 flex min-h-0 relative">
               {/* Textarea + mirror overlay. The mirror sits *behind*
                   the textarea so the highlights paint under the user's
@@ -1628,11 +1680,17 @@ export function Editor() {
                 </div>
               </div>
             )}
+            {isSplit && (
+              <ResizeHandle
+                handle="right"
+                onPointerDown={(e) => beginSplitResize('right', e)}
+              />
+            )}
           </div>
         )}
         {showPreview && (
           <div
-              className="flex-1 overflow-y-auto p-4 prose-md bg-paper-base dark:bg-ape-base"
+              className="flex-1 min-w-0 overflow-y-auto p-4 prose-md bg-paper-base dark:bg-ape-base"
               style={{ fontSize: `${editorFontSize}px`, lineHeight: 1.55 }}
             >
             <ReactMarkdown

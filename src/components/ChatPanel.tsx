@@ -261,6 +261,9 @@ export function ChatPanel() {
     if (!currentDocumentId) return;
     const text = input.trim();
     if (!text || streaming) return;
+    // Snapshot current document before the AI turn so the user can
+    // restore via Revision history if later applies go wrong.
+    useStore.getState().saveRevision(currentDocumentId, 'Before AI send');
     setError(null);
     setInput('');
 
@@ -484,6 +487,9 @@ export function ChatPanel() {
       edits
     );
     if (appliedIds.length === 0) return;
+    // Snapshot pre-apply content before the bulk write so Apply All
+    // is reversible via Revision history (same path as Snapshot now).
+    useStore.getState().saveRevision(doc.id, 'Before Apply All');
     useStore.getState().updateDocumentContent(doc.id, next);
     // Record each adopted edit as a rationale on the comment that
     // produced it. The store resolves the comment via anchor/sent-

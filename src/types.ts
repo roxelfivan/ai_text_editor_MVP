@@ -74,7 +74,13 @@ export interface ApiConfig {
   // Either a full chat-completions URL or a base URL (we will append /chat/completions).
   apiEndpoint: string;
   model: string;
-  systemMessage: string;
+  /**
+   * Optional. Undefined / empty falls through to
+   * `DEFAULT_SYSTEM_MESSAGE` from `src/api/chat.ts` so the live
+   * built-in is used and Settings can show the active prompt
+   * (and future updates stay in sync without a migration).
+   */
+  systemMessage?: string;
   temperature: number;
   /**
    * User-supplied override for the rationale rules inside the

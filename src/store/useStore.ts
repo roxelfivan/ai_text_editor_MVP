@@ -19,21 +19,26 @@ import { applyThemeClass } from '@/utils/theme';
 import { COMMENT_UNDO_STACK_LIMIT } from '@/utils/comments';
 import { findEditAnchor } from '@/utils/proposedEdit';
 import {
+  DEFAULT_SYSTEM_MESSAGE,
+  normalizeRationaleRulesOverride,
+  normalizeSystemMessage,
+} from '@/api/chat';
+import {
   clamp,
   MIN_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
   MIN_CHAT_WIDTH,
   MAX_CHAT_WIDTH,
+  MIN_EDITOR_SPLIT_PCT,
+  MAX_EDITOR_SPLIT_PCT,
+  DEFAULT_EDITOR_SPLIT_PCT,
 } from '@/hooks/useDragResize';
 
 const STORAGE_KEY = 'ai-text-editor-mvp';
 
-export const DEFAULT_SYSTEM_MESSAGE =
-  "You are a writing assistant. Be concise, preserve the user's voice, " +
-    "and emit one proposed-edit fence per paragraph so edits can be " +
-    "accepted independently. Include `rationale` per RATIONALE RULES; " +
-    "do not discuss those rules inside the rationale. Escape JSON " +
-    'double-quotes as \\".';
+// Re-export so existing `import { DEFAULT_SYSTEM_MESSAGE } from
+// '@/store/useStore'` call sites keep working.
+export { DEFAULT_SYSTEM_MESSAGE };
 
 // Resolve the build-time default provider, then derive endpoint/model
 // defaults from the matching preset. VITE_DEFAULT_PROVIDER lets a
@@ -56,7 +61,7 @@ const defaultApiConfig: ApiConfig = {
   apiEndpoint:
     import.meta.env.VITE_DEFAULT_API_ENDPOINT || initialPreset.defaultEndpoint,
   model: import.meta.env.VITE_DEFAULT_MODEL || initialPreset.defaultModel,
-  systemMessage: DEFAULT_SYSTEM_MESSAGE,
+  systemMessage: undefined,
   temperature: 0.7,
   // Rationale rules default to undefined so the chat pipeline falls
   // back to the hard-coded `PROPOSED_EDIT_RULES_DEFAULT` in
@@ -174,6 +179,8 @@ export interface StoreState {
   layout: {
     sidebarWidth: number;
     chatWidth: number;
+    /** Write-pane width as % of the editor Split row (Preview takes the rest). */
+    editorSplitPct: number;
     previewSizes: Record<string, { w: number; h: number }>;
   };
 
@@ -237,6 +244,7 @@ export interface StoreState {
     patch: Partial<{
       sidebarWidth: number;
       chatWidth: number;
+      editorSplitPct: number;
     }>
   ) => void;
   setPreviewSize: (
@@ -393,6 +401,7 @@ export const useStore = create<StoreState>()(
       layout: {
         sidebarWidth: 240,
         chatWidth: 384,
+        editorSplitPct: DEFAULT_EDITOR_SPLIT_PCT,
         previewSizes: {},
       },
       editorFocus: {},
@@ -977,27 +986,74 @@ export const useStore = create<StoreState>()(
         if (state?.theme) {
           applyThemeClass(state.theme);
         }
-        // Repair any out-of-bounds layout values persisted by older builds
-        // (before bounds clamping existed) so the panels can never blow
-        // out the viewport on load.
+        // Note: the `state` argument here is the loaded snapshot
+        // (already merged into the live store by zustand). Mutating
+        // nested fields on it does NOT propagate to the live store,
+        // so every migration below queues a `set((s) => …)` patch
+        // that zustand applies after this callback returns. The
+        // snapshot is left alone — we only inspect it.
         if (state) {
           const sw = state.layout?.sidebarWidth;
           const cw = state.layout?.chatWidth;
-          let repaired = false;
+          const esp = state.layout?.editorSplitPct;
+          const api0 = state.api;
+          const repairs: Partial<StoreState> = {};
+          const layoutPatch: Record<string, unknown> = {};
           if (typeof sw === 'number' && (sw < MIN_SIDEBAR_WIDTH || sw > MAX_SIDEBAR_WIDTH)) {
-            state.layout.sidebarWidth = clamp(sw, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH);
-            repaired = true;
+            layoutPatch.sidebarWidth = clamp(sw, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH);
           }
           if (typeof cw === 'number' && (cw < MIN_CHAT_WIDTH || cw > MAX_CHAT_WIDTH)) {
-            state.layout.chatWidth = clamp(cw, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH);
-            repaired = true;
+            layoutPatch.chatWidth = clamp(cw, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH);
           }
-          // Migration for v0.2.5+: older payloads predate the `provider`
-          // field on ApiConfig. Default to 'minimax' so the existing
-          // endpoint/model keep working unchanged.
-          if (state.api && typeof state.api === 'object' && !('provider' in state.api)) {
-            (state.api as ApiConfig).provider = 'minimax';
-            repaired = true;
+          if (typeof esp !== 'number' || Number.isNaN(esp)) {
+            layoutPatch.editorSplitPct = DEFAULT_EDITOR_SPLIT_PCT;
+          } else if (
+            esp < MIN_EDITOR_SPLIT_PCT ||
+            esp > MAX_EDITOR_SPLIT_PCT
+          ) {
+            layoutPatch.editorSplitPct = clamp(
+              esp,
+              MIN_EDITOR_SPLIT_PCT,
+              MAX_EDITOR_SPLIT_PCT
+            );
+          }
+          if (Object.keys(layoutPatch).length > 0) {
+            repairs.layout = { ...state.layout, ...layoutPatch } as StoreState['layout'];
+          }
+          // ApiConfig migrations. Build a new `api` object when any
+          // field needs to change so React subscribers see the
+          // reference change and Settings re-renders.
+          if (api0 && typeof api0 === 'object') {
+            const apiPatch: Partial<ApiConfig> = {};
+            if (!('provider' in api0)) {
+              apiPatch.provider = 'minimax';
+            }
+            const prevRationale = api0.rationaleRulesOverride;
+            const normalizedRationale = normalizeRationaleRulesOverride(prevRationale);
+            if (normalizedRationale !== prevRationale) {
+              apiPatch.rationaleRulesOverride = normalizedRationale;
+            }
+            const prevSystem = api0.systemMessage;
+            const normalizedSystem = normalizeSystemMessage(prevSystem);
+            if (normalizedSystem !== prevSystem) {
+              apiPatch.systemMessage = normalizedSystem;
+            }
+            if (Object.keys(apiPatch).length > 0) {
+              repairs.api = { ...api0, ...apiPatch } as ApiConfig;
+            }
+          }
+          if (Object.keys(repairs).length > 0) {
+            // Defer to a microtask so we are outside the persist
+            // rehydration call stack. `set` is the zustand store
+            // setter; we re-read it from the closure.
+            queueMicrotask(() => {
+              try {
+                useStore.setState(repairs);
+              } catch {
+                /* store not initialized yet; subsequent renders will
+                   surface the inconsistency */
+              }
+            });
           }
           // Migration for v0.4.0: older payloads predate the
           // `comments` slice. Default to `{}` so the editor never has
@@ -1009,24 +1065,32 @@ export const useStore = create<StoreState>()(
           // array). Wrap each one in a single CommentRound seeded
           // from the existing flat fields so existing users keep
           // their comment history with no visible loss.
+          let commentsPatch: Record<string, Comment[]> | null = null;
           if (typeof state.comments !== 'object' || state.comments === null) {
-            state.comments = {};
-            repaired = true;
+            commentsPatch = {};
           } else {
-            for (const [docId, list] of Object.entries(state.comments)) {
+            const base: Record<string, Comment[]> = {
+              ...(state.comments as Record<string, Comment[]>),
+            };
+            for (const [docId, list] of Object.entries(base)) {
               if (!Array.isArray(list)) {
-                delete (state.comments as Record<string, Comment[]>)[docId];
-                repaired = true;
+                delete base[docId];
+                commentsPatch = base;
                 continue;
               }
+              let changed = false;
               const normalized = list.map((c) => {
                 const wrapped = ensureRoundsShape(c as Comment);
-                if (wrapped !== c) repaired = true;
+                if (wrapped !== c) changed = true;
                 return wrapped;
               });
-              (state.comments as Record<string, Comment[]>)[docId] = normalized;
+              if (changed) {
+                base[docId] = normalized;
+                commentsPatch = base;
+              }
             }
           }
+          if (commentsPatch) repairs.comments = commentsPatch;
           // Migration for the `google-ai-mode` provider: any persisted
           // value not in the closed union (corrupted localStorage, a
           // typo from a future build, an experimental id we later
@@ -1041,43 +1105,25 @@ export const useStore = create<StoreState>()(
             (state.api as ApiConfig).provider !== 'openai' &&
             (state.api as ApiConfig).provider !== 'google-ai-mode'
           ) {
-            (state.api as ApiConfig).provider = 'minimax';
-            repaired = true;
+            repairs.api = {
+              ...(repairs.api ?? (state.api as ApiConfig)),
+              provider: 'minimax',
+            };
           }
           // Migration for Debug Mode: older payloads predate the
           // `debugMode` field. Default to off so the toolbar stays
           // minimal for users upgrading from earlier versions.
           if (typeof state.debugMode !== 'boolean') {
-            state.debugMode = false;
-            repaired = true;
+            repairs.debugMode = false;
           }
           // Migration for UI font size: older payloads predate the
           // `uiFontSize` field. Default to 14px (the implicit body
           // size before this setting existed) and clamp any out-of-
           // range value persisted by a future build.
           if (typeof state.uiFontSize !== 'number') {
-            state.uiFontSize = 14;
-            repaired = true;
+            repairs.uiFontSize = 14;
           } else if (state.uiFontSize < 12 || state.uiFontSize > 20) {
-            state.uiFontSize = clamp(state.uiFontSize, 12, 20);
-            repaired = true;
-          }
-          if (repaired) {
-            try {
-              // Persist the corrected values so we don't re-run the
-              // repair on every load. Include all migrated fields
-              // explicitly — a partial setState leaves stale values
-              // in localStorage and forces re-repair on next boot.
-              useStore.setState({
-                layout: state.layout,
-                api: state.api,
-                debugMode: state.debugMode,
-                uiFontSize: state.uiFontSize,
-                comments: state.comments,
-              });
-            } catch {
-              /* ignore */
-            }
+            repairs.uiFontSize = clamp(state.uiFontSize, 12, 20);
           }
         }
       },

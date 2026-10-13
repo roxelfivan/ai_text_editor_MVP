@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useStore } from '@/store/useStore';
 import type { ProposedEdit } from '@/types';
-import { lineDiff, splitDiff } from '@/utils/diff';
+import { lineDiff } from '@/utils/diff';
+import { remarkPlugins, rehypePlugins } from '@/utils/markdown';
 import { applyEdit, applyEditAtCaret, findEditAnchor } from '@/utils/proposedEdit';
 import { ResizeHandle } from '@/components/ResizeHandle';
 import {
@@ -130,11 +132,9 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
     };
   }, [content, edit.original]);
 
-  // Diff lines between anchor and replacement, for the preview. Context
-  // lines are kept so the split view can render surrounding text on both
-  // sides; the unified view still hides them. We always compute the diff
-  // (even when the anchor is missing) so the card can still render the
-  // AI's original vs replacement as a standalone red/green comparison.
+  // Unified (Inline) view still uses a line-level +/- diff. Split view
+  // renders full Original / Proposed columns as Preview-style markdown
+  // instead of line-synced monospace rows.
   const flatDiff = useMemo(
     () => lineDiff(edit.original, edit.replacement),
     [edit.original, edit.replacement]
@@ -143,7 +143,9 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
     () => flatDiff.filter((l) => l.kind !== 'context'),
     [flatDiff]
   );
-  const splitRows = useMemo(() => splitDiff(flatDiff), [flatDiff]);
+  const hasTextChange =
+    edit.original !== edit.replacement &&
+    (edit.original.length > 0 || edit.replacement.length > 0);
 
   // Resize wiring. The hook only gives us the pointer delta; we apply it
   // to the start size using the dragged handle to compute the new rect.
@@ -358,7 +360,7 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
                 : 'bg-white dark:bg-ape-base text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan'
             }`}
             onClick={() => setViewMode('split')}
-            title="Side-by-side: original on the left, proposed on the right"
+            title="Side-by-side markdown preview: original on the left, proposed on the right"
           >
             Split
           </button>
@@ -397,12 +399,15 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
             </div>
           </div>
         )}
-        {flatDiff.length === 0 || (viewMode === 'unified' && unifiedLines.length === 0) ? (
+        {!hasTextChange || (viewMode === 'unified' && unifiedLines.length === 0) ? (
           <div className="text-xs text-paper-inkSoft dark:text-cyber-muted italic px-3">
             (no textual change)
           </div>
         ) : viewMode === 'split' ? (
-          renderSplit(splitRows)
+          <MarkdownSplitPreview
+            original={edit.original}
+            replacement={edit.replacement}
+          />
         ) : (
           <div className="pe-diff-unified">
             {unifiedLines.map((line, i) => (
@@ -529,11 +534,16 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
           <summary className="cursor-pointer select-none text-paper-inkSoft dark:text-cyber-muted">
             Show what the AI was looking for
           </summary>
-          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-white dark:bg-ape-base p-2 text-[11px] leading-snug text-paper-ink dark:text-cyber-primary border border-paper-hairline dark:border-cyber-border">
-            {edit.original.length > 800
-              ? edit.original.slice(0, 800) + '\n…(truncated)'
-              : edit.original}
-          </pre>
+          <div className="mt-1 max-h-40 overflow-auto rounded bg-white dark:bg-ape-base p-2 text-[11px] leading-snug text-paper-ink dark:text-cyber-primary border border-paper-hairline dark:border-cyber-border prose-md">
+            <ReactMarkdown
+              remarkPlugins={remarkPlugins}
+              rehypePlugins={rehypePlugins}
+            >
+              {edit.original.length > 800
+                ? edit.original.slice(0, 800) + '\n\n*(truncated)*'
+                : edit.original}
+            </ReactMarkdown>
+          </div>
         </details>
       )}
 
@@ -551,90 +561,41 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
 }
 
 /**
- * Render the side-by-side diff: original on the left, proposed on the
- * right. Rows line up vertically — a removed line on the left aligns with
- * an added line on the right at the same row index. When one side has no
- * counterpart for a row, that cell renders as an empty placeholder so the
- * rows stay aligned.
+ * Side-by-side reader preview: Original and Proposed as full markdown
+ * columns (same ReactMarkdown + prose-md stack as the Editor Preview
+ * tab). Not line-synced — use Inline for a textual +/- diff.
  */
-function renderSplit(rows: ReturnType<typeof splitDiff>) {
+function MarkdownSplitPreview({
+  original,
+  replacement,
+}: {
+  original: string;
+  replacement: string;
+}) {
   return (
-    <div className="grid grid-cols-2 font-mono text-xs">
-      {/* Column headers */}
+    <div className="grid grid-cols-2 text-xs min-h-0">
       <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#a83232] dark:text-cyber-danger/80 border-b border-r border-paper-hairline dark:border-cyber-border bg-[rgba(190,50,50,0.06)] dark:bg-cyber-danger/5">
         Original
       </div>
       <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#1f6f3e] dark:text-cyber-cyan/80 border-b border-paper-hairline dark:border-cyber-border bg-[rgba(0,130,70,0.08)] dark:bg-cyber-cyan/5">
         Proposed
       </div>
-      {/* Diff rows */}
-      {rows.map((row, i) => (
-        <SplitRowView key={i} row={row} />
-      ))}
+      <div className="min-h-0 overflow-auto border-r border-paper-hairline dark:border-cyber-border bg-[rgba(190,50,50,0.06)] dark:bg-cyber-danger/10 px-2 py-1.5 prose-md pe-md-split pe-md-split--original">
+        <ReactMarkdown
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={rehypePlugins}
+        >
+          {original || '*Empty*'}
+        </ReactMarkdown>
+      </div>
+      <div className="min-h-0 overflow-auto bg-[rgba(0,130,70,0.08)] dark:bg-cyber-cyan/10 px-2 py-1.5 prose-md pe-md-split pe-md-split--proposed">
+        <ReactMarkdown
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={rehypePlugins}
+        >
+          {replacement || '*Empty*'}
+        </ReactMarkdown>
+      </div>
     </div>
-  );
-}
-
-/**
- * One row of the side-by-side diff: left half (original) + right half
- * (proposed). Each half renders the line text, an empty placeholder, or a
- * "+/-" gutter marker; the cell's background colour reflects the diff kind.
- */
-function SplitRowView({
-  row,
-}: {
-  row: ReturnType<typeof splitDiff>[number];
-}) {
-  const leftKind = row.left?.kind ?? null;
-  const rightKind = row.right?.kind ?? null;
-  // Light mode: very soft sage / brick washes. Dark mode: same opacity
-  // ratios on dark panels.
-  const leftBg =
-    leftKind === 'remove'
-      ? 'bg-[rgba(190,50,50,0.10)] dark:bg-cyber-danger/15'
-      : leftKind === 'context'
-        ? 'bg-paper-panel dark:bg-ape-panel'
-        : 'bg-paper-elevated/50 dark:bg-ape-elevated/40';
-  const rightBg =
-    rightKind === 'add'
-      ? 'bg-[rgba(0,130,70,0.12)] dark:bg-cyber-cyan/15'
-      : rightKind === 'context'
-        ? 'bg-paper-panel dark:bg-ape-panel'
-        : 'bg-paper-elevated/50 dark:bg-ape-elevated/40';
-  const leftText =
-    leftKind === 'remove'
-      ? 'line-through opacity-80 text-[#a83232] dark:text-cyber-danger'
-      : leftKind === 'context'
-        ? 'opacity-90 text-paper-ink dark:text-cyber-primary'
-        : 'text-paper-inkSoft dark:text-cyber-muted';
-  const rightText =
-    rightKind === 'add'
-      ? 'opacity-90 text-[#1f6f3e] dark:text-cyber-cyan'
-      : rightKind === 'context'
-        ? 'opacity-90 text-paper-ink dark:text-cyber-primary'
-        : 'text-paper-inkSoft dark:text-cyber-muted';
-  const leftMarker = leftKind === 'remove' ? '-' : leftKind === 'context' ? ' ' : '';
-  const rightMarker = rightKind === 'add' ? '+' : rightKind === 'context' ? ' ' : '';
-  return (
-    <>
-      <div
-        className={`flex items-start gap-2 px-2 py-0.5 border-r border-paper-hairline dark:border-cyber-border ${leftBg}`}
-      >
-        <span className="inline-block w-3 shrink-0 select-none opacity-60">
-          {leftMarker}
-        </span>
-        <span className={`whitespace-pre-wrap break-words flex-1 ${leftText}`}>
-          {row.left?.text || (row.left ? '' : '\u00a0')}
-        </span>
-      </div>
-      <div className={`flex items-start gap-2 px-2 py-0.5 ${rightBg}`}>
-        <span className="inline-block w-3 shrink-0 select-none opacity-60">
-          {rightMarker}
-        </span>
-        <span className={`whitespace-pre-wrap break-words flex-1 ${rightText}`}>
-          {row.right?.text || (row.right ? '' : '\u00a0')}
-        </span>
-      </div>
-    </>
   );
 }

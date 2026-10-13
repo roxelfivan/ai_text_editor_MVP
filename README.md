@@ -12,35 +12,47 @@
 > See [Credits](#credits) for details.
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/darrylschaefer/ai-text-editor/blob/main/LICENSE)
-[![v0.4.5](https://img.shields.io/badge/version-0.4.5-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.5)
+[![v0.4.6](https://img.shields.io/badge/version-0.4.6-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 ---
 
-## What's new in v0.4.5
+## What's new in v0.4.6
 
-> Comments keep a **multi-round history** with AI **rationales** after
-> Apply. Settings can edit **Rationale Rules**. Apply fits the highlight
-> to the adopted text. Prompts are leaner. **Predict** starts **off**.
+> Auto-snapshot before Send / Apply All, credit-risk cover-memo
+> Rationale Rules with bold+underlined keywords, ProposedEditCard Split
+> view as Preview-style markdown, and a draggable Write / Preview
+> divider with Preview-style rendering in Revision History.
 
 Highlights:
 
-1. **Comment rounds.** After **Send to AI**, editing the comment body
-   starts a new round instead of overwriting the last one. The popover
-   **Rationale** section lists every round (`+` / `−` independently)
-   with that round's comment, anchored text, and applied diffs.
-2. **Required `rationale` on every proposed-edit.** Default rules ask
-   for ≥7 numbered points (`1`, `2`, `3a`, `3b`, `3c`, `4`, `5`) and
-   ≥100 words (with `3a`–`3c` each ≥30 words). Override the format in
-   **Settings** → **Rationale Rules** without changing the fence schema.
-3. **Apply re-anchors to the replacement** so the yellow highlight and
-   selection match the adopted wording exactly.
-4. **Predict off by default** — click **Predict** (or `⌘/Ctrl + \\`)
-   when you want inline suggestions.
+1. **Auto-snapshot on Chat actions.** Chat **Send** and **Apply N
+   changes** now save a revision (`Before AI send` / `Before Apply
+   All`) before mutating the document, so the prior state is
+   recoverable from Revision history.
+2. **Credit-risk cover-memo Rationale Rules.** Default rules are
+   written as a credit-risk cover memo proposing amendments to bank
+   policies / procedures / guidelines. Point 3 expands into `3.1`
+   (risk the Bank faced before), `3.2` (risk the amendment
+   mitigates), and `3.3` (why risk management is stronger after).
+   Keywords are bold **and** underlined (`**<u>…</u>**`).
+3. **ProposedEditCard Split = Editor Preview.** Split view now
+   renders Original and Proposed as Preview-style markdown columns
+   (full-document markdown), keeping the existing Inline line-diff
+   for byte-level comparison.
+4. **Draggable Write / Preview divider.** The Split editor divider
+   is now draggable; the write-pane share is stored as
+   `layout.editorSplitPct` (20–80%, persisted).
+5. **Revision history Preview.** The right pane defaults to a
+   Preview-style markdown rendering of the selected snapshot, with a
+   **Diff** toggle for the existing line diff.
+6. **Settings always shows the live default.** Stale frozen
+   Rationale Rules / System Message overrides are now cleared on
+   rehydration and the textarea mirrors the current built-in
+   (instead of the old frozen text).
 
-See [Comment + Send to AI](#comment--send-to-ai),
-[How AI edits work](#how-ai-edits-work), and
-[RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.4.5 changelog.
+See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.4.6
+changelog and the v0.4.5 entry above for prior highlights.
 
 ---
 
@@ -88,8 +100,10 @@ toggles in the topbar.
 - **B / I / U toolbar** — toggle bold (`**…**`), italic (`*…*`),
   and underline (`<u>…</u>`); also `⌘/Ctrl + B/I/U`.
 - **Per-document font size** — independent of the global UI font size.
-- **Revision history** — **Save** a snapshot from the toolbar, then
-  open **History** (top-bar clock / `⌘/Ctrl + H`) to diff and restore.
+- **Revision history** — **Save** a snapshot from the toolbar, or
+  let Chat **Send** / **Apply N changes** auto-snapshot
+  (`Before AI send` / `Before Apply All`). Open **History** (top-bar
+  clock / `⌘/Ctrl + H`) to diff and restore.
 - **Import text from photos or PDFs** — in-browser OCR (PaddleOCR +
   ONNX Runtime), then Markdown rewrite via your configured model
   before insert at the caret. See [OCR / PDF import](#ocr--pdf-import).
@@ -103,7 +117,8 @@ toggles in the topbar.
   and **Google AI Mode (no key)**. Switch in **Settings** (⚙).
 - **Proposed-edit cards** — when the model emits a `proposed-edit`
   fence (with `summary`, `rationale`, `original`, `replacement`),
-  you get a track-changes style diff with **Apply** / **Reject** /
+  you get **Split** (Original / Proposed as Editor Preview–style
+  markdown) or **Inline** (line diff), plus **Apply** / **Reject** /
   **Apply N changes**. See [How AI edits work](#how-ai-edits-work).
 - **Predict** — inline sentence completion (**off by default**).
   Click **Predict** or press `⌘/Ctrl + \\` to turn it on and
@@ -213,9 +228,12 @@ Controls how the model fills the `rationale` field on each
 The fence JSON schema is always sent separately and is not
 overridden here.
 
-Default rules (v0.4.5): ≥100 words; ≥7 numbered points
-(`1`, `2`, `3a`, `3b`, `3c`, `4`, `5`); `3a`–`3c` each ≥30 words
-covering why / paragraph / document. Edit or **Reset** in
+Default rules: credit-risk cover-memo voice (policy / procedure /
+guideline amendments); GitHub-flavored Markdown; ≥100 words; ≥7
+numbered points (`1`, `2`, `3.1`, `3.2`, `3.3`, `4`, `5`); `3.1`–
+`3.3` each ≥30 words covering pre-change bank risk, risk mitigated,
+and why risk management is stronger; **keywords bold and
+underlined** as `**<u>keyword</u>**`. Edit or **Reset** in
 **Settings** → **Rationale Rules**.
 
 ### Temperature
@@ -255,7 +273,7 @@ the editor parses into a track-changes style card:
 {
   "id": "p1",
   "summary": "Tighten the second sentence",
-  "rationale": "1. …\\n2. …\\n3a. …\\n3b. …\\n3c. …\\n4. …\\n5. …",
+  "rationale": "1. … **<u>keyword</u>** …\\n2. …\\n3.1 …",
   "original": "<verbatim substring of the current document>",
   "replacement": "<the new text>"
 }
@@ -266,8 +284,11 @@ the editor parses into a track-changes style card:
 
 - `original` is a byte-for-byte copy of a substring in the document.
   No paraphrasing. If no exact match exists, that change is skipped.
-- `rationale` is required. Format is controlled by **Settings →
-  Rationale Rules** (default: ≥7 points, ≥100 words — see above).
+- `rationale` is required Markdown in a **credit-risk cover-memo**
+  style. Format is controlled by **Settings → Rationale Rules**
+  (default: ≥7 points including `3.1`–`3.3` risk sub-points, ≥100
+  words, keywords as `**<u>…</u>**` — see above). Rendered as
+  markdown in the comment popover after Apply.
 - Multiple fences in one reply are allowed; one per change.
 - `original` should be as short as possible while still uniquely
   locating the text.
@@ -275,6 +296,8 @@ the editor parses into a track-changes style card:
 
 ### Per-card actions
 
+- **Split / Inline** — **Split** shows Original and Proposed as
+  Preview-style markdown; **Inline** keeps a unified line diff.
 - **Apply** — write the change into the document at the anchored
   position, re-anchor the related comment highlight (and selection)
   to the **replacement** text, and record the rationale on the
@@ -285,10 +308,14 @@ the editor parses into a track-changes style card:
 - **Reject with feedback** — stage a reason for a follow-up chat
   turn; on **Send** the staged reasons are folded into a single
   prompt so the model can address them all together.
-- **Apply N changes** (chat footer) — bulk-apply every anchored
-  edit in that reply. Un-anchorable edits are skipped silently
-  with a footer line like `Applied 4 of 5 changes (1 skipped —
-  not anchored)`.
+- **Apply N changes** (chat footer) — auto-snapshots the document
+  (`Before Apply All`), then bulk-applies every anchored edit in
+  that reply. Un-anchorable edits are skipped silently with a
+  footer line like `Applied 4 of 5 changes (1 skipped — not
+  anchored)`.
+
+Chat **Send** also auto-saves a `Before AI send` revision before
+the turn starts.
 
 ### Example
 
@@ -296,8 +323,9 @@ the editor parses into a track-changes style card:
 2. In the chat panel, check **include selection**.
 3. Type: `Make this more concise.` and press `⌘/Ctrl + Enter`.
 4. The AI streams back a `proposed-edit` card.
-5. Read the diff, then click **Apply**. The document updates; open
-   the related comment badge to read the rationale.
+5. Read Original / Proposed in **Split**, then click **Apply**. The
+   document updates; open the related comment badge to read the
+   markdown rationale.
 
 ---
 
@@ -517,6 +545,7 @@ per-release notes also ship on the GitHub release pages.
 
 | Version | Highlights |
 | --- | --- |
+| [v0.4.6](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6) | Auto-snapshot on Send / Apply All, credit-risk cover-memo Rationale Rules with bold+underlined keywords, ProposedEditCard Split as Preview-style markdown, draggable Write / Preview divider, Revision history Preview pane, live-default Settings sync. |
 | [v0.4.5](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.5) | Comment **rounds** + **rationales**, Settings Rationale Rules, Apply re-anchors to replacement, leaner prompts, **Predict** off by default. |
 | [v0.4.1](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.1) | **Send to AI** whole-document consistency; per-comment context; doc outline instead of verbatim document. |
 | [v0.4.0](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.0) | **Comment** + **Send to AI**, **Google AI Mode (no key)**, title-case **Predict**, Welcome quick start. |
