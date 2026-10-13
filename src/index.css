@@ -447,7 +447,7 @@ html.dark .proposed-edit-card .pe-comment {
    ========================================================================= */
 .resize-handle {
   background-color: transparent;
-}
+  }
 .resize-handle:hover,
 .resize-handle:active {
   background-color: rgba(27, 70, 54, 0.20); /* moss-tinged on paper */
@@ -455,6 +455,27 @@ html.dark .proposed-edit-card .pe-comment {
 html.dark .resize-handle:hover,
 html.dark .resize-handle:active {
   background-color: rgba(111, 191, 153, 0.35); /* moss in dark mode */
+}
+
+/* ---- Settings prompt-textarea wrapper ----
+ *
+ * The Main system message + Rationale rules textareas in the
+ * Settings modal are user-resizable. Each textarea lives inside a
+ * `settings-textarea-wrap` div that owns the size; the textarea
+ * itself fills the wrapper at 100% width and height. The three
+ * `ResizeHandle`s (bottom, right, br) are rendered as siblings of
+ * the textarea so the user can drag any of them to grow the box. */
+.settings-textarea-wrap {
+  position: relative;
+  display: flex;
+}
+.settings-textarea-wrap > textarea {
+  flex: 1 1 auto;
+  /* Prevent the textarea's native scrollbar from pushing the
+   * wrapper out of bounds. The wrapper itself is fixed-size, so
+   * the textarea scrolls inside it when content overflows. */
+  min-width: 0;
+  min-height: 0;
 }
 
 .edge-anchor {
@@ -669,7 +690,16 @@ html.dark .cm-margin__badge--outdated {
 
 /* Composer / popover shared shell. The same primitives work on
    desktop and mobile; the `--sheet` modifier switches to a
-   bottom-sheet layout on `< sm` viewports. */
+   bottom-sheet layout on `< sm` viewports.
+   ---
+   The popover is user-resizable (see the 8 `.resize-handle` elements
+   rendered inside it). When the user has chosen a size, the inline
+   `style.width` / `style.height` set on the wrapper override the
+   `width: 320px` default here. The `display: flex; flex-direction:
+   column` + `min-height: 0` chain lets the body / rationale sections
+   scroll inside the box when the content outgrows the chosen height,
+   so resizing the popover actually shows the full rationale instead
+   of clipping it. */
 .cm-composer,
 .cm-popover {
   width: 320px;
@@ -689,6 +719,18 @@ html.dark .cm-popover {
   border-color: #2a2825;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
   color: #f5f1e6;
+}
+/* Popover-only: enable the user-resize flex chain. The composer is
+ * still a fixed-size box (anchored to the selection), so it keeps
+ * its non-flex behaviour. */
+.cm-popover:not(.cm-popover--sheet) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* Allow content to flow downward when the user grows the height,
+   * but keep the body / rationale scrolling when content overflows
+   * the chosen height. */
+  overflow: hidden;
 }
 
 .cm-composer__textarea,
@@ -760,6 +802,9 @@ html.dark .cm-popover__counter {
 .cm-popover__footer {
   display: flex;
   gap: 8px;
+  /* Footer stays at its natural height; the rationale section
+   * (above) takes the rest of the popover's height and scrolls. */
+  flex-shrink: 0;
 }
 
 .cm-composer__btn,
@@ -814,6 +859,8 @@ html.dark .cm-popover__btn--primary:disabled {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+  /* Keep the title row visible when the rationale grows tall. */
+  flex-shrink: 0;
 }
 .cm-popover__index {
   display: inline-flex;
@@ -885,9 +932,340 @@ html.dark .cm-popover__banner {
   font-size: 14px;
   line-height: 1.5;
   margin-bottom: 8px;
+  /* Let the body shrink so the rationale can claim the rest of
+   * the popover's height when the user resizes it. */
+  flex-shrink: 0;
 }
 .cm-popover__empty {
   color: #9a9181;
+}
+
+/* ---- Rationale section (bottom of the popover) ----
+ *
+ * New in v0.4.x+ — the popover shows a per-round history of
+ * adopted-edit rationales here. Each round is collapsible; the
+ * latest round is always expanded. We deliberately use a
+ * border-top divider (instead of a margin gap) so the rationale
+ * section reads as a distinct block of the popover rather than
+ * more body text. */
+.cm-popover__rationale {
+  border-top: 1px dashed #e5dfd3;
+  margin-top: 8px;
+  padding-top: 8px;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+  /* The rationale is the only section in the popover that can
+   * grow tall (each entry carries a multi-paragraph explanation
+   * + a diff preview). Letting it claim the rest of the
+   * popover's height via `flex: 1 1 auto` + `min-height: 0` and
+   * scroll internally means resizing the popover actually
+   * reveals more of the rationale instead of just clipping
+   * it. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Subtle padding so the scrollbar doesn't sit flush against
+   * the dashed divider above. */
+  padding-right: 2px;
+}
+html.dark .cm-popover__rationale {
+  border-top-color: #2a2825;
+}
+.cm-popover__rationale--empty {
+  /* The empty-state placeholder uses the same shell so the
+   * section boundary is consistent whether or not there's
+   * history to show. */
+  padding-bottom: 4px;
+}
+.cm-popover__rationale-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6fbf99;
+  margin-bottom: 6px;
+}
+html.dark .cm-popover__rationale-header {
+  color: #00e5ff;
+}
+.cm-popover__rationale-count {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: #7a7062;
+}
+html.dark .cm-popover__rationale-count {
+  color: #9a9181;
+}
+.cm-popover__rationale-placeholder,
+.cm-popover__round-placeholder {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #7a7062;
+  margin: 0;
+  font-style: italic;
+}
+html.dark .cm-popover__rationale-placeholder,
+html.dark .cm-popover__round-placeholder {
+  color: #9a9181;
+}
+
+/* One round block inside the rationale section. */
+.cm-popover__round {
+  border: 1px solid #e5dfd3;
+  border-radius: 4px;
+  background: #f7f2e7;
+  margin-bottom: 6px;
+}
+html.dark .cm-popover__round {
+  border-color: #2a2825;
+  background: #1c1a17;
+}
+.cm-popover__round--latest {
+  /* Latest round gets a thin accent border so the user can
+   * scan to "what just happened" without reading the headers. */
+  border-color: rgba(232, 93, 59, 0.45);
+  box-shadow: 0 0 0 1px rgba(232, 93, 59, 0.08);
+}
+html.dark .cm-popover__round--latest {
+  border-color: rgba(0, 229, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.12);
+}
+.cm-popover__round--empty {
+  /* Empty rounds (sent but no applied edits yet) read as
+   * placeholder-only — quieter background to signal "nothing
+   * to see yet". */
+  background: transparent;
+  border-style: dashed;
+}
+.cm-popover__round-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  color: #514a3e;
+}
+html.dark .cm-popover__round-toggle {
+  color: #c8c2b3;
+}
+.cm-popover__round-toggle:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+html.dark .cm-popover__round-toggle:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.cm-popover__round-num {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6fbf99;
+}
+html.dark .cm-popover__round-num {
+  color: #00e5ff;
+}
+.cm-popover__round-meta {
+  flex: 1;
+  font-size: 10px;
+  color: #7a7062;
+}
+html.dark .cm-popover__round-meta {
+  color: #9a9181;
+}
+.cm-popover__round-caret {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+  font-size: 12px;
+  width: 12px;
+  text-align: center;
+  color: #7a7062;
+}
+html.dark .cm-popover__round-caret {
+  color: #9a9181;
+}
+.cm-popover__round-body {
+  padding: 4px 8px 8px 8px;
+  border-top: 1px solid #e5dfd3;
+}
+html.dark .cm-popover__round-body {
+  border-top-color: #2a2825;
+}
+.cm-popover__round-field {
+  margin-bottom: 8px;
+}
+.cm-popover__round-field-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7a7062;
+  margin-bottom: 2px;
+}
+html.dark .cm-popover__round-field-label {
+  color: #9a9181;
+}
+.cm-popover__round-comment {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #2a2620;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+html.dark .cm-popover__round-comment {
+  color: #e8e2d4;
+}
+.cm-popover__round-snippet {
+  margin: 0;
+  padding: 6px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #514a3e;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 3px;
+  max-height: 6.5em;
+  overflow: auto;
+}
+html.dark .cm-popover__round-snippet {
+  color: #c8c2b3;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* One rationale entry inside a round. */
+.cm-popover__rationale-entry {
+  padding: 6px 0;
+  border-bottom: 1px dashed #e5dfd3;
+}
+.cm-popover__rationale-entry:last-child {
+  border-bottom: none;
+}
+html.dark .cm-popover__rationale-entry {
+  border-bottom-color: #2a2825;
+}
+.cm-popover__rationale-entry-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.cm-popover__rationale-summary {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2a2520;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html.dark .cm-popover__rationale-summary {
+  color: #f5f1e6;
+}
+.cm-popover__rationale-time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+  font-size: 10px;
+  color: #7a7062;
+}
+html.dark .cm-popover__rationale-time {
+  color: #9a9181;
+}
+.cm-popover__rationale-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #2a2520;
+  margin: 0 0 4px 0;
+  white-space: pre-wrap;
+  /* Reserve at least 5 rows of vertical space (12px × 1.5 × 5 = 90px)
+   * so a short / missing rationale never collapses to a single line.
+   * Longer rationales (5+ numbered points, ≥100 words) grow past this
+   * floor and scroll inside `.cm-popover__rationale`. */
+  min-height: calc(12px * 1.5 * 5);
+  overflow-y: auto;
+}
+html.dark .cm-popover__rationale-body {
+  color: #f5f1e6;
+}
+.cm-popover__rationale-body--empty {
+  color: #7a7062;
+}
+html.dark .cm-popover__rationale-body--empty {
+  color: #9a9181;
+}
+.cm-popover__rationale-diff {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  background: #ffffff;
+  border: 1px solid #e5dfd3;
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin-top: 4px;
+  max-height: 5.6em;
+  overflow: auto;
+}
+html.dark .cm-popover__rationale-diff {
+  background: #0d0c0a;
+  border-color: #2a2825;
+}
+.cm-popover__rationale-diff-add {
+  color: #1f6f3e;
+}
+html.dark .cm-popover__rationale-diff-add {
+  color: #00e5ff;
+}
+.cm-popover__rationale-diff-remove {
+  color: #a83232;
+  text-decoration: line-through;
+  text-decoration-color: rgba(168, 50, 50, 0.5);
+}
+html.dark .cm-popover__rationale-diff-remove {
+  color: #ff7864;
+}
+.cm-popover__rationale-diff-marker {
+  display: inline-block;
+  width: 12px;
+  text-align: center;
+  user-select: none;
+  opacity: 0.7;
+}
+.cm-popover__rationale-diff-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---- Margin badge rationale indicator ----
+ *
+ * Tiny green/cyan dot rendered on the margin badge when the
+ * comment has at least one applied-edit entry. Helps the user
+ * scan the right column for comments that already have a
+ * rationale attached. */
+.cm-margin__badge-rationale {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #6fbf99;
+  box-shadow: 0 0 0 1.5px #ffffff;
+}
+html.dark .cm-margin__badge-rationale {
+  background: #00e5ff;
+  box-shadow: 0 0 0 1.5px #0d0c0a;
 }
 
 /* Tray at the bottom of the write pane. */

@@ -1,11 +1,29 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { Comment } from '@/types';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import type { Comment, CommentRound, ProposedEditRationale } from '@/types';
 import {
   COMMENT_HARD_CAP,
   COMMENT_SOFT_CAP,
   clampCommentBody,
   clampToContainer,
 } from '@/utils/comments';
+import { lineDiff } from '@/utils/diff';
+import { ResizeHandle } from '@/components/ResizeHandle';
+import {
+  useDragResize,
+  applyHandle,
+  clamp,
+  MIN_POPOVER_WIDTH,
+  MAX_POPOVER_WIDTH,
+  MIN_POPOVER_HEIGHT,
+  MAX_POPOVER_HEIGHT,
+  type ResizeHandle as HandleName,
+} from '@/hooks/useDragResize';
 
 /**
  * Non-modal read/edit popover for a single comment. Anchored to a
@@ -68,7 +86,88 @@ export function CommentPopover({
     height: 200,
   });
 
+  // User-resizable size. Persisted per comment id in localStorage so
+  // the popover remembers the user's chosen size across opens. When
+  // unset, the popover falls back to its CSS default (320px wide,
+  // auto height) — the resize handles still work, but the popover
+  // starts un-sized.
+  const [userSize, setUserSize] = useState<{
+    w: number;
+    h: number;
+  } | null>(() => {
+    const loaded = loadPopoverSize(comment.id);
+    return loaded ? { w: loaded.width, h: loaded.height } : null;
+  });
+  // Drag origin captured when a handle is pressed so `onDelta` can
+  // compute the next size relative to the size at the start of the
+  // drag (rather than relative to a 0 baseline that drifts over
+  // time).
+  const startSizeRef = useRef<{ w: number; h: number }>(
+    userSize ?? { w: 320, h: 200 }
+  );
+  const activeHandleRef = useRef<HandleName | null>(null);
+
+  // Drag wiring — free mode so all 8 handles work, then `applyHandle`
+  // picks the right axes from the active handle.
+  const { start: beginResize } = useDragResize({
+    mode: 'free',
+    onDelta: ({ dx, dy }) => {
+      const handle = activeHandleRef.current;
+      if (!handle) return;
+      const next = applyHandle(
+        handle,
+        startSizeRef.current.w,
+        startSizeRef.current.h,
+        dx,
+        dy
+      );
+      const w = clamp(next.w, MIN_POPOVER_WIDTH, MAX_POPOVER_WIDTH);
+      const h = clamp(next.h, MIN_POPOVER_HEIGHT, MAX_POPOVER_HEIGHT);
+      // Skip the setState if nothing changed so the popover doesn't
+      // re-render on every idle rAF tick.
+      if (
+        userSize &&
+        userSize.w === w &&
+        userSize.h === h
+      ) {
+        return;
+      }
+      setUserSize({ w, h });
+    },
+  });
+  const onResizePointerDown = (handle: HandleName) =>
+    (e: React.PointerEvent<HTMLElement>) => {
+      // Capture the size at drag start. Prefer the user's chosen
+      // size; fall back to the live measured size so a first-time
+      // drag from the CSS default still feels continuous.
+      if (userSize) {
+        startSizeRef.current = userSize;
+      } else if (wrapperRef.current) {
+        const r = wrapperRef.current.getBoundingClientRect();
+        startSizeRef.current = { w: r.width, h: r.height };
+      } else {
+        startSizeRef.current = { w: 320, h: 200 };
+      }
+      activeHandleRef.current = handle;
+      beginResize(handle, e);
+    };
+
   const isSent = comment.sent;
+
+  // Persist the user's size whenever it changes (debounced via the
+  // setState coalescing — no rAF dedupe needed because the value
+  // only changes when the drag actually crosses a pixel boundary).
+  useEffect(() => {
+    if (!userSize) return;
+    try {
+      localStorage.setItem(
+        popoverSizeKey(comment.id),
+        JSON.stringify({ width: userSize.w, height: userSize.h })
+      );
+    } catch {
+      /* ignore quota / private-mode errors */
+    }
+  }, [userSize, comment.id]);
 
   // Measure the popover's actual rendered size after mount + on
   // resize. We use `useLayoutEffect` so the first paint already
@@ -139,6 +238,14 @@ export function CommentPopover({
     onClose();
   };
 
+  // The size we use to position the popover is the user's chosen
+  // size when set, otherwise the live measured size (which is the
+  // CSS default before the user has dragged any handle). This keeps
+  // the anchor math consistent before AND after a resize.
+  const positioningSize = userSize
+    ? { width: userSize.w, height: userSize.h }
+    : boxSize;
+
   const style: React.CSSProperties | undefined = bottomSheet
     ? undefined
     : position
@@ -155,21 +262,29 @@ export function CommentPopover({
             bottom: window.innerHeight,
           };
           const preferredTopLeft = {
-            left: position.left - boxSize.width,
+            left: position.left - positioningSize.width,
             top: position.top,
           };
           const clamped = clampToContainer(
             { left: 0, top: 0, right: c.right - c.left, bottom: c.bottom - c.top },
-            boxSize,
+            positioningSize,
             {
               left: preferredTopLeft.left - c.left,
               top: preferredTopLeft.top - c.top,
             }
           );
+          // Inline width/height so the user's chosen size wins over
+          // the CSS `width: 320px` default. `maxHeight` keeps the
+          // popover inside the editor pane even on short viewports.
           return {
             position: 'absolute',
             left: `${clamped.left + c.left}px`,
             top: `${clamped.top + c.top}px`,
+            width: userSize ? `${userSize.w}px` : undefined,
+            height: userSize ? `${userSize.h}px` : undefined,
+            maxHeight: userSize
+              ? `${Math.min(userSize.h, c.bottom - c.top - 16)}px`
+              : undefined,
           };
         })()
       : { position: 'absolute', left: '50%', top: '50%' };
@@ -256,6 +371,8 @@ export function CommentPopover({
         </div>
       )}
 
+      <RationaleSection comment={comment} />
+
       <div className="cm-popover__footer">
         {editing ? (
           <>
@@ -294,7 +411,10 @@ export function CommentPopover({
             <button
               type="button"
               className="cm-popover__btn cm-popover__btn--primary"
-              onClick={() => setEditing(true)}
+              onClick={() => {
+                setDraft(comment.body);
+                setEditing(true);
+              }}
               onMouseDown={(e) => e.preventDefault()}
             >
               Edit
@@ -302,6 +422,313 @@ export function CommentPopover({
           </>
         )}
       </div>
+
+      {/* 8 resize handles. Same shape as the ProposedEditCard so the
+          affordance reads consistently across the app: thin hit
+          areas on every edge + corner, with a slightly thicker
+          bottom-right corner for users on a trackpad. Hidden when
+          the popover is in bottom-sheet mode — there's no useful
+          surface to resize on mobile, and the popover is already
+          full-width. */}
+      {!bottomSheet && (
+        <>
+          <ResizeHandle handle="top" onPointerDown={onResizePointerDown('top')} />
+          <ResizeHandle handle="bottom" onPointerDown={onResizePointerDown('bottom')} />
+          <ResizeHandle handle="left" onPointerDown={onResizePointerDown('left')} />
+          <ResizeHandle handle="right" onPointerDown={onResizePointerDown('right')} />
+          <ResizeHandle handle="tl" onPointerDown={onResizePointerDown('tl')} />
+          <ResizeHandle handle="tr" onPointerDown={onResizePointerDown('tr')} />
+          <ResizeHandle handle="bl" onPointerDown={onResizePointerDown('bl')} />
+          <ResizeHandle handle="br" onPointerDown={onResizePointerDown('br')} />
+        </>
+      )}
     </div>
   );
+}
+
+/**
+ * Bottom section of the popover that lists EVERY round on the
+ * comment (oldest → newest). Each round is independently
+ * collapsible (+ / −). A round card shows the user's comment for
+ * that round, the anchored snippet, and any applied-edit
+ * rationales (original → replacement + AI rationale).
+ *
+ * The latest round starts expanded; older rounds start collapsed.
+ */
+function RationaleSection({ comment }: { comment: Comment }) {
+  // Defensive: legacy payloads (pre-rounds) get wrapped on the fly
+  // by the store; we re-normalize here so we never crash on a
+  // comment that somehow slipped through.
+  const rounds = useMemo<CommentRound[]>(() => {
+    if (Array.isArray(comment.rounds) && comment.rounds.length > 0) {
+      return comment.rounds;
+    }
+    return [
+      {
+        id: 'legacy',
+        start: comment.start,
+        end: comment.end,
+        snippet: comment.snippet,
+        body: comment.body,
+        createdAt: comment.createdAt,
+        updatedAt: comment.updatedAt,
+        outdated: comment.outdated,
+        sent: comment.sent,
+        applied: [],
+      },
+    ];
+  }, [comment]);
+
+  const latestIdx = rounds.length - 1;
+
+  return (
+    <div className="cm-popover__rationale">
+      <div className="cm-popover__rationale-header">
+        Rationale
+        {rounds.length > 1 ? (
+          <span className="cm-popover__rationale-count">
+            {rounds.length} rounds
+          </span>
+        ) : null}
+      </div>
+      {rounds.map((round, i) => (
+        <RoundRationale
+          key={round.id}
+          round={round}
+          isLatest={i === latestIdx}
+          roundNumber={i + 1}
+          totalRounds={rounds.length}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One round card: user comment + anchored snippet + applied-edit
+ * rationales. Independently expandable via + / −.
+ */
+function RoundRationale({
+  round,
+  isLatest,
+  roundNumber,
+  totalRounds,
+}: {
+  round: CommentRound;
+  isLatest: boolean;
+  roundNumber: number;
+  totalRounds: number;
+}) {
+  // Latest round starts expanded; older rounds start collapsed.
+  // Each card owns its own expanded state so + / − are independent.
+  const [expanded, setExpanded] = useState(isLatest);
+  // When a brand-new latest round appears (follow-up edit), open it.
+  useEffect(() => {
+    if (isLatest) setExpanded(true);
+  }, [isLatest, round.id]);
+
+  const appliedCount = round.applied.length;
+  return (
+    <div
+      className={[
+        'cm-popover__round',
+        isLatest ? 'cm-popover__round--latest' : '',
+        appliedCount === 0 ? 'cm-popover__round--empty' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <button
+        type="button"
+        className="cm-popover__round-toggle"
+        onClick={() => setExpanded((v) => !v)}
+        onMouseDown={(e) => e.preventDefault()}
+        aria-expanded={expanded}
+        aria-label={
+          expanded
+            ? `Collapse round ${roundNumber}`
+            : `Expand round ${roundNumber}`
+        }
+      >
+        <span className="cm-popover__round-num">
+          Round {roundNumber}
+          {totalRounds > 1 ? ` / ${totalRounds}` : ''}
+        </span>
+        <span className="cm-popover__round-meta">
+          {appliedCount === 0
+            ? round.sent
+              ? 'Sent · no applied edits'
+              : 'Draft'
+            : appliedCount === 1
+              ? '1 applied edit'
+              : `${appliedCount} applied edits`}
+        </span>
+        <span className="cm-popover__round-caret" aria-hidden>
+          {expanded ? '−' : '+'}
+        </span>
+      </button>
+      {expanded && (
+        <div className="cm-popover__round-body">
+          <div className="cm-popover__round-field">
+            <div className="cm-popover__round-field-label">Comment</div>
+            <p className="cm-popover__round-comment">
+              {round.body.trim() ? (
+                round.body
+              ) : (
+                <em>(empty comment)</em>
+              )}
+            </p>
+          </div>
+          {round.snippet.trim() ? (
+            <div className="cm-popover__round-field">
+              <div className="cm-popover__round-field-label">
+                Anchored text
+              </div>
+              <pre className="cm-popover__round-snippet">{round.snippet}</pre>
+            </div>
+          ) : null}
+          {appliedCount === 0 ? (
+            <p className="cm-popover__round-placeholder">
+              {round.sent
+                ? 'This round was sent to the AI, but no proposed edits from the response were applied yet. Apply an edit in chat to record a rationale here.'
+                : 'Edit this comment and Send to AI, then apply a proposed edit to record a rationale for this round.'}
+            </p>
+          ) : (
+            round.applied.map((entry) => (
+              <RationaleEntry key={`${round.id}-${entry.editId}-${entry.appliedAt}`} entry={entry} />
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A single adopted edit's rationale: AI summary + rationale body +
+ * a one-line +/- diff preview + relative timestamp.
+ */
+function RationaleEntry({ entry }: { entry: ProposedEditRationale }) {
+  // One-line diff: render only the +/- lines, capped so a long
+  // replacement doesn't push the popover off-screen. The diff
+  // helper returns a list of `add` / `remove` / `context` lines;
+  // we keep up to 2 of each so the preview stays informative.
+  const diffLines = useMemo(() => {
+    const all = lineDiff(entry.original, entry.replacement);
+    const adds = all.filter((l) => l.kind === 'add').slice(0, 2);
+    const removes = all.filter((l) => l.kind === 'remove').slice(0, 2);
+    // Interleave: remove lines first, then add lines, so the
+    // preview reads as "old → new" top-to-bottom.
+    return [...removes, ...adds];
+  }, [entry.original, entry.replacement]);
+
+  const relative = useMemo(
+    () => formatRelativeTime(entry.appliedAt),
+    [entry.appliedAt]
+  );
+
+  return (
+    <div className="cm-popover__rationale-entry">
+      <div className="cm-popover__rationale-entry-header">
+        <span
+          className="cm-popover__rationale-summary"
+          title={entry.summary}
+        >
+          {entry.summary || `Change ${entry.editId}`}
+        </span>
+        <span
+          className="cm-popover__rationale-time"
+          title={new Date(entry.appliedAt).toLocaleString()}
+        >
+          {relative}
+        </span>
+      </div>
+      {entry.rationale ? (
+        <p className="cm-popover__rationale-body">{entry.rationale}</p>
+      ) : (
+        <p className="cm-popover__rationale-body cm-popover__rationale-body--empty">
+          <em>No rationale was provided for this change.</em>
+        </p>
+      )}
+      {diffLines.length > 0 && (
+        <div className="cm-popover__rationale-diff" aria-hidden>
+          {diffLines.map((l, i) => (
+            <div
+              key={i}
+              className={
+                l.kind === 'add'
+                  ? 'cm-popover__rationale-diff-add'
+                  : l.kind === 'remove'
+                    ? 'cm-popover__rationale-diff-remove'
+                    : ''
+              }
+            >
+              <span className="cm-popover__rationale-diff-marker">
+                {l.kind === 'add' ? '+' : l.kind === 'remove' ? '−' : ' '}
+              </span>
+              <span className="cm-popover__rationale-diff-text">
+                {l.text || ' '}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Compact "x minutes ago" formatter for the rationale entry
+ * timestamp. Mirrors the pattern used in `Editor.tsx` for the
+ * "saved Xs ago" label so the UI reads consistently.
+ */
+function formatRelativeTime(at: number): string {
+  const diffSec = Math.max(0, Math.floor((Date.now() - at) / 1000));
+  if (diffSec < 5) return 'just now';
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const mins = Math.floor(diffSec / 60);
+  if (mins < 60) return `${mins} min${mins === 1 ? '' : 's'} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+/**
+ * localStorage key for the popover's user-chosen size. Scoped to
+ * the comment id so each popover remembers its own size, and
+ * namespaced under the same key prefix the editor already uses.
+ */
+function popoverSizeKey(commentId: string): string {
+  return `ai-text-editor-mvp:popover-size:${commentId}`;
+}
+
+/**
+ * Read the popover's persisted size from localStorage. Returns
+ * `null` when the user has never resized the popover for this
+ * comment, or when the stored value is malformed. Defensive against
+ * JSON parse errors and out-of-range values from older payloads.
+ */
+function loadPopoverSize(
+  commentId: string
+): { width: number; height: number } | null {
+  try {
+    const raw = localStorage.getItem(popoverSizeKey(commentId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed.width === 'number' &&
+      typeof parsed.height === 'number' &&
+      parsed.width >= MIN_POPOVER_WIDTH &&
+      parsed.width <= MAX_POPOVER_WIDTH &&
+      parsed.height >= MIN_POPOVER_HEIGHT &&
+      parsed.height <= MAX_POPOVER_HEIGHT
+    ) {
+      return { width: parsed.width, height: parsed.height };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

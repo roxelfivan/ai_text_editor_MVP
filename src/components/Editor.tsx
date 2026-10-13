@@ -211,9 +211,9 @@ export function Editor() {
   const apiConfigured =
     requiresApiKey(api.provider) && Boolean(api.apiKey && api.apiEndpoint);
   // User-controlled on/off toggle for the inline-completion feature.
-  // Defaults to ON when the API is configured; the user toggles it
-  // by clicking the Predict button in the toolbar.
-  const [inlineOn, setInlineOn] = useState<boolean>(true);
+  // Defaults to OFF so predictions never fire until the user
+  // explicitly enables them via the Predict button.
+  const [inlineOn, setInlineOn] = useState<boolean>(false);
   // Ref mirror so the click handler (and queued microtasks) can read
   // the latest value without depending on a stale closure.
   const inlineOnRef = useRef<boolean>(inlineOn);
@@ -291,6 +291,26 @@ export function Editor() {
     };
     window.addEventListener('mvp:get-selection', handler);
     return () => window.removeEventListener('mvp:get-selection', handler);
+  }, []);
+
+  // After Apply, ProposedEditCard / ChatPanel dispatch this so the
+  // textarea selection rectangle matches the adopted replacement.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ start: number; end: number }>).detail;
+      if (
+        !detail ||
+        typeof detail.start !== 'number' ||
+        typeof detail.end !== 'number'
+      ) {
+        return;
+      }
+      restoreCaret(textareaRef.current, detail.start, detail.end, {
+        preserveScroll: true,
+      });
+    };
+    window.addEventListener('mvp:select-range', handler);
+    return () => window.removeEventListener('mvp:select-range', handler);
   }, []);
 
   // Listen for OCR-insert events from the import media button. Inserts
@@ -434,7 +454,8 @@ export function Editor() {
           (c, i) =>
             c.start === currentComments[i].start &&
             c.end === currentComments[i].end &&
-            c.outdated === currentComments[i].outdated
+            c.outdated === currentComments[i].outdated &&
+            c.snippet === currentComments[i].snippet
         );
       if (!same) {
         replaceCommentsForDocument(doc.id, next);
@@ -697,6 +718,10 @@ export function Editor() {
       );
       if (!snippet) return;
       const now = Date.now();
+      // Seed round 1 of the new comment. The top-level
+      // convenience fields mirror the latest round so existing
+      // call-sites (margin badges, re-anchoring, batch format)
+      // keep working unchanged.
       const comment: Comment = {
         id: uuid(),
         documentId: doc.id,
@@ -708,6 +733,20 @@ export function Editor() {
         updatedAt: now,
         outdated: false,
         sent: false,
+        rounds: [
+          {
+            id: uuid(),
+            start: pendingSelection.start,
+            end: pendingSelection.end,
+            snippet,
+            body: text,
+            createdAt: now,
+            updatedAt: now,
+            outdated: false,
+            sent: false,
+            applied: [],
+          },
+        ],
       };
       addComment(comment);
       setComposerOpen(false);

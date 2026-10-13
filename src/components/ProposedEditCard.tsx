@@ -191,6 +191,34 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
     const r = applyEdit(doc.content, edit.original, edit.replacement);
     if (!r.ok) return;
     useStore.getState().updateDocumentContent(doc.id, r.next);
+    // Record the adopted edit against the comment that produced it.
+    // The store's `recordAppliedEdit` resolves the right comment by
+    // walking the document's comment batch that was sent to AI, so
+    // we don't need to know the comment id here. We also pass the
+    // exact new anchor range (the replaced text's start/end in the
+    // post-apply document) so the comment re-anchors to the
+    // ADOPTED text — not the original — preventing the highlight
+    // from drifting to a wider span on the next re-anchor pass.
+    const newStart = r.anchor.idx;
+    const newEnd = r.anchor.idx + edit.replacement.length;
+    useStore.getState().recordAppliedEdit({
+      documentId: doc.id,
+      messageId,
+      editId: edit.id,
+      summary: edit.summary,
+      rationale: edit.rationale ?? '',
+      original: edit.original,
+      replacement: edit.replacement,
+      appliedAt: Date.now(),
+      newAnchor: { start: newStart, end: newEnd },
+    });
+    // Select the adopted replacement in the editor so the caret /
+    // selection rectangle matches the new highlight exactly.
+    window.dispatchEvent(
+      new CustomEvent('mvp:select-range', {
+        detail: { start: newStart, end: newEnd },
+      })
+    );
     setStatus({ kind: 'applied' });
   };
 
@@ -219,6 +247,29 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
     );
     if (!r.ok) return;
     useStore.getState().updateDocumentContent(doc.id, r.next);
+    // Record the adopted edit against the comment that produced it.
+    // Force-apply uses the same recordAppliedEdit path; the comment
+    // lookup falls back to snippet overlap so the rationale is
+    // attached to the most likely producing comment. The new anchor
+    // is the post-apply range of the inserted replacement.
+    const insertedStart = editorState.selectionStart ?? 0;
+    const insertedEnd = insertedStart + edit.replacement.length;
+    useStore.getState().recordAppliedEdit({
+      documentId: doc.id,
+      messageId,
+      editId: edit.id,
+      summary: edit.summary,
+      rationale: edit.rationale ?? '',
+      original: edit.original,
+      replacement: edit.replacement,
+      appliedAt: Date.now(),
+      newAnchor: { start: insertedStart, end: insertedEnd },
+    });
+    window.dispatchEvent(
+      new CustomEvent('mvp:select-range', {
+        detail: { start: insertedStart, end: insertedEnd },
+      })
+    );
     setStatus({ kind: 'applied' });
   };
 

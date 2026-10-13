@@ -41,6 +41,46 @@ export const COMMENT_UNDO_STACK_LIMIT = 20;
  * returns a comment with `outdated: true` otherwise. The original
  * comment is never mutated.
  */
+/**
+ * Mirror top-level `(start, end, snippet, outdated)` onto the
+ * comment's latest round so CommentLayer / margin badges (which
+ * read the top-level fields) and round history stay in sync.
+ */
+function withLatestRoundAnchor(
+  comment: Comment,
+  patch: {
+    start: number;
+    end: number;
+    snippet: string;
+    outdated?: boolean;
+  }
+): Comment {
+  const next: Comment = {
+    ...comment,
+    start: patch.start,
+    end: patch.end,
+    snippet: patch.snippet,
+    outdated: patch.outdated ?? comment.outdated,
+    updatedAt: Date.now(),
+  };
+  if (Array.isArray(comment.rounds) && comment.rounds.length > 0) {
+    const lastIdx = comment.rounds.length - 1;
+    const last = comment.rounds[lastIdx];
+    next.rounds = [
+      ...comment.rounds.slice(0, lastIdx),
+      {
+        ...last,
+        start: patch.start,
+        end: patch.end,
+        snippet: patch.snippet,
+        outdated: patch.outdated ?? last.outdated,
+        updatedAt: Date.now(),
+      },
+    ];
+  }
+  return next;
+}
+
 export function reanchorComment(doc: string, comment: Comment): Comment {
   if (comment.outdated) {
     // Once outdated, skip auto-recovery — keep the flag until the
@@ -48,19 +88,41 @@ export function reanchorComment(doc: string, comment: Comment): Comment {
     return comment;
   }
 
+  // After Apply, the highlight must cover the ADOPTED replacement,
+  // not the pre-change original (which is gone) and not a wider
+  // fuzzy reconstruction. Prefer the latest applied replacement
+  // as the search target whenever one exists.
+  const lastApplied =
+    Array.isArray(comment.rounds) && comment.rounds.length > 0
+      ? comment.rounds[comment.rounds.length - 1].applied[
+          comment.rounds[comment.rounds.length - 1].applied.length - 1
+        ]
+      : undefined;
+  const targetSnippet =
+    lastApplied?.replacement && lastApplied.replacement.length > 0
+      ? lastApplied.replacement
+      : comment.snippet;
+
   // 1) Offset-preserving check.
   const safeStart = Math.max(0, Math.min(comment.start, doc.length));
   const safeEnd = Math.max(safeStart, Math.min(comment.end, doc.length));
   if (
     safeEnd > safeStart &&
-    doc.slice(safeStart, safeEnd) === comment.snippet
+    doc.slice(safeStart, safeEnd) === targetSnippet
   ) {
-    return comment;
+    // Offsets already cover the adopted text. Sync snippet if a
+    // prior pass left it pointing at the pre-change original.
+    if (comment.snippet === targetSnippet) return comment;
+    return withLatestRoundAnchor(comment, {
+      start: safeStart,
+      end: safeEnd,
+      snippet: targetSnippet,
+    });
   }
 
   // Empty snippet (a degenerate comment from older data) → nothing to
   // search for. Mark outdated so the user can clean it up.
-  if (!comment.snippet) {
+  if (!targetSnippet) {
     return { ...comment, outdated: true };
   }
 
@@ -69,48 +131,49 @@ export function reanchorComment(doc: string, comment: Comment): Comment {
   const localStart = Math.max(0, comment.start - localWindow);
   const localEnd = Math.min(doc.length, comment.end + localWindow);
   const localHay = doc.slice(localStart, localEnd);
-  const localIdx = localHay.indexOf(comment.snippet);
+  const localIdx = localHay.indexOf(targetSnippet);
   if (localIdx !== -1) {
     const newStart = localStart + localIdx;
-    const newEnd = newStart + comment.snippet.length;
-    return {
-      ...comment,
+    const newEnd = newStart + targetSnippet.length;
+    return withLatestRoundAnchor(comment, {
       start: newStart,
       end: newEnd,
-      updatedAt: Date.now(),
-    };
+      snippet: targetSnippet,
+    });
   }
 
   // 3) Full-document fuzzy match via the existing helper.
-  const anchor = findEditAnchor(doc, comment.snippet);
+  const anchor = findEditAnchor(doc, targetSnippet);
   if (anchor) {
-    return {
-      ...comment,
+    return withLatestRoundAnchor(comment, {
       start: anchor.idx,
       end: anchor.idx + anchor.length,
-      updatedAt: Date.now(),
-    };
+      // Keep the authoritative target (esp. applied replacement)
+      // rather than a fuzzy-expanded doc slice.
+      snippet: targetSnippet,
+    });
   }
 
   // 4) Substring fallback — first/last 30 chars anchored independently.
-  const head = comment.snippet.slice(0, 30);
-  const tail = comment.snippet.slice(-30);
-  if (head && tail && head !== tail) {
-    const headIdx = doc.indexOf(head);
-    if (headIdx !== -1) {
-      const tailIdx = doc.indexOf(tail, headIdx + head.length);
-      if (tailIdx !== -1) {
-        const newEnd = tailIdx + tail.length;
-        if (newEnd > headIdx) {
-          // Rebuild the snippet from the new range so subsequent
-          // re-anchors use the relocated text.
-          return {
-            ...comment,
-            start: headIdx,
-            end: newEnd,
-            snippet: doc.slice(headIdx, newEnd),
-            updatedAt: Date.now(),
-          };
+  // Skip this for applied-replacement anchors: expanding via head/tail
+  // is what produced oversized highlights that no longer fit the
+  // Proposed text. Only use it for never-applied comment snippets.
+  if (!lastApplied?.replacement) {
+    const head = targetSnippet.slice(0, 30);
+    const tail = targetSnippet.slice(-30);
+    if (head && tail && head !== tail) {
+      const headIdx = doc.indexOf(head);
+      if (headIdx !== -1) {
+        const tailIdx = doc.indexOf(tail, headIdx + head.length);
+        if (tailIdx !== -1) {
+          const newEnd = tailIdx + tail.length;
+          if (newEnd > headIdx) {
+            return withLatestRoundAnchor(comment, {
+              start: headIdx,
+              end: newEnd,
+              snippet: doc.slice(headIdx, newEnd),
+            });
+          }
         }
       }
     }
@@ -205,8 +268,8 @@ export function formatCommentBatch(
     lines.push(
       `[${id}] (paragraph ${paraIndex + 1}/${totalParagraphs}, doc offset ${c.start}–${c.end})`,
       `"${c.snippet}"`,
-      `Context before: ${JSON.stringify(before)}`,
-      `Context after:  ${JSON.stringify(after)}`,
+      `Before: ${JSON.stringify(before)}`,
+      `After: ${JSON.stringify(after)}`,
       `Comment: ${c.body}`,
       ''
     );

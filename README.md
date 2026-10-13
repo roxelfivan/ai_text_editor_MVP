@@ -12,39 +12,35 @@
 > See [Credits](#credits) for details.
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/darrylschaefer/ai-text-editor/blob/main/LICENSE)
-[![v0.4.1](https://img.shields.io/badge/version-0.4.1-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.1)
+[![v0.4.5](https://img.shields.io/badge/version-0.4.5-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.5)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 ---
 
-## What's new in v0.4.1
+## What's new in v0.4.5
 
-> **Send to AI** now requires **whole-document consistency** for every
-> comment-driven fix, and the per-turn prompt is typically **70%+ cheaper
-> on long documents** without losing any of the byte-exact anchoring
-> the proposed-edit cards depend on.
+> Comments keep a **multi-round history** with AI **rationales** after
+> Apply. Settings can edit **Rationale Rules**. Apply fits the highlight
+> to the adopted text. Prompts are leaner. **Predict** starts **off**.
 
-Three things changed in the comment-batch prompt:
+Highlights:
 
-1. **The "address each `[id]` independently" instruction is gone.** The
-   system note now requires every replacement to stay consistent in
-   voice, terminology, character names, facts, numbers, and style with
-   the rest of the document, and tells the model to emit *additional*
-   `proposed-edit` fences when a fix logically requires a corresponding
-   change elsewhere.
-2. **Per-comment blocks now carry local context.** Each `[cN]` in the
-   user message also carries the paragraph index, the byte offset, and
-   a 120-character context window on each side of the verbatim snippet.
-   The model no longer has to fuzzy-match the snippet back into the
-   full document.
-3. **The document is delivered as a structural outline, not a verbatim
-   blob.** `sys-current-doc` now emits one `[pN] offset S–E: <first 60
-   chars>` line per paragraph instead of the entire document body. On
-   a comment-batch turn the verbatim document is no longer inlined at
-   all.
+1. **Comment rounds.** After **Send to AI**, editing the comment body
+   starts a new round instead of overwriting the last one. The popover
+   **Rationale** section lists every round (`+` / `−` independently)
+   with that round's comment, anchored text, and applied diffs.
+2. **Required `rationale` on every proposed-edit.** Default rules ask
+   for ≥7 numbered points (`1`, `2`, `3a`, `3b`, `3c`, `4`, `5`) and
+   ≥100 words (with `3a`–`3c` each ≥30 words). Override the format in
+   **Settings** → **Rationale Rules** without changing the fence schema.
+3. **Apply re-anchors to the replacement** so the yellow highlight and
+   selection match the adopted wording exactly.
+4. **Predict off by default** — click **Predict** (or `⌘/Ctrl + \\`)
+   when you want inline suggestions.
 
-See [Comment + Send to AI](#comment--send-to-ai) for the full flow and
-[RELEASE_NOTES.md](./RELEASE_NOTES.md) for the v0.4.1 changelog.
+See [Comment + Send to AI](#comment--send-to-ai),
+[How AI edits work](#how-ai-edits-work), and
+[RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.4.5 changelog.
 
 ---
 
@@ -106,13 +102,15 @@ toggles in the topbar.
 - **Three providers** — MiniMax (OpenAI-compatible, default), OpenAI,
   and **Google AI Mode (no key)**. Switch in **Settings** (⚙).
 - **Proposed-edit cards** — when the model emits a `proposed-edit`
-  fence, you get a track-changes style diff with **Apply** /
-  **Reject** / **Apply N changes** (apply every anchored edit in
-  one shot). See [How AI edits work](#how-ai-edits-work).
-- **Predict** — inline sentence completion with `Tab` to accept,
-  `Esc` to reject, or `⌘/Ctrl + \\` to trigger manually.
-- **Customizable system prompt** — the assistant's writing voice is
-  yours to set.
+  fence (with `summary`, `rationale`, `original`, `replacement`),
+  you get a track-changes style diff with **Apply** / **Reject** /
+  **Apply N changes**. See [How AI edits work](#how-ai-edits-work).
+- **Predict** — inline sentence completion (**off by default**).
+  Click **Predict** or press `⌘/Ctrl + \\` to turn it on and
+  request a suggestion; `Tab` accepts, `Esc` rejects.
+- **Customizable System Message + Rationale Rules** — set the
+  assistant voice and the per-edit rationale format in **Settings**
+  (each has **Reset** to the built-in default).
 
 ### Comment + Send to AI (v0.4.0+)
 
@@ -121,7 +119,11 @@ toggles in the topbar.
   margin badge.
 - **Edit / Delete anytime** — open a badge for **Edit** / **Delete**,
   including after the comment has been sent. `⌘/Ctrl + Z` undoes
-  the last comment op.
+  the last comment op. Editing the body after a send starts a
+  **new round** (history is preserved).
+- **Rationale history** — after you **Apply** a proposed edit, open
+  the badge to read the AI's rationale under **Rationale**, with
+  one collapsible card per round.
 - **Outdated** — when edits move or delete the anchored text and
   re-anchoring fails, the badge flips to **Outdated** so you can
   clean it up.
@@ -196,13 +198,25 @@ VITE_DEFAULT_MODEL=MiniMax-M2.7
 The in-app **Settings** modal always wins — these values only set
 the first-run defaults.
 
-### System prompt
+### System Message
 
-The default system message is a writing-assistant prompt
-("be concise, specific, and preserve the user's voice when
-revising…"). Edit it in **Settings** → **System instructions**.
-Changes apply to the next chat send; the existing chat history is
-unaffected.
+The default is a short writing-assistant prompt (concise, preserve
+voice, one `proposed-edit` fence per paragraph, `rationale` per
+Rationale Rules). Edit it in **Settings** → **System Message**.
+**Reset** restores the built-in default. Changes apply to the next
+chat send; existing chat history is unaffected.
+
+### Rationale Rules
+
+Controls how the model fills the `rationale` field on each
+`proposed-edit` fence (shown in the comment popover after Apply).
+The fence JSON schema is always sent separately and is not
+overridden here.
+
+Default rules (v0.4.5): ≥100 words; ≥7 numbered points
+(`1`, `2`, `3a`, `3b`, `3c`, `4`, `5`); `3a`–`3c` each ≥30 words
+covering why / paragraph / document. Edit or **Reset** in
+**Settings** → **Rationale Rules**.
 
 ### Temperature
 
@@ -223,8 +237,8 @@ higher for more creative brainstorming. Persisted in `localStorage`.
 | `⌘ / Ctrl + Shift + C` | Toggle chat panel |
 | `⌘ / Ctrl + B / I / U` (in editor) | Bold / Italic / Underline |
 | `⌘ / Ctrl + Z` (in editor, after a comment op) | Undo last comment op |
-| `⌘ / Ctrl + \\` | Manual **Predict** trigger |
-| `Tab` / `Esc` (Predict pill) | Accept / reject inline completion |
+| `⌘ / Ctrl + \\` | Toggle **Predict** on and request a suggestion |
+| `Tab` / `Esc` (when Predict is on) | Accept / reject inline completion |
 | `⌘ / Ctrl + Enter` (in comment composer / popover) | Save comment |
 | `Esc` (in comment composer / popover) | Cancel / close |
 
@@ -241,6 +255,7 @@ the editor parses into a track-changes style card:
 {
   "id": "p1",
   "summary": "Tighten the second sentence",
+  "rationale": "1. …\\n2. …\\n3a. …\\n3b. …\\n3c. …\\n4. …\\n5. …",
   "original": "<verbatim substring of the current document>",
   "replacement": "<the new text>"
 }
@@ -250,8 +265,9 @@ the editor parses into a track-changes style card:
 **Rules the model follows (see `src/api/chat.ts`):**
 
 - `original` is a byte-for-byte copy of a substring in the document.
-  No paraphrasing. If the document says "Section 1. Background",
-  `original` starts with exactly that text.
+  No paraphrasing. If no exact match exists, that change is skipped.
+- `rationale` is required. Format is controlled by **Settings →
+  Rationale Rules** (default: ≥7 points, ≥100 words — see above).
 - Multiple fences in one reply are allowed; one per change.
 - `original` should be as short as possible while still uniquely
   locating the text.
@@ -260,10 +276,11 @@ the editor parses into a track-changes style card:
 ### Per-card actions
 
 - **Apply** — write the change into the document at the anchored
-  position. Fails if `original` no longer matches (e.g. you edited
-  the document since the reply was generated); the card flips to
-  **Missing** and offers a **Force-apply…** action that anchors at
-  the current caret instead.
+  position, re-anchor the related comment highlight (and selection)
+  to the **replacement** text, and record the rationale on the
+  comment's current round. Fails if `original` no longer matches;
+  the card flips to **Missing** and offers **Force-apply…** at the
+  current caret.
 - **Reject** — discard the change.
 - **Reject with feedback** — stage a reason for a follow-up chat
   turn; on **Send** the staged reasons are folded into a single
@@ -279,14 +296,15 @@ the editor parses into a track-changes style card:
 2. In the chat panel, check **include selection**.
 3. Type: `Make this more concise.` and press `⌘/Ctrl + Enter`.
 4. The AI streams back a `proposed-edit` card.
-5. Read the diff, then click **Apply**. The document updates.
+5. Read the diff, then click **Apply**. The document updates; open
+   the related comment badge to read the rationale.
 
 ---
 
 ## Comment + Send to AI
 
-This is the headline flow introduced in v0.4.0 and tightened in
-v0.4.1.
+Headline flow from v0.4.0, prompt efficiency from v0.4.1, and
+**rounds + rationales** from v0.4.5.
 
 ### The user-facing flow
 
@@ -298,46 +316,46 @@ v0.4.1.
    popover.
 5. Click **Send to AI** under the editor when you want the model to
    address every comment in one chat turn.
+6. **Apply** a proposed-edit card. Open the badge again: **Rationale**
+   shows Round 1 with the AI explanation and a short diff preview.
+7. For a follow-up, **Edit** the comment body (this starts Round 2),
+   **Send to AI** again, and Apply. Expand each round with `+` / `−`.
 
-### How the prompt is built (v0.4.1)
+### How the prompt is built (v0.4.5)
 
 The **Send to AI** tray dispatches the comment batch as the user's
 chat message. `buildRequestMessages` in `src/api/chat.ts` then pushes
-five system messages around the user's turn:
+system messages around the user's turn:
 
-1. **`sys`** — the user's customizable system prompt.
+1. **`sys`** — the user's customizable System Message.
 2. **`sys-current-doc`** — a structural outline of the document
-   (`[pN] offset S–E: <first 60 chars>` per paragraph) plus a
-   length / paragraph count header. The verbatim document is
-   **not** inlined on comment-batch turns.
-3. **`sys-proposed-edit-rules`** — the `proposed-edit` fence schema
-   and rules, kept as a stable contract independent of the document
-   and the user's system prompt.
+   (`[pN]@offset: <first 60 chars>` per paragraph). The verbatim
+   document is **not** inlined on comment-batch turns.
+3. **`sys-proposed-edit-rules`** — fence schema (always) + Rationale
+   Rules (default or your Settings override).
 4. The **user message** — one block per comment, in document order:
    ```
    [c1] (paragraph 7/32, doc offset 1840–1920)
    "<verbatim snippet>"
-   Context before: "<120 chars before>"
-   Context after:  "<120 chars after>"
+   Before: "<120 chars before>"
+   After: "<120 chars after>"
    Comment: <user's comment body>
    ```
-5. **`*-comments-batch`** — the one-shot instruction note that
-   requires whole-document consistency (voice, terminology,
-   character names, facts, numbers, style) and tells the model to
-   emit *additional* `proposed-edit` fences when a fix logically
-   requires a corresponding change elsewhere.
+5. **`*-comments-batch`** — address every `[id]`, keep whole-document
+   consistency, emit extra fences when a fix implies another change,
+   and do not quote Before/After back.
 
-The reply comes back as the same proposed-edit cards you'd get from
-a normal chat rewrite — one per comment, plus any extra fences the
-model emits to keep the document coherent.
+The reply comes back as proposed-edit cards — one per comment, plus
+any extra fences for coherence. Applied rationales are stored on the
+comment's current round in `localStorage` with the rest of the app
+state.
 
 ### Token savings
 
-For a 10,000-character document with 5 short comments, the v0.4.0
-prompt sent roughly 3,000 tokens; v0.4.1 sends roughly 900 — about
-a 70% reduction — and the consistency requirements are *stronger*
-than before. See the [v0.4.1 release notes](./RELEASE_NOTES.md) for
-the worked example.
+v0.4.1 cut long-document comment-batch prompts by ~70% vs v0.4.0
+(outline instead of full doc + per-comment context). v0.4.5 further
+shortens the fixed instruction blocks (~50% fewer characters) while
+keeping the same contracts. See [RELEASE_NOTES.md](./RELEASE_NOTES.md).
 
 ---
 
@@ -406,37 +424,41 @@ src/
 ├── index.css                # Tailwind layers + markdown + diff + theme.
 ├── types.ts                 # Shared TS types.
 ├── api/
-│   └── chat.ts              # OpenAI-compatible streaming client +
-│                            # request-message builder, doc outline,
-│                            # proposed-edit + comment-batch system notes.
+│   └── chat.ts              # Streaming client + request builder,
+│                            # doc outline, proposed-edit schema +
+│                            # rationale rules, comment-batch notes.
 ├── config/
 │   └── providers.tsx        # MiniMax / OpenAI / Google AI Mode presets.
 ├── store/
-│   └── useStore.ts          # zustand store + localStorage persistence.
+│   └── useStore.ts          # zustand store + localStorage persistence
+│                            # (documents, chats, comments/rounds, API).
 ├── hooks/
-│   └── useDragResize.ts     # Resizable chat / sidebar logic.
+│   ├── useDragResize.ts     # Resizable chat / sidebar / Settings /
+│   │                        # popover / prompt textareas.
+│   └── useInlineCompletion.ts
 ├── utils/
-│   ├── comments.ts          # Comment re-anchor, batch format, selection rect.
-│   ├── diff.ts              # Line-diff helper for revisions.
+│   ├── comments.ts          # Re-anchor, batch format, selection rect.
+│   ├── diff.ts              # Line-diff helper for revisions / rationales.
 │   ├── googleAiMode.ts      # Google AI Mode deep-link builder.
 │   ├── ocr.ts               # PaddleOCR pipeline for image import.
 │   ├── pdf.ts               # pdfjs-dist wrapper.
-│   ├── proposedEdit.ts      # Proposed-edit parsing + formatting.
+│   ├── proposedEdit.ts      # Parse / apply proposed-edit fences.
 │   └── ocrMarkdown.ts       # Chat-model Markdown reformatting of OCR output.
 └── components/
     ├── Sidebar.tsx
-    ├── Editor.tsx           # Textarea + mirror + comment layer + toolbar.
+    ├── Editor.tsx           # Textarea + mirror + comment layer + toolbar
+    │                        # (Predict defaults off).
     ├── ChatPanel.tsx        # Streaming chat + proposed-edit cards +
-    │                        # comment-batch send handler.
+    │                        # comment-batch send / Apply All.
     ├── CommentLayer.tsx     # Mirror overlay (highlights under textarea).
-    ├── CommentMargin.tsx    # Numbered margin badges.
+    ├── CommentMargin.tsx    # Numbered badges (+ rationale indicator).
     ├── CommentComposer.tsx  # Floating composer after **Comment**.
-    ├── CommentPopover.tsx   # Edit / Delete popover on a badge.
+    ├── CommentPopover.tsx   # Edit / Delete + multi-round Rationale UI.
     ├── CommentTray.tsx      # **Send to AI** tray under the editor.
     ├── PromptLibrary.tsx
     ├── ProposedEditCard.tsx # Apply / Reject cards for AI diffs.
     ├── RevisionHistory.tsx
-    ├── SettingsModal.tsx
+    ├── SettingsModal.tsx    # Provider, System Message, Rationale Rules.
     ├── ImportMediaButton.tsx
     ├── EdgeAnchor.tsx       # Side / top edge-anchor toggles.
     ├── ResizeHandle.tsx     # Drag-to-resize between sidebar/editor/chat.
@@ -444,11 +466,12 @@ src/
 ```
 
 State lives in a single zustand store (`src/store/useStore.ts`),
-persisted to `localStorage` under the `ai-text-editor-mvp` key.
-Messages between components use `window` `CustomEvent`s
-(`mvp:editor-selection`, `mvp:fill-chat`, `mvp:send-comments`,
-`mvp:chat-streaming`, `mvp:mark-comments-sent`, `mvp:insert-text`)
-to keep the editor / chat / comment layer one-way coupled.
+persisted to `localStorage` under the `ai-text-editor-mvp` key
+(including comment `rounds` and applied rationales). Messages between
+components use `window` `CustomEvent`s (`mvp:editor-selection`,
+`mvp:fill-chat`, `mvp:send-comments`, `mvp:chat-streaming`,
+`mvp:mark-comments-sent`, `mvp:insert-text`, `mvp:select-range`)
+to keep the editor / chat / comment layer loosely coupled.
 
 ---
 
@@ -494,7 +517,8 @@ per-release notes also ship on the GitHub release pages.
 
 | Version | Highlights |
 | --- | --- |
-| [v0.4.1](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.1) | **Send to AI** requires whole-document consistency; per-comment context windows; doc outline instead of verbatim document. |
+| [v0.4.5](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.5) | Comment **rounds** + **rationales**, Settings Rationale Rules, Apply re-anchors to replacement, leaner prompts, **Predict** off by default. |
+| [v0.4.1](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.1) | **Send to AI** whole-document consistency; per-comment context; doc outline instead of verbatim document. |
 | [v0.4.0](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.0) | **Comment** + **Send to AI**, **Google AI Mode (no key)**, title-case **Predict**, Welcome quick start. |
 | [v0.3.4](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.4) | Import → Markdown, OCR works under CSP, security hardening, topbar icons. |
 | [v0.3.3](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.3) | **Apply All** for proposed edits, B/I/U toolbar, Debug Mode, global UI font size. |

@@ -141,7 +141,16 @@ export async function streamChatCompletion(
 export function buildRequestMessages(
   history: ChatMessage[],
   systemMessage: string,
-  currentDocument?: { title: string; content: string } | null
+  currentDocument?: { title: string; content: string } | null,
+  /**
+   * Optional override for the rationale rules block. When the user
+   * has customized `api.rationaleRulesOverride` in Settings, the
+   * chat pipeline passes that string here. When undefined or empty,
+   * the hard-coded `PROPOSED_EDIT_RULES_DEFAULT` is used so the
+   * prompt stays sensible for callers that don't know about the
+   * override (tests, other entry points).
+   */
+  rationaleRulesOverride?: string
 ): ChatMessage[] {
   const out: ChatMessage[] = [];
   if (systemMessage.trim()) {
@@ -164,31 +173,28 @@ export function buildRequestMessages(
   //      and rules. Lifted out of the per-turn doc block so it
   //      reads as a stable contract, and so the user can keep their
   //      own `systemMessage` focused on tone / style.
+  // Detect comment-batch once — used for the doc outline signal and
+  // the per-batch instruction note below.
+  const lastUser = [...history].reverse().find((m) => m.role === 'user');
+  const isCommentBatch =
+    !!lastUser && looksLikeCommentBatch(lastUser.content);
+
   if (currentDocument && currentDocument.content.trim()) {
     const title = currentDocument.title?.trim() || 'Untitled';
-    // Detect "is the most recent user message a comment batch?"
-    // here so we can decide whether to inline the referenced
-    // paragraphs. We do this *before* emitting the doc system
-    // message so the cost is paid at most once.
-    const lastUser = [...history].reverse().find((m) => m.role === 'user');
-    const isCommentBatch =
-      !!lastUser && looksLikeCommentBatch(lastUser.content);
     out.push({
       id: 'sys-current-doc',
       role: 'system',
       content:
-        `The user currently has a document open titled "${title}". ` +
-        `When the user says "read the document", "summarize this", ` +
-        `"rewrite this", or otherwise refers to "the document" / "the text", ` +
-        `they mean the content below. Use it as the working source of truth ` +
-        `for the conversation.\n\n` +
+        `Open document "${title}". Treat the outline below as the ` +
+        `working text when the user refers to "the document" / ` +
+        `"this text".\n\n` +
         buildDocOutline(title, currentDocument.content, isCommentBatch),
       createdAt: 0,
     });
     out.push({
       id: 'sys-proposed-edit-rules',
       role: 'system',
-      content: PROPOSED_EDIT_RULES,
+      content: buildProposedEditRulesMessage(rationaleRulesOverride),
       createdAt: 0,
     });
   }
@@ -199,56 +205,38 @@ export function buildRequestMessages(
       out.push({
         id: `${m.id}-sel`,
         role: 'system',
-        content: `The user has highlighted the following text from their document. Refer to it when relevant:\n\n"""\n${m.selection}\n"""`,
+        content:
+          `Highlighted selection from the document:\n\n"""\n` +
+          `${m.selection}\n"""`,
         createdAt: 0,
       });
     }
   }
 
-  // If the most recent user message is a comment batch (the format
-  // emitted by `formatCommentBatch` in `src/utils/comments.ts`), inject
-  // a one-shot system note that tells the model how to address each
-  // `[id]` block. We detect the format by matching the
-  // `[cN] (paragraph ...)` header that `formatCommentBatch` always
-  // produces.
-  const lastUser = [...history].reverse().find((m) => m.role === 'user');
-  if (lastUser && looksLikeCommentBatch(lastUser.content)) {
+  // Comment-batch instruction: how to address each `[id]` block.
+  // Keep labels in sync with `formatCommentBatch`.
+  if (lastUser && isCommentBatch) {
     out.push({
       id: `${lastUser.id}-comments-batch`,
       role: 'system',
       content:
-        `The user's latest message is a batch of inline comments on the ` +
-        `open document. Each block has the shape:\n\n` +
-        `  [id] (paragraph N of M, doc offset S–E)\n` +
-        `  "<verbatim quoted text>"\n` +
-        `  Context before: "<120 chars before>"\n` +
-        `  Context after:  "<120 chars after>"\n` +
-        `  Comment: <user's comment text>\n\n` +
-        `Address EVERY [id]. For each one, either:\n` +
-        `  - Emit a proposed-edit fence with the concrete fix, OR\n` +
-        `  - Briefly explain why no concrete edit is possible.\n\n` +
-        `CONSISTENCY RULES (read carefully):\n` +
-        `- Each [id] is a slice of one larger document. Your replacement ` +
-        `for any single [id] MUST stay consistent in voice, terminology, ` +
-        `character names, facts, numbers, and style with the rest of the ` +
-        `document. Use the per-block "Context before/after" lines (and ` +
-        `the document outline / paragraphs you were given, if any) to ` +
-        `verify.\n` +
-        `- If a fix in one [id] logically requires a corresponding change ` +
-        `in another [id] or elsewhere in the document (e.g. a renamed ` +
-        `term, a corrected date, a contradiction with another passage), ` +
-        `emit an ADDITIONAL proposed-edit fence for that change. Do not ` +
-        `silently leave inconsistencies.\n` +
-        `- If two [id]s conflict, prioritize the one whose fix keeps the ` +
-        `document internally coherent, and briefly note the conflict in ` +
-        `your prose.\n` +
-        `- Keep comments tied to their [id] throughout your reply so the ` +
-        `user can match your response back to each specific comment.\n\n` +
-        `TOKEN BUDGET:\n` +
-        `- The "Context before/after" lines are only here so you can ` +
-        `locate the snippet and stay consistent with surrounding text. ` +
-        `Do NOT quote them back in your reply, and do not mention them ` +
-        `in your reasoning prose.`,
+        `Latest user message is an inline-comment batch. Each block:\n` +
+        `  [id] (paragraph N/M, doc offset S–E)\n` +
+        `  "<verbatim snippet>"\n` +
+        `  Before: "…"\n` +
+        `  After: "…"\n` +
+        `  Comment: <text>\n\n` +
+        `Address every [id]: emit a proposed-edit fence, or briefly ` +
+        `say why no edit is possible.\n` +
+        `Consistency:\n` +
+        `- Replacements must match the document's voice, terms, ` +
+        `names, facts, numbers, style. Use Before/After and the ` +
+        `doc outline.\n` +
+        `- If one fix implies another change elsewhere, emit an ` +
+        `extra proposed-edit; do not leave inconsistencies.\n` +
+        `- On conflicting [id]s, prefer document coherence; note ` +
+        `the conflict briefly.\n` +
+        `- Tie replies to [id]s. Do not quote Before/After back.`,
       createdAt: 0,
     });
   }
@@ -277,35 +265,93 @@ function looksLikeCommentBatch(content: string): boolean {
  * needing to mention the schema, and the rules themselves are
  * pushed as their own system message (separately inspectable /
  * cacheable) rather than being inlined into a giant doc block.
+ *
+ * Split into two parts so the user can override ONLY the
+ * rationale-format rules without losing the JSON schema reminder
+ * for the proposed-edit fence:
+ *
+ *   - `PROPOSED_EDIT_SCHEMA_RULES` — JSON shape, original /
+ *     replacement byte-exact rules. Always sent.
+ *   - `PROPOSED_EDIT_RULES_DEFAULT` — the rationale-format rules
+ *     that follow. Replaced by `api.rationaleRulesOverride` when
+ *     the user has customized them in Settings.
+ *
+ * The Settings modal's "Reset" button restores
+ * `PROPOSED_EDIT_RULES_DEFAULT` exactly.
  */
-const PROPOSED_EDIT_RULES: string =
-  `When you propose changes to the document above, emit one or more ` +
-  `fenced blocks using the "proposed-edit" info-string, in this exact ` +
-  `shape (one fence per change):\n\n` +
+const PROPOSED_EDIT_SCHEMA_RULES: string =
+  `To propose document edits, emit one fence per change ` +
+  `(info-string exactly "proposed-edit"):\n\n` +
   '```proposed-edit\n' +
   `{\n` +
-  `  "id": "<short unique string, e.g. 'p1'>",\n` +
-  `  "summary": "<one-line description of the change>",\n` +
-  `  "original": "<verbatim substring of the current document>",\n` +
-  `  "replacement": "<the new text>"\n` +
+  `  "id": "<short id, e.g. p1>",\n` +
+  `  "summary": "<one-line change description>",\n` +
+  `  "rationale": "<REQUIRED: ≥7 numbered points, ≥100 words — see RATIONALE RULES>",\n` +
+  `  "original": "<verbatim substring from the document>",\n` +
+  `  "replacement": "<new text>"\n` +
   `}\n` +
   '```\n\n' +
   `Rules:\n` +
-  `- The "original" value MUST be a byte-for-byte copy of a substring ` +
-  `in the document above, including every space, newline, dash, and ` +
-  `punctuation mark. If the document says "Section 1. Background", ` +
-  `the original must start with exactly that text, not a paraphrase. ` +
-  `If you cannot find an exact substring, do not emit a ` +
-  `proposed-edit block for that change.\n` +
-  `- Before emitting each fence, locate the target text in the ` +
-  `document and copy the exact characters between two known anchors. ` +
-  `Treat the document as authoritative — do not invent or reformat.\n` +
-  `- Multiple changes in a single reply are allowed; emit one fence ` +
-  `per change.\n` +
-  `- Keep "original" as short as possible while still uniquely ` +
-  `locating the text to change.\n` +
-  `- You may optionally add commentary outside the fences (the user ` +
-  `will see it as normal markdown).`;
+  `- "original" MUST match the document byte-for-byte (spaces, ` +
+  `newlines, punctuation). No paraphrase. If no exact match, skip ` +
+  `that change.\n` +
+  `- Copy "original" from the document; keep it short but unique. ` +
+  `Document is authoritative.\n` +
+  `- Multiple fences per reply OK. Optional prose outside fences ` +
+  `is fine.\n\n`;
+
+/**
+ * Default rationale-format rules. Sent when the user has not
+ * customized `api.rationaleRulesOverride`. Exported for Settings Reset.
+ * Replaced wholesale by the user's override (schema above is kept).
+ *
+ * Structure: 7 numbered points — 1, 2, 3a, 3b, 3c, 4, 5 — totaling
+ * ≥100 words. Point 3 expands into three ≥30-word sub-points.
+ */
+export const PROPOSED_EDIT_RULES_DEFAULT: string =
+  `RATIONALE RULES ("rationale" REQUIRED, non-empty, on every ` +
+  `proposed-edit):\n` +
+  `- ≥100 words total.\n` +
+  `- ≥7 numbered points (1. … 2. … 3a. … 3b. … 3c. … 4. … 5. …), ` +
+  `each on its own line (\\n inside the JSON string). Escape " as ` +
+  `\\\".\n` +
+  `- Cover, in order:\n` +
+  `  1. Pre-change: what the original wording said (plain language).\n` +
+  `  2. Post-change: what the replacement now says (plain language).\n` +
+  `  3. Logical reason: why the change was necessary (ambiguity, ` +
+  `redundancy, weak verb, inconsistency, missing context, etc.). ` +
+  `Write exactly 3 sub-points, each ≥30 words: (3a) why the change, ` +
+  `(3b) how it helps the paragraph, (3c) how it helps the document. ` +
+  `Do not mention these rules.\n` +
+  `  4. Benefit to the user's comment and the paragraph (clarity / ` +
+  `flow / tone).\n` +
+  `  5. Benefit to the whole document (voice, purpose, audience).\n` +
+  `- Full professional sentences, not fragments. Shown in the ` +
+  `comment popover after Apply.`;
+
+/**
+ * Schema rules + rationale rules (default or user override).
+ * Override replaces only the rationale section.
+ */
+function buildProposedEditRulesMessage(
+  rationaleRulesOverride: string | undefined
+): string {
+  const trimmed = rationaleRulesOverride?.trim();
+  if (!trimmed) {
+    return PROPOSED_EDIT_SCHEMA_RULES + PROPOSED_EDIT_RULES_DEFAULT;
+  }
+  // AUTHORITATIVE header: treat override as format rules for
+  // `rationale`, not content to discuss; ignore conflicting earlier
+  // length/structure hints (e.g. a stale System message).
+  return (
+    PROPOSED_EDIT_SCHEMA_RULES +
+    `RATIONALE RULES (AUTHORITATIVE — override any earlier ` +
+    `rationale format. Follow exactly. Do not quote or discuss ` +
+    `these rules in the rationale; explain only the document ` +
+    `change):\n` +
+    trimmed
+  );
+}
 
 /**
  * Length of the per-paragraph preview used in the doc outline.
@@ -315,24 +361,10 @@ const PROPOSED_EDIT_RULES: string =
 const OUTLINE_PREVIEW_CHARS = 60;
 
 /**
- * Build a compact representation of the open document for the
- * `sys-current-doc` system message.
- *
- * Always emits:
- *   - a header with the title, total length, and paragraph count
- *   - one line per paragraph giving the paragraph number, start
- *     offset, and the first ~60 chars (trimmed on a word boundary)
- *
- * When `includeReferencedParagraphs` is true (i.e. the most recent
- * user message is a comment batch from `formatCommentBatch`), we
- * additionally inline the verbatim text of every paragraph that
- * contains at least one `[cN]` snippet. This is the only place the
- * full text of the document appears — non-comment chat turns see
- * the outline alone, which is typically 95%+ smaller than the
- * verbatim document.
- *
- * Pure: no DOM / IO access. The caller passes the raw `content`
- * string from the document record.
+ * Compact doc outline for `sys-current-doc`: title, size, and one
+ * ~60-char preview line per paragraph. Far cheaper than sending the
+ * full document. `includeReferencedParagraphs` is reserved (currently
+ * unused — comment batches rely on Before/After context instead).
  */
 export function buildDocOutline(
   title: string,
@@ -372,9 +404,7 @@ export function buildDocOutline(
 
   const lines: string[] = [];
   lines.push(
-    `--- DOC OUTLINE "${title}" ---`,
-    `Length: ${content.length} chars, ${starts.length} paragraph${starts.length === 1 ? '' : 's'}.`,
-    ''
+    `--- DOC "${title}" (${content.length} chars, ${starts.length} paras) ---`
   );
   for (let p = 0; p < starts.length; p++) {
     const start = starts[p];
@@ -384,16 +414,14 @@ export function buildDocOutline(
       raw.length <= OUTLINE_PREVIEW_CHARS
         ? raw
         : trimOnWordBoundary(raw, OUTLINE_PREVIEW_CHARS) + '…';
-    lines.push(`[p${p + 1}] offset ${start}–${end}: ${preview}`);
+    lines.push(`[p${p + 1}]@${start}: ${preview}`);
   }
-  // Reserved for future expansion: if we detect the comment batch
-  // referenced paragraphs, we can inline their verbatim text here
-  // under a "--- REFERENCED PARAGRAPHS ---" header. Currently a
-  // no-op because the per-comment `Context before/after` lines in
-  // `formatCommentBatch` already give the model enough local
-  // context to make byte-exact `original` matches.
+  // Reserved: could inline referenced paragraphs when
+  // `includeReferencedParagraphs` is true. Currently unused —
+  // Before/After in `formatCommentBatch` is enough for byte-exact
+  // `original` matches.
   void referenced;
-  lines.push(`--- END DOC OUTLINE "${title}" ---`);
+  lines.push('--- END DOC ---');
   return lines.join('\n');
 }
 

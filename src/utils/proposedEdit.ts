@@ -111,17 +111,21 @@ function rescueRawJsonEdits(
 function tryParseEditLenient(body: string): ProposedEdit | null {
   const direct = tryParseEdit(body);
   if (direct) return direct;
-  // Extract the four string values with a tolerant regex, then re-build
+  // Extract the string values with a tolerant regex, then re-build
   // a valid JSON object. Use a non-greedy match that allows nested
-  // quotes so we can capture phrases like `"Higher or Equal"`.
+  // quotes so we can capture phrases like `"Higher or Equal"`. The
+  // `rationale` field is optional for backward compatibility with
+  // older AI replies; we default to an empty string when missing.
   const id = extractJsonString(body, 'id');
   const summary = extractJsonString(body, 'summary');
   const original = extractJsonString(body, 'original');
   const replacement = extractJsonString(body, 'replacement');
   if (id && summary && original !== null && replacement !== null) {
+    const rationale = extractJsonString(body, 'rationale') ?? '';
     return {
       id,
       summary,
+      rationale,
       original,
       replacement,
     };
@@ -171,9 +175,14 @@ function tryParseEdit(body: string): ProposedEdit | null {
       typeof obj.original === 'string' &&
       typeof obj.replacement === 'string'
     ) {
+      // `rationale` is optional; older replies may not include it.
+      // Empty string is treated the same as missing by the UI.
+      const rationale =
+        typeof obj.rationale === 'string' ? obj.rationale : '';
       return {
         id: obj.id,
         summary: obj.summary,
+        rationale,
         original: obj.original,
         replacement: obj.replacement,
       };
@@ -185,7 +194,18 @@ function tryParseEdit(body: string): ProposedEdit | null {
 }
 
 export type ApplyEditResult =
-  | { ok: true; next: string }
+  | {
+      ok: true;
+      next: string;
+      /**
+       * The byte range that was replaced in the source `content`.
+       * `idx` is the position of the matched original, and
+       * `end = idx + length` is the end of the inserted
+       * replacement in `next`. Useful for re-anchoring comments
+       * to the adopted text.
+       */
+      anchor: { idx: number; length: number };
+    }
   | { ok: false; reason: 'anchor-missing' };
 
 /**
@@ -336,7 +356,7 @@ export function applyEdit(
     content.slice(0, anchor.idx) +
     replacement +
     content.slice(anchor.idx + anchor.length);
-  return { ok: true, next };
+  return { ok: true, next, anchor };
 }
 
 /**
@@ -355,9 +375,25 @@ export function applyEdit(
 export function applyAllEdits(
   content: string,
   edits: ProposedEdit[]
-): { next: string; appliedIds: string[] } {
+): {
+  next: string;
+  appliedIds: string[];
+  /**
+   * Per-edit anchor info for the edits that were applied. Each
+   * entry's `idx` is the position of the original substring in
+   * the running accumulator, and `replacement` is the new text
+   * the caller should use to re-anchor the producing comment.
+   * One entry per applied id; the order matches `appliedIds`.
+   */
+  appliedAnchors: Array<{ id: string; idx: number; replacement: string }>;
+} {
   let acc = content;
   const appliedIds: string[] = [];
+  const appliedAnchors: Array<{
+    id: string;
+    idx: number;
+    replacement: string;
+  }> = [];
   for (const edit of edits) {
     const anchor = findEditAnchor(acc, edit.original);
     if (!anchor) continue;
@@ -366,8 +402,13 @@ export function applyAllEdits(
       edit.replacement +
       acc.slice(anchor.idx + anchor.length);
     appliedIds.push(edit.id);
+    appliedAnchors.push({
+      id: edit.id,
+      idx: anchor.idx,
+      replacement: edit.replacement,
+    });
   }
-  return { next: acc, appliedIds };
+  return { next: acc, appliedIds, appliedAnchors };
 }
 
 /**

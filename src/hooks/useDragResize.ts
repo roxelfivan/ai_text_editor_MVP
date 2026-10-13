@@ -184,6 +184,33 @@ export const MIN_CARD_WIDTH = 220;
 export const MIN_CARD_HEIGHT = 140;
 export const MAX_CARD_WIDTH = 800;
 export const MAX_CARD_HEIGHT = 600;
+// Comment popover bounds. Sized to comfortably fit a long rationale
+// (the rationale can be several paragraphs) plus the diff preview
+// and the footer buttons, with enough breathing room that the
+// popover never feels cramped.
+export const MIN_POPOVER_WIDTH = 280;
+export const MAX_POPOVER_WIDTH = 720;
+export const MIN_POPOVER_HEIGHT = 220;
+export const MAX_POPOVER_HEIGHT = 800;
+// Settings modal bounds. Sized to comfortably fit the two prompt
+// textareas (Main system message + Rationale rules) plus the rest
+// of the form (provider, API key, endpoint, model, temperature,
+// Debug Mode, UI font size). The default modal already used
+// `max-w-lg` (~32rem) so the lower bound sits comfortably above
+// that, and the upper bound leaves room on a 1280-wide viewport
+// without crowding the chat panel.
+export const MIN_SETTINGS_WIDTH = 360;
+export const MAX_SETTINGS_WIDTH = 960;
+export const MIN_SETTINGS_HEIGHT = 420;
+export const MAX_SETTINGS_HEIGHT = 900;
+// Per-textarea bounds inside the Settings modal. Each prompt
+// textarea starts at 3 rows by default; the user can grow either
+// one to roughly half a laptop screen while keeping the rest of
+// the modal scannable.
+export const MIN_SETTINGS_TEXTAREA_WIDTH = 320;
+export const MAX_SETTINGS_TEXTAREA_WIDTH = 880;
+export const MIN_SETTINGS_TEXTAREA_HEIGHT = 100;
+export const MAX_SETTINGS_TEXTAREA_HEIGHT = 600;
 
 export function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));

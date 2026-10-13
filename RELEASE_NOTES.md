@@ -1,3 +1,32 @@
+## v0.4.5 — Comment rounds, edit rationales, leaner prompts
+
+Feature release on top of [v0.4.1](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.1). Comments keep multi-round history with AI rationales after Apply; Settings can edit rationale format; Apply re-anchors the highlight to the adopted text; prompts are shorter; **Predict** starts off.
+
+### Added
+
+- **Comment rounds.** Each comment stores an ordered `rounds[]` (oldest first). Editing the body after **Send to AI** appends a new round instead of overwriting the previous one. Top-level `body` / `start` / `end` / `snippet` / `sent` still mirror the latest round for existing UI.
+- **Applied-edit rationales.** Every `proposed-edit` fence includes a `rationale` field. On **Apply**, that text (plus summary / original / replacement) is stored on the current round and shown in the comment popover under **Rationale**.
+- **Multi-round Rationale UI.** The popover lists every round; each card is independently expandable (`+` / `−`) and shows that round's comment, anchored text, and applied diffs. Margin badges show a small indicator when any round has an applied rationale.
+- **Settings → Rationale Rules.** Edit the format rules independently of the fence schema. **Reset** restores the built-in default. System Message and Rationale Rules textareas resize with the Settings modal (width 100%, height drag + auto-measure).
+
+### Changed
+
+- **Default Rationale Rules** require ≥7 numbered points (`1`, `2`, `3a`, `3b`, `3c`, `4`, `5`), ≥100 words total, with `3a`–`3c` each ≥30 words covering why / paragraph / document. Custom overrides remain authoritative for the `rationale` field only.
+- **Apply / Apply All** re-anchor the comment (and select the range) to the replacement text so the highlight fits the adopted wording.
+- **Prompt wording** for system message, proposed-edit schema, rationale rules, doc preamble, and comment-batch instructions is condensed (~50% fewer characters of fixed overhead) without changing the contracts.
+- **Predict** defaults to **off**. Click **Predict** or `⌘/Ctrl + \\` to enable and request a suggestion.
+
+### Internal
+
+- `src/types.ts` — `CommentRound`, `ProposedEditRationale`, `ProposedEdit.rationale`, `ApiConfig.rationaleRulesOverride`; comment undo ops for `append-round` / `record-applied`.
+- `src/store/useStore.ts` — round migration on rehydrate; `updateCommentBody` appends a round when the latest was already sent; `recordAppliedEdit` + re-anchor to `newAnchor` / replacement.
+- `src/api/chat.ts` — split `PROPOSED_EDIT_SCHEMA_RULES` + `PROPOSED_EDIT_RULES_DEFAULT`; override wrapper; leaner batch / outline copy.
+- `src/components/CommentPopover.tsx`, `CommentMargin.tsx`, `SettingsModal.tsx`, `ProposedEditCard.tsx`, `ChatPanel.tsx`, `Editor.tsx`, `utils/comments.ts`, `utils/proposedEdit.ts`, `index.css`.
+
+### Verification
+
+- `npm run typecheck` — clean.
+
 ## v0.4.1 — Comment / Send to AI: whole-document consistency, fewer tokens
 
 Patch release on top of [v0.4.0](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.0). Tightens the prompt that runs when the user clicks **Send to AI** on a document with inline comments: every fix must now stay consistent with the rest of the document, and the per-turn prompt is materially cheaper on long documents.

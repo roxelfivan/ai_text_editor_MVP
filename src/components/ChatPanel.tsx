@@ -175,7 +175,8 @@ export function ChatPanel() {
           buildRequestMessages(
             history,
             api.systemMessage,
-            docSnap ? { title: docSnap.title, content: docSnap.content } : null
+            docSnap ? { title: docSnap.title, content: docSnap.content } : null,
+            api.rationaleRulesOverride
           ),
           api,
           {
@@ -325,7 +326,7 @@ export function ChatPanel() {
     let acc = '';
     try {
       await streamChatCompletion(
-        buildRequestMessages(history, api.systemMessage, docSnap ? { title: docSnap.title, content: docSnap.content } : null),
+        buildRequestMessages(history, api.systemMessage, docSnap ? { title: docSnap.title, content: docSnap.content } : null, api.rationaleRulesOverride),
         api,
         {
           signal: abortRef.current.signal,
@@ -478,9 +479,55 @@ export function ChatPanel() {
       if (seg.kind === 'edit') edits.push(seg.payload);
     }
     if (edits.length === 0) return;
-    const { next, appliedIds } = applyAllEdits(doc.content, edits);
+    const { next, appliedIds, appliedAnchors } = applyAllEdits(
+      doc.content,
+      edits
+    );
     if (appliedIds.length === 0) return;
     useStore.getState().updateDocumentContent(doc.id, next);
+    // Record each adopted edit as a rationale on the comment that
+    // produced it. The store resolves the comment via anchor/sent-
+    // round overlap so we don't need to track which comment belongs
+    // to which edit here. Each per-edit `appliedAnchors` entry
+    // carries the exact byte range that was replaced, which we
+    // forward to the store so the comment re-anchors to the
+    // ADOPTED text rather than the original (preventing the
+    // highlight from drifting to a wider span on the next
+    // re-anchor pass).
+    const recordApplied = useStore.getState().recordAppliedEdit;
+    const appliedSet = new Set(appliedIds);
+    const appliedAt = Date.now();
+    const anchorById = new Map(appliedAnchors.map((a) => [a.id, a]));
+    let lastRange: { start: number; end: number } | null = null;
+    for (const edit of edits) {
+      if (!appliedSet.has(edit.id)) continue;
+      const anchor = anchorById.get(edit.id);
+      const newAnchor = anchor
+        ? {
+            start: anchor.idx,
+            end: anchor.idx + edit.replacement.length,
+          }
+        : undefined;
+      if (newAnchor) lastRange = newAnchor;
+      recordApplied({
+        documentId: doc.id,
+        messageId,
+        editId: edit.id,
+        summary: edit.summary,
+        rationale: edit.rationale ?? '',
+        original: edit.original,
+        replacement: edit.replacement,
+        appliedAt,
+        ...(newAnchor ? { newAnchor } : {}),
+      });
+    }
+    if (lastRange) {
+      window.dispatchEvent(
+        new CustomEvent('mvp:select-range', {
+          detail: lastRange,
+        })
+      );
+    }
     // Mark applied ids as committed so the cards hide without flicker,
     // mirroring the existing staged-rejection commit pattern.
     setCommittedRejections((prev) => {
@@ -494,7 +541,7 @@ export function ChatPanel() {
       [messageId]: {
         applied: appliedIds.length,
         total: edits.length,
-        at: Date.now(),
+        at: appliedAt,
       },
     }));
   };
@@ -535,7 +582,7 @@ export function ChatPanel() {
     let acc = '';
     try {
       await streamChatCompletion(
-        buildRequestMessages(history, api.systemMessage, docSnap ? { title: docSnap.title, content: docSnap.content } : null),
+        buildRequestMessages(history, api.systemMessage, docSnap ? { title: docSnap.title, content: docSnap.content } : null, api.rationaleRulesOverride),
         api,
         {
           signal: abortRef.current.signal,

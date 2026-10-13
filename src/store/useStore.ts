@@ -7,7 +7,9 @@ import type {
   ChatMessage,
   Comment,
   CommentOp,
+  CommentRound,
   DocumentRecord,
+  ProposedEditRationale,
   Prompt,
   Revision,
   Theme,
@@ -15,6 +17,7 @@ import type {
 import { getProvider } from '@/config/providers';
 import { applyThemeClass } from '@/utils/theme';
 import { COMMENT_UNDO_STACK_LIMIT } from '@/utils/comments';
+import { findEditAnchor } from '@/utils/proposedEdit';
 import {
   clamp,
   MIN_SIDEBAR_WIDTH,
@@ -25,12 +28,12 @@ import {
 
 const STORAGE_KEY = 'ai-text-editor-mvp';
 
-const DEFAULT_SYSTEM_MESSAGE =
-  "You are a helpful writing assistant. Be concise, specific, and preserve " +
-  "the user's voice when revising. Unless specified, please provide your " +
-  "output paragraph by paragraph using the Proposed Edit Card: emit one " +
-  "proposed-edit fenced block per paragraph so the user can accept or " +
-  "reject each one independently, all within a single reply message.";
+export const DEFAULT_SYSTEM_MESSAGE =
+  "You are a writing assistant. Be concise, preserve the user's voice, " +
+    "and emit one proposed-edit fence per paragraph so edits can be " +
+    "accepted independently. Include `rationale` per RATIONALE RULES; " +
+    "do not discuss those rules inside the rationale. Escape JSON " +
+    'double-quotes as \\".';
 
 // Resolve the build-time default provider, then derive endpoint/model
 // defaults from the matching preset. VITE_DEFAULT_PROVIDER lets a
@@ -55,6 +58,11 @@ const defaultApiConfig: ApiConfig = {
   model: import.meta.env.VITE_DEFAULT_MODEL || initialPreset.defaultModel,
   systemMessage: DEFAULT_SYSTEM_MESSAGE,
   temperature: 0.7,
+  // Rationale rules default to undefined so the chat pipeline falls
+  // back to the hard-coded `PROPOSED_EDIT_RULES_DEFAULT` in
+  // `src/api/chat.ts`. Existing persisted payloads (which never
+  // wrote this field) keep the same behaviour.
+  rationaleRulesOverride: undefined,
 };
 
 const seedPrompts: Prompt[] = [
@@ -245,6 +253,46 @@ export interface StoreState {
   // re-renders fire correctly.
   addComment: (comment: Comment) => void;
   updateCommentBody: (id: string, body: string) => void;
+  /**
+   * Append a new round to an existing comment. Used when the user
+   * adds a follow-up body on a revised passage (after an AI edit
+   * was applied), or when the system needs to push a new round
+   * for any reason. The new round is added at the end of
+   * `rounds[]`; the top-level `body` / `start` / `end` / `snippet`
+   * / `outdated` / `sent` convenience mirrors are updated to point
+   * at the new round.
+   */
+  appendCommentRound: (id: string, round: Omit<CommentRound, 'id' | 'applied'>) => void;
+  /**
+   * Record an adopted proposed edit against the comment whose
+   * current round was the one the AI was responding to. The
+   * `commentId` is resolved inside the action via anchor/sent-round
+   * lookup, so the caller can pass either an explicit id OR leave
+   * it undefined and let the action find the matching comment
+   * from the most recent batch. Returns the resolved comment id,
+   * or `null` if no match was found.
+   */
+  recordAppliedEdit: (info: {
+    documentId: string;
+    /** Explicit comment id, if the caller already knows it. */
+    commentId?: string;
+    messageId: string;
+    editId: string;
+    summary: string;
+    rationale: string;
+    original: string;
+    replacement: string;
+    appliedAt: number;
+    /**
+     * Explicit new anchor range for the adopted edit, when the
+     * caller has computed it (e.g. `applyEdit` returns the match
+     * position). When omitted, the store re-anchors the comment
+     * by searching the *post-apply* document content for the
+     * `replacement` text. Set this from `applyAllEdits` so each
+     * per-edit anchor is exact.
+     */
+    newAnchor?: { start: number; end: number };
+  }) => string | null;
   markCommentsSent: (ids: string[]) => void;
   deleteComment: (id: string) => void;
   replaceCommentsForDocument: (documentId: string, comments: Comment[]) => void;
@@ -297,16 +345,18 @@ text sent with your message.
 
 ## 6. ✅ Apply or Reject AI edits
 
-**AI rewrites show up as cards.** Click **Apply** or **Reject** on
-each one. For several changes in one reply, use **Apply N changes**
-in the chat footer. If a quote no longer matches the document, click
-in the editor and use **Force-apply…**.
+**AI rewrites show up as cards** with a rationale. Click **Apply** or
+**Reject** on each one. For several changes in one reply, use
+**Apply N changes** in the chat footer. After Apply, open the comment
+badge to read the rationale (multi-round history if you follow up).
+If a quote no longer matches the document, click in the editor and
+use **Force-apply…**.
 
 ## 7. ✨ Get sentence suggestions while writing
 
-**Press \`Tab\` or click Accept** for the suggestion under your text,
-\`Esc\` or **Reject** to dismiss, or click **Predict** (or
-\`⌘/Ctrl + \\\`) to turn predictions on and request one.
+**Predict starts off.** Click **Predict** (or \`⌘/Ctrl + \\\`) to turn
+it on and request a suggestion. Press \`Tab\` or **Accept** to insert,
+\`Esc\` or **Reject** to dismiss.
 
 ## 8. 📷 Import text from photos or PDFs
 
@@ -525,14 +575,17 @@ export const useStore = create<StoreState>()(
       addComment: (comment) =>
         set((s) => {
           const existing = s.comments[comment.documentId] ?? [];
+          // Defensive: if a comment was built without a `rounds` array
+          // (e.g. an older caller), seed round 1 from the flat fields.
+          const seeded = ensureRoundsShape(comment);
           return {
             comments: {
               ...s.comments,
-              [comment.documentId]: [...existing, comment],
+              [comment.documentId]: [...existing, seeded],
             },
             commentUndoStack: pushUndoOp(s.commentUndoStack, {
               kind: 'add',
-              comment,
+              comment: seeded,
             }),
           };
         }),
@@ -540,20 +593,248 @@ export const useStore = create<StoreState>()(
         set((s) => {
           const entry = findCommentEntry(s.comments, id);
           if (!entry) return s;
-          const next = {
-            ...entry.comment,
+          const comment = ensureRoundsShape(entry.comment);
+          const lastIdx = comment.rounds.length - 1;
+          const lastRound = comment.rounds[lastIdx];
+          const now = Date.now();
+          // If the latest round was already sent to the AI, a body
+          // edit is a NEW round (follow-up), not an in-place rewrite.
+          // Overwriting would erase the prior round's comment body
+          // from history and leave applied rationales orphaned under
+          // the wrong round — which is why the popover only showed
+          // "Round 1" after a second Send.
+          if (lastRound.sent) {
+            if (body.trim() === lastRound.body.trim()) {
+              return s;
+            }
+            const newRound: CommentRound = {
+              id: uuid(),
+              start: lastRound.start,
+              end: lastRound.end,
+              snippet: lastRound.snippet,
+              body,
+              createdAt: now,
+              updatedAt: now,
+              outdated: lastRound.outdated,
+              sent: false,
+              applied: [],
+            };
+            const next: Comment = {
+              ...comment,
+              start: newRound.start,
+              end: newRound.end,
+              snippet: newRound.snippet,
+              body: newRound.body,
+              updatedAt: now,
+              outdated: newRound.outdated,
+              sent: false,
+              rounds: [...comment.rounds, newRound],
+            };
+            return {
+              comments: replaceComment(s.comments, id, next),
+              commentUndoStack: pushUndoOp(s.commentUndoStack, {
+                kind: 'append-round',
+                before: comment,
+                after: next,
+              }),
+            };
+          }
+          const updatedRound: CommentRound = {
+            ...lastRound,
             body,
-            updatedAt: Date.now(),
+            updatedAt: now,
+          };
+          const next: Comment = {
+            ...comment,
+            body,
+            updatedAt: updatedRound.updatedAt,
+            rounds: [
+              ...comment.rounds.slice(0, lastIdx),
+              updatedRound,
+            ],
           };
           return {
             comments: replaceComment(s.comments, id, next),
             commentUndoStack: pushUndoOp(s.commentUndoStack, {
               kind: 'update-body',
-              before: entry.comment,
+              before: comment,
               after: next,
             }),
           };
         }),
+      appendCommentRound: (id, round) =>
+        set((s) => {
+          const entry = findCommentEntry(s.comments, id);
+          if (!entry) return s;
+          const comment = ensureRoundsShape(entry.comment);
+          const newRound: CommentRound = {
+            ...round,
+            id: uuid(),
+            applied: [],
+          };
+          const next: Comment = {
+            ...comment,
+            start: newRound.start,
+            end: newRound.end,
+            snippet: newRound.snippet,
+            body: newRound.body,
+            createdAt: comment.rounds[0]?.createdAt ?? newRound.createdAt,
+            updatedAt: newRound.updatedAt,
+            outdated: newRound.outdated,
+            sent: newRound.sent,
+            rounds: [...comment.rounds, newRound],
+          };
+          return {
+            comments: replaceComment(s.comments, id, next),
+            commentUndoStack: pushUndoOp(s.commentUndoStack, {
+              kind: 'append-round',
+              before: comment,
+              after: next,
+            }),
+          };
+        }),
+      recordAppliedEdit: (info) => {
+        // Resolve the comment to attach this rationale to. The caller
+        // can pass an explicit `commentId` (the ProposedEditCard and
+        // ChatPanel Apply-All paths know which comment they're in).
+        // If `commentId` is missing, we look up the matching comment
+        // by walking the document's comments and finding the one
+        // whose latest-sent round has a snippet that overlaps the
+        // edit's `original`.
+        let resolvedId: string | null = null;
+        set((s) => {
+          const docComments = s.comments[info.documentId] ?? [];
+          let target: Comment | undefined;
+          if (info.commentId) {
+            target = docComments.find((c) => c.id === info.commentId);
+          } else {
+            target = findCommentForEdit(docComments, info);
+          }
+          if (!target) return s;
+          resolvedId = target.id;
+          const comment = ensureRoundsShape(target);
+          const lastIdx = comment.rounds.length - 1;
+          const lastRound = comment.rounds[lastIdx];
+          // Don't double-record the same (editId, roundId) pair.
+          if (lastRound.applied.some((a) => a.editId === info.editId)) {
+            return s;
+          }
+          const rationale: ProposedEditRationale = {
+            messageId: info.messageId,
+            editId: info.editId,
+            summary: info.summary,
+            rationale: info.rationale ?? '',
+            original: info.original,
+            replacement: info.replacement,
+            appliedAt: info.appliedAt,
+          };
+          // ---- Re-anchor the round to the ADOPTED text ----
+          //
+          // The original `original` snippet no longer exists in the
+          // document after Apply. If we leave the round pointing at
+          // the original's `(start, end)`, the next `reanchorAll`
+          // pass uses strategy 2-4 (local search, fuzzy match,
+          // first/last 30 chars) to relocate the comment — and any
+          // of those can match a much LONGER span than the user
+          // actually adopted, producing a highlight that swallows
+          // the surrounding paragraph.
+          //
+          // Instead, we anchor the round to the new `replacement`
+          // range inside the now-updated document. Three sources
+          // of truth, in priority order:
+          //
+          //  1. Explicit `info.newAnchor` from the caller (the
+          //     Apply-All path passes the exact anchor returned by
+          //     `applyAllEdits`).
+          //  2. Search the post-apply document content for the
+          //     `replacement` text. The Apply path uses this.
+          //  3. Fall back to the round's existing anchor unchanged
+          //     (e.g. when the replacement is empty and a search
+          //     would fail).
+          const liveDoc = s.documents.find((d) => d.id === info.documentId);
+          const liveContent = liveDoc?.content ?? '';
+          let newStart: number | null = null;
+          let newEnd: number | null = null;
+          let newSnippet: string | null = null;
+          if (info.newAnchor && info.replacement) {
+            const { start, end } = info.newAnchor;
+            const slice = liveContent.slice(start, end);
+            if (slice === info.replacement) {
+              newStart = start;
+              newEnd = end;
+              // Prefer the authoritative replacement string so the
+              // next reanchorAll pass matches the adopted text
+              // byte-for-byte (not a stale slice of the old original).
+              newSnippet = info.replacement;
+            } else {
+              // Explicit idx drifted (e.g. concurrent apply) — rescue
+              // by locating the replacement near the claimed start,
+              // then anywhere in the doc.
+              const near = liveContent.indexOf(
+                info.replacement,
+                Math.max(0, start - 200)
+              );
+              const idx =
+                near !== -1
+                  ? near
+                  : liveContent.indexOf(info.replacement);
+              if (idx !== -1) {
+                newStart = idx;
+                newEnd = idx + info.replacement.length;
+                newSnippet = info.replacement;
+              }
+            }
+          } else if (liveContent && info.replacement) {
+            const rep = findEditAnchor(liveContent, info.replacement);
+            if (rep) {
+              newStart = rep.idx;
+              newEnd = rep.idx + rep.length;
+              newSnippet = info.replacement;
+            }
+          }
+          const updatedRound: CommentRound = {
+            ...lastRound,
+            applied: [...lastRound.applied, rationale],
+            // Re-anchor only when we found a valid replacement
+            // range. Skipping the rewrite on failure preserves the
+            // existing anchor so the next `reanchorAll` pass can
+            // still attempt recovery.
+            ...(newStart !== null && newEnd !== null && newSnippet !== null
+              ? {
+                  start: newStart,
+                  end: newEnd,
+                  snippet: newSnippet,
+                }
+              : {}),
+          };
+          // Mirror the latest round's anchor to the top-level
+          // convenience fields so existing call-sites (margin
+          // badges, re-anchoring on doc edits) read the new
+          // position.
+          const nextComment: Comment = {
+            ...comment,
+            start: updatedRound.start,
+            end: updatedRound.end,
+            snippet: updatedRound.snippet,
+            updatedAt: Date.now(),
+            rounds: [
+              ...comment.rounds.slice(0, lastIdx),
+              updatedRound,
+            ],
+          };
+          return {
+            comments: replaceComment(s.comments, target.id, nextComment),
+            commentUndoStack: pushUndoOp(s.commentUndoStack, {
+              kind: 'record-applied',
+              before: comment,
+              after: nextComment,
+              roundId: lastRound.id,
+              editId: info.editId,
+            }),
+          };
+        });
+        return resolvedId;
+      },
       markCommentsSent: (ids) =>
         set((s) => {
           if (ids.length === 0) return s;
@@ -561,12 +842,17 @@ export const useStore = create<StoreState>()(
           let changed = false;
           const next: Record<string, Comment[]> = { ...s.comments };
           for (const [docId, list] of Object.entries(next)) {
+            let docChanged = false;
             const updated = list.map((c) => {
-              if (!idSet.has(c.id) || c.sent) return c;
-              changed = true;
-              return { ...c, sent: true };
+              if (!idSet.has(c.id)) return c;
+              const marked = markLatestRoundSent(c);
+              if (marked !== c) {
+                docChanged = true;
+                changed = true;
+              }
+              return marked;
             });
-            if (changed) next[docId] = updated;
+            if (docChanged) next[docId] = updated;
           }
           if (!changed) return s;
           return { comments: next };
@@ -641,6 +927,22 @@ export const useStore = create<StoreState>()(
                 commentUndoStack: rest,
               };
             }
+            case 'append-round': {
+              // Inverse: restore the `before` comment (drops the
+              // newly-appended round).
+              return {
+                comments: replaceComment(s.comments, op.before.id, op.before),
+                commentUndoStack: rest,
+              };
+            }
+            case 'record-applied': {
+              // Inverse: restore the `before` comment (drops the
+              // rationale entry that was appended to the round).
+              return {
+                comments: replaceComment(s.comments, op.before.id, op.before),
+                commentUndoStack: rest,
+              };
+            }
           }
         });
         return popped;
@@ -701,6 +1003,12 @@ export const useStore = create<StoreState>()(
           // `comments` slice. Default to `{}` so the editor never has
           // to special-case `undefined`. Any comment with missing
           // fields is also normalized defensively.
+          //
+          // Migration for v0.4.x+ (rounds / rationale revamp): older
+          // comments are stored in the FLAT shape (no `rounds`
+          // array). Wrap each one in a single CommentRound seeded
+          // from the existing flat fields so existing users keep
+          // their comment history with no visible loss.
           if (typeof state.comments !== 'object' || state.comments === null) {
             state.comments = {};
             repaired = true;
@@ -709,7 +1017,14 @@ export const useStore = create<StoreState>()(
               if (!Array.isArray(list)) {
                 delete (state.comments as Record<string, Comment[]>)[docId];
                 repaired = true;
+                continue;
               }
+              const normalized = list.map((c) => {
+                const wrapped = ensureRoundsShape(c as Comment);
+                if (wrapped !== c) repaired = true;
+                return wrapped;
+              });
+              (state.comments as Record<string, Comment[]>)[docId] = normalized;
             }
           }
           // Migration for the `google-ai-mode` provider: any persisted
@@ -825,4 +1140,137 @@ function replaceComment(
     out[documentId] = touched ? updated : list;
   }
   return out;
+}
+
+/**
+ * Ensure a `Comment` carries a `rounds[]` array, and that the
+ * top-level convenience fields mirror the latest round.
+ *
+ * Used as a defensive guard at every read/write boundary so a
+ * partially-constructed comment (built by an older caller, or
+ * migrated from an older persisted payload) is upgraded to the
+ * nested shape on the fly. Returns the input unchanged when it's
+ * already in shape (the common case).
+ */
+function ensureRoundsShape(c: Comment): Comment {
+  if (Array.isArray(c.rounds) && c.rounds.length > 0) {
+    return c;
+  }
+  // Build a single round from the flat fields. We never see a
+  // comment with both `rounds` and flat fields out of sync in
+  // practice, but we still copy them defensively so the
+  // convenience mirrors stay accurate after the wrap.
+  const fallback: CommentRound = {
+    id: uuid(),
+    start: typeof c.start === 'number' ? c.start : 0,
+    end: typeof c.end === 'number' ? c.end : 0,
+    snippet: typeof c.snippet === 'string' ? c.snippet : '',
+    body: typeof c.body === 'string' ? c.body : '',
+    createdAt: typeof c.createdAt === 'number' ? c.createdAt : Date.now(),
+    updatedAt: typeof c.updatedAt === 'number' ? c.updatedAt : Date.now(),
+    outdated: !!c.outdated,
+    sent: !!c.sent,
+    applied: [],
+  };
+  return {
+    id: c.id,
+    documentId: c.documentId,
+    start: fallback.start,
+    end: fallback.end,
+    snippet: fallback.snippet,
+    body: fallback.body,
+    createdAt: fallback.createdAt,
+    updatedAt: fallback.updatedAt,
+    outdated: fallback.outdated,
+    sent: fallback.sent,
+    rounds: [fallback],
+  };
+}
+
+/**
+ * Return a new comment with its latest round's `sent` flag flipped
+ * to `true`, and the top-level convenience `sent` mirror updated to
+ * match. Used by `markCommentsSent` so the flag follows the most
+ * recent round, not just the first one (which would be the only
+ * round under the old flat shape).
+ */
+function markLatestRoundSent(c: Comment): Comment {
+  const comment = ensureRoundsShape(c);
+  const lastIdx = comment.rounds.length - 1;
+  const lastRound = comment.rounds[lastIdx];
+  // Only the latest round matters. Earlier rounds may already be
+  // sent; a follow-up round starts with sent:false and must be
+  // flippable on the next "Send to AI".
+  if (lastRound.sent && comment.sent) return comment;
+  const updatedRound: CommentRound = { ...lastRound, sent: true };
+  return {
+    ...comment,
+    sent: true,
+    rounds: [
+      ...comment.rounds.slice(0, lastIdx),
+      updatedRound,
+    ],
+  };
+}
+
+/**
+ * Pick the comment whose current (latest) sent round most likely
+ * produced the proposed edit at hand. Used by `recordAppliedEdit`
+ * when the caller didn't already know which comment to attach the
+ * rationale to (i.e. the bulk Apply-All path).
+ *
+ * Heuristic: rank candidates by the overlap between the proposed
+ * edit's `original` and the round's `snippet`. A round whose snippet
+ * shares at least 12 characters of overlap with the edit's
+ * `original` is considered a match. We pick the candidate with the
+ * largest overlap so the most specific round wins ties.
+ */
+function findCommentForEdit(
+  comments: Comment[],
+  info: {
+    original: string;
+    messageId: string;
+    editId: string;
+  }
+): Comment | undefined {
+  let best: { comment: Comment; score: number } | null = null;
+  for (const raw of comments) {
+    const c = ensureRoundsShape(raw);
+    const lastRound = c.rounds[c.rounds.length - 1];
+    if (!lastRound.sent) continue;
+    const score = snippetOverlapScore(lastRound.snippet, info.original);
+    if (score <= 0) continue;
+    if (!best || score > best.score) {
+      best = { comment: c, score };
+    }
+  }
+  return best?.comment;
+}
+
+/**
+ * Cheap overlap score between two strings. Returns 0 when there's
+ * no meaningful overlap, otherwise the length of the longest
+ * common substring (capped at 12 to keep this O(n) in practice on
+ * realistic snippets).
+ */
+function snippetOverlapScore(a: string, b: string): number {
+  if (!a || !b) return 0;
+  const lo = a.length < b.length ? a : b;
+  const hi = a.length < b.length ? b : a;
+  // Quick rejection: if there's no shared character at all, the
+  // overlap is 0.
+  let best = 0;
+  // Sliding window over the shorter string, checking for a match
+  // in the longer one. The window size is capped at min(lo.length,
+  // 24) so the inner loop is O(n * 24).
+  const cap = Math.min(lo.length, 24);
+  outer: for (let len = cap; len >= 12; len--) {
+    for (let i = 0; i + len <= lo.length; i++) {
+      if (hi.indexOf(lo.slice(i, i + len)) !== -1) {
+        best = len;
+        break outer;
+      }
+    }
+  }
+  return best;
 }

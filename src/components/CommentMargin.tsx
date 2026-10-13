@@ -56,6 +56,13 @@ export function CommentMargin({
       {sorted.map((comment, i) => {
         const y = badgePositions[comment.id];
         if (typeof y !== 'number') return null;
+        // True when the comment has at least one applied-edit
+        // rationale attached across any of its rounds. The badge
+        // shows a small dot to indicate "this comment has a
+        // rationale" at a glance.
+        const hasRationale =
+          Array.isArray(comment.rounds) &&
+          comment.rounds.some((r) => r.applied.length > 0);
         return (
           <button
             key={comment.id}
@@ -82,11 +89,19 @@ export function CommentMargin({
             }}
             aria-label={
               `Comment ${i + 1}: ${comment.body.slice(0, 30)}` +
-              (comment.outdated ? ' (anchor needs attention)' : '')
+              (comment.outdated ? ' (anchor needs attention)' : '') +
+              (hasRationale ? ' (has rationale)' : '')
             }
             title={comment.body}
           >
             <span className="cm-margin__badge-num">{i + 1}</span>
+            {hasRationale && (
+              <span
+                className="cm-margin__badge-rationale"
+                aria-hidden
+                title="This comment has at least one applied-edit rationale"
+              />
+            )}
           </button>
         );
       })}
