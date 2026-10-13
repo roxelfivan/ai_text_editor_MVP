@@ -65,3 +65,7 @@ Edits only apply automatically when **original** is an exact substring of the cu
 - You already applied a nearby change that shifted the wording
 
 Open **Show what the AI was looking for** on the card if you need to see the quote. Then either restore the old wording from [Revision history](revisions.md), or Force-apply at the caret.
+
+## Reference other documents in rejection feedback
+
+The **Comment (optional)** box on a proposed-edit card supports `@`, so you can attach another document to your rejection reason. For example, *“see the policy in `<Other Doc>` § Risk Owners”* — the model gets that context when you **Send N rejection comments**. Details: [Reference other documents](reference-other-documents.md).

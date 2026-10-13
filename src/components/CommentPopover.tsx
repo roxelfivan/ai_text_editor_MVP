@@ -6,7 +6,19 @@ import {
   useState,
 } from 'react';
 import ReactMarkdown from 'react-markdown';
-import type { Comment, CommentRound, ProposedEditRationale } from '@/types';
+import type {
+  Comment,
+  CommentRound,
+  MentionToken,
+  ProposedEditRationale,
+} from '@/types';
+import { useStore } from '@/store/useStore';
+import {
+  buildEditableMentionBody,
+  parseMentions,
+  parseMentionsWithRanges,
+} from '@/components/mentions/parseMentions';
+import { MentionInput } from '@/components/mentions/MentionInput';
 import {
   COMMENT_HARD_CAP,
   COMMENT_SOFT_CAP,
@@ -45,8 +57,12 @@ interface Props {
   index: number;
   /** Anchored position; supplied by the parent (margin column / etc). */
   position: { left: number; top: number } | null;
-  /** Save body edits. */
-  onSaveBody: (id: string, body: string) => void;
+  /**
+   * Save body edits. `mentions` is the live @-document reference list
+   * from the edit-mode MentionInput (may be empty when the user
+   * removed every reference).
+   */
+  onSaveBody: (id: string, body: string, mentions: MentionToken[]) => void;
   /** Delete the comment. */
   onDelete: (id: string) => void;
   /** Close the popover. */
@@ -77,8 +93,18 @@ export function CommentPopover({
   containerBounds,
 }: Props) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(comment.body);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Edit mode uses MentionInput so `@` works the same as create.
+  // Rebuild the textarea value from body sentinels, or from the
+  // latest round's mentions when an older edit path stripped them.
+  const latestRoundMentions =
+    comment.rounds[comment.rounds.length - 1]?.mentions;
+  const [draft, setDraft] = useState(() =>
+    buildEditableMentionBody(comment.body, latestRoundMentions)
+  );
+  const [draftMentions, setDraftMentions] = useState<MentionToken[]>(() => {
+    const { mentions: fromBody } = parseMentions(comment.body);
+    return fromBody.length > 0 ? fromBody : latestRoundMentions ?? [];
+  });
   const wrapperRef = useRef<HTMLDivElement>(null);
   // Same idea as `CommentComposer`: default size so the first render
   // positions the box sensibly before measurement, then refine on
@@ -200,7 +226,13 @@ export function CommentPopover({
         e.preventDefault();
         if (editing) {
           setEditing(false);
-          setDraft(comment.body);
+          const rebuilt = buildEditableMentionBody(
+            comment.body,
+            comment.rounds[comment.rounds.length - 1]?.mentions
+          );
+          setDraft(rebuilt);
+          const { mentions: fromBody } = parseMentions(rebuilt);
+          setDraftMentions(fromBody);
         } else {
           onClose();
         }
@@ -210,29 +242,29 @@ export function CommentPopover({
     return () => window.removeEventListener('keydown', handler);
   }, [editing, comment.body, onClose]);
 
-  // Auto-focus textarea when entering edit mode.
-  useEffect(() => {
-    if (!editing) return;
-    const el = textareaRef.current;
-    if (!el) return;
-    queueMicrotask(() => {
-      try {
-        el.focus({ preventScroll: true });
-      } catch {
-        el.focus();
-      }
-    });
-  }, [editing]);
+  // Auto-focus is handled by MentionInput via `autoFocus` when editing.
 
-  const trimmed = draft.trim();
-  const overSoft = draft.length > COMMENT_SOFT_CAP;
-  const overHard = draft.length >= COMMENT_HARD_CAP;
-  const canSave = trimmed.length > 0;
+  const { plain: draftPlain } = parseMentions(draft);
+  const trimmed = draftPlain.trim();
+  const overSoft = draftPlain.length > COMMENT_SOFT_CAP;
+  const overHard = draftPlain.length >= COMMENT_HARD_CAP;
+  // Allow save when there is prose OR at least one @-reference.
+  const canSave = trimmed.length > 0 || draftMentions.length > 0;
 
   const handleSave = () => {
     if (!canSave) return;
-    onSaveBody(comment.id, clampCommentBody(draft));
+    onSaveBody(comment.id, clampCommentBody(draft), draftMentions);
     setEditing(false);
+  };
+
+  const resetDraftFromComment = () => {
+    const rebuilt = buildEditableMentionBody(
+      comment.body,
+      comment.rounds[comment.rounds.length - 1]?.mentions
+    );
+    setDraft(rebuilt);
+    const { mentions: fromBody } = parseMentions(rebuilt);
+    setDraftMentions(fromBody);
   };
 
   const handleDelete = () => {
@@ -338,10 +370,15 @@ export function CommentPopover({
 
       {editing ? (
         <>
-          <textarea
-            ref={textareaRef}
+          <MentionInput
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(v) => {
+              setDraft(v.text);
+              setDraftMentions(v.mentions);
+            }}
+            onSubmit={handleSave}
+            ariaLabel="Edit comment"
+            placeholder="Edit comment… type @ to reference a document"
             className={[
               'cm-popover__textarea',
               overSoft ? 'cm-popover__textarea--warn' : '',
@@ -349,27 +386,38 @@ export function CommentPopover({
             ]
               .filter(Boolean)
               .join(' ')}
-            rows={5}
-            aria-label="Edit comment"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                handleSave();
-              }
-            }}
+            autoFocus
           />
           <div className="cm-popover__counter">
-            {draft.length}/{COMMENT_SOFT_CAP}
+            {draftPlain.length}/{COMMENT_SOFT_CAP}
             {overSoft ? ' — long comment' : ''}
           </div>
         </>
       ) : (
         <div className="cm-popover__body">
-          {comment.body.trim() ? (
-            comment.body
-          ) : (
-            <em className="cm-popover__empty">(empty comment)</em>
-          )}
+          {(() => {
+            const { plain, mentions } = parseMentions(comment.body);
+            if (plain.trim() || mentions.length > 0) {
+              return (
+                <CommentBodyWithChips
+                  text={comment.body}
+                  getDocById={(id) =>
+                    useStore.getState().documents.find((d) => d.id === id) ??
+                    null
+                  }
+                  onDocumentClick={(id) => {
+                    // Switch the editor to the referenced document so
+                    // the user can read the source in context.
+                    useStore.getState().setCurrentDocument(id);
+                    onClose();
+                  }}
+                />
+              );
+            }
+            return (
+              <em className="cm-popover__empty">(empty comment)</em>
+            );
+          })()}
         </div>
       )}
 
@@ -383,7 +431,7 @@ export function CommentPopover({
               className="cm-popover__btn cm-popover__btn--ghost"
               onClick={() => {
                 setEditing(false);
-                setDraft(comment.body);
+                resetDraftFromComment();
               }}
               onMouseDown={(e) => e.preventDefault()}
             >
@@ -414,7 +462,7 @@ export function CommentPopover({
               type="button"
               className="cm-popover__btn cm-popover__btn--primary"
               onClick={() => {
-                setDraft(comment.body);
+                resetDraftFromComment();
                 setEditing(true);
               }}
               onMouseDown={(e) => e.preventDefault()}
@@ -740,4 +788,97 @@ function loadPopoverSize(
   } catch {
     return null;
   }
+}
+
+/**
+ * Render a comment body that may contain @-mention sentinels as a
+ * sequence of text nodes and inline reference pills. Used by the
+ * popover's read view so the user can see the references inline
+ * (rather than the raw `[[mention:…]]` sentinel text). Clicking a
+ * pill switches the editor to the referenced document so the user
+ * can read the source in context.
+ */
+function CommentBodyWithChips({
+  text,
+  getDocById,
+  onDocumentClick,
+}: {
+  text: string;
+  getDocById: (id: string) => { id: string; title: string } | null;
+  onDocumentClick: (id: string) => void;
+}) {
+  // Use the ranges-aware parser so each mention comes with its
+  // source-byte start/end, which we need to slice the body text
+  // around the chip in source order.
+  const { plain, mentions: scanned } = parseMentionsWithRanges(text);
+  if (scanned.length === 0) {
+    return <span style={{ whiteSpace: 'pre-wrap' }}>{plain}</span>;
+  }
+  // Build a flat list of (kind, payload) entries in source order.
+  type Part =
+    | { kind: 'text'; text: string }
+    | {
+        kind: 'mention';
+        title: string;
+        docId: string;
+        available: boolean;
+        sectionCount: number;
+      };
+  const parts: Part[] = [];
+  let cursor = 0;
+  for (const m of scanned) {
+    // Slice raw text using known offsets; the chip lives between
+    // `m.start` and `m.end` (the sentinel range).
+    if (m.start > cursor) {
+      parts.push({ kind: 'text', text: text.slice(cursor, m.start) });
+    }
+    const doc = getDocById(m.token.documentId);
+    parts.push({
+      kind: 'mention',
+      title: m.token.documentTitle || 'Untitled',
+      docId: m.token.documentId,
+      available: !!doc,
+      sectionCount: m.token.paragraphIndexes.length,
+    });
+    cursor = m.end;
+  }
+  if (cursor < text.length) {
+    parts.push({ kind: 'text', text: text.slice(cursor) });
+  }
+  return (
+    <span style={{ whiteSpace: 'pre-wrap' }}>
+      {parts.map((p, i) => {
+        if (p.kind === 'text') return <span key={i}>{p.text}</span>;
+        return (
+          <button
+            key={i}
+            type="button"
+            className={`cm-popover__ref ${
+              p.available ? '' : 'cm-popover__ref--deleted'
+            }`}
+            disabled={!p.available}
+            onClick={() => p.available && onDocumentClick(p.docId)}
+            title={
+              p.available
+                ? `Open "${p.title}" in the editor${
+                    p.sectionCount > 0
+                      ? ` (${p.sectionCount} section${
+                          p.sectionCount === 1 ? '' : 's'
+                        } referenced)`
+                      : ''
+                  }`
+                : 'Source document was deleted'
+            }
+          >
+            <span aria-hidden>📄</span>
+            <span>
+              {p.title}
+              {p.sectionCount > 0 ? ` · §×${p.sectionCount}` : ''}
+              {!p.available ? ' (deleted)' : ''}
+            </span>
+          </button>
+        );
+      })}
+    </span>
+  );
 }

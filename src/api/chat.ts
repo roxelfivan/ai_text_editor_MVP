@@ -1,6 +1,6 @@
 // Minimal OpenAI-compatible chat client. Works with MiniMax by default.
 // The user supplies apiKey + apiEndpoint (and optionally model/systemMessage).
-import type { ChatMessage, ApiConfig } from '@/types';
+import type { ApiConfig, ChatMessage, DocumentRecord, MentionToken } from '@/types';
 
 /**
  * Built-in default system message. Single source of truth for the
@@ -150,6 +150,15 @@ export async function streamChatCompletion(
  * Build the message array that gets sent to the API: system + history + current.
  * If a `selection` is present on the most recent user message, append a system
  * note telling the model what the highlighted text is.
+ *
+ * `referencedDocuments` are the @-mention tokens attached to the
+ * user message (or to a comment batch that's about to be sent). For
+ * each token we resolve the source document by id from
+ * `documentLookup` (when provided) and append a separate
+ * `sys-referenced-doc-N` system message with either the compact
+ * outline (whole-doc mentions) or the verbatim paragraph text
+ * (section-scoped mentions). Tokens whose source document is
+ * missing from the lookup are dropped silently.
  */
 export function buildRequestMessages(
   history: ChatMessage[],
@@ -163,7 +172,16 @@ export function buildRequestMessages(
    * prompt stays sensible for callers that don't know about the
    * override (tests, other entry points).
    */
-  rationaleRulesOverride?: string
+  rationaleRulesOverride?: string,
+  /**
+   * @-document references attached to the outgoing turn. Each token
+   * resolves to a separate system message appended after
+   * `sys-current-doc`. Pass `documentLookup` when the tokens point
+   * at documents the caller does not already have in `currentDocument`
+   * (i.e. always for chat; tests may skip it).
+   */
+  referencedDocuments?: MentionToken[],
+  documentLookup?: (id: string) => DocumentRecord | null
 ): ChatMessage[] {
   const effectiveSystem =
     (systemMessage && systemMessage.trim()) || DEFAULT_SYSTEM_MESSAGE;
@@ -217,6 +235,29 @@ export function buildRequestMessages(
       content: buildProposedEditRulesMessage(rationaleRulesOverride),
       createdAt: 0,
     });
+  }
+
+  // Append @-referenced documents as separate system messages so the
+  // model can address them by title in the reply. Each token is one
+  // message, numbered sequentially. We dedupe by documentId (the
+  // first-seen mention wins) and drop tokens whose source document
+  // is no longer available in the lookup.
+  if (referencedDocuments && referencedDocuments.length > 0) {
+    const seen = new Set<string>();
+    let counter = 0;
+    for (const token of referencedDocuments) {
+      if (seen.has(token.documentId)) continue;
+      const doc = documentLookup?.(token.documentId);
+      if (!doc || !doc.content.trim()) continue;
+      seen.add(token.documentId);
+      counter++;
+      out.push({
+        id: `sys-referenced-doc-${counter}`,
+        role: 'system',
+        content: buildReferencedDocMessage(token, doc),
+        createdAt: 0,
+      });
+    }
   }
   for (const m of history) {
     if (m.role === 'system') continue;
@@ -555,4 +596,94 @@ function trimOnWordBoundary(s: string, max: number): string {
   const sp = sliced.lastIndexOf(' ');
   if (sp > max / 2) return sliced.slice(0, sp);
   return sliced;
+}
+
+/**
+ * Hard cap on the total characters inlined from section-scoped
+ * referenced documents. When the picked paragraphs exceed this we
+ * fall back to a compact outline and append a truncation note so
+ * the model still has orientation but the prompt stays bounded.
+ */
+const REFERENCED_SECTION_CHARS_CAP = 4000;
+
+/**
+ * Build the system message for a single @-referenced document.
+ * Whole-doc mentions get the same compact outline used for the
+ * current document (token-cheap, lets the model address the doc
+ * by title without seeing the full text). Section-scoped mentions
+ * get the verbatim paragraph text for the picked indexes (capped),
+ * so the model can quote / propose edits against the exact passage.
+ */
+function buildReferencedDocMessage(
+  token: MentionToken,
+  doc: DocumentRecord
+): string {
+  const title = (doc.title || token.documentTitle || 'Untitled').trim();
+  if (token.kind === 'doc' || token.paragraphIndexes.length === 0) {
+    return (
+      `Referenced document: "${title}". ` +
+      `Treat the outline below as the working text when the user ` +
+      `refers to it by name.\n\n` +
+      buildDocOutline(title, doc.content, false)
+    );
+  }
+  const starts = splitParagraphs(doc.content);
+  const picked: number[] = [];
+  for (const idx of token.paragraphIndexes) {
+    if (idx >= 0 && idx < starts.length) picked.push(idx);
+  }
+  if (picked.length === 0) {
+    return (
+      `Referenced document: "${title}". ` +
+      `The user picked sections, but none could be located; falling ` +
+      `back to the outline.\n\n` +
+      buildDocOutline(title, doc.content, false)
+    );
+  }
+  // Build the verbatim text and bail to outline + note if the total
+  // would blow the cap. Most sections will be far under the cap
+  // (a typical 200-word paragraph is ~1,200 chars).
+  const sections: string[] = [];
+  let used = 0;
+  for (const idx of picked) {
+    const start = starts[idx];
+    const end = idx + 1 < starts.length ? starts[idx + 1] : doc.content.length;
+    const slice = doc.content.slice(start, end);
+    if (used + slice.length > REFERENCED_SECTION_CHARS_CAP) {
+      return (
+        `Referenced document: "${title}". ` +
+        `Sections picked (truncated to fit the prompt budget; ` +
+        `outline below for orientation).\n\n` +
+        sections.join('') +
+        `\n…(remaining sections omitted)…\n\n` +
+        buildDocOutline(title, doc.content, false)
+      );
+    }
+    sections.push(`[p${idx + 1}]\n${slice}`);
+    used += slice.length;
+  }
+  return (
+    `Referenced document: "${title}". ` +
+    `Sections picked by the user (verbatim — quote / propose edits ` +
+    `against this exact text):\n\n` +
+    sections.join('')
+  );
+}
+
+/**
+ * Compute paragraph start offsets for `content`. Mirrors the logic
+ * in `buildDocOutline` so the section-text builder sees the same
+ * paragraph boundaries as the outline.
+ */
+function splitParagraphs(content: string): number[] {
+  const starts: number[] = [0];
+  for (let i = 0; i < content.length; i++) {
+    if (content.charCodeAt(i) === 10) {
+      const next = i + 1;
+      if (next < content.length && starts[starts.length - 1] !== next) {
+        starts.push(next);
+      }
+    }
+  }
+  return starts;
 }

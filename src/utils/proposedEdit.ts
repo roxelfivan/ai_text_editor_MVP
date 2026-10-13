@@ -1,4 +1,4 @@
-import type { ProposedEdit } from '@/types';
+import type { MentionToken, ProposedEdit } from '@/types';
 
 export type ProposedEditSegment =
   | { kind: 'text'; payload: string }
@@ -459,6 +459,14 @@ export interface RejectionItem {
   editId: string;
   /** The user's free-text comment. Trimmed before formatting. */
   comment: string;
+  /**
+   * @-document references the user attached to the rejection comment.
+   * Empty / undefined for cards where the user did not use `@`.
+   * When the staged rejections are committed, the merged mention
+   * list is forwarded to the prompt builder so the model sees the
+   * referenced doc(s) alongside the rejection batch.
+   */
+  mentions?: MentionToken[];
 }
 
 /**
@@ -472,10 +480,20 @@ export interface RejectionItem {
  *
  * Items with empty/whitespace-only comments are skipped — those should
  * have used the plain "Reject" button instead.
+ *
+ * The `comment` strings passed in may contain @-mention sentinel
+ * sequences (e.g. `\u200B[[mention:…]]\u200B`). We strip those here
+ * via `cleanCommentForPrompt` before formatting so the user-visible
+ * chat message is plain prose — the referenced docs are conveyed
+ * separately through the prompt builder's `referencedDocuments`
+ * argument.
  */
 export function formatRejectionBatch(items: RejectionItem[]): string {
   const lines = items
-    .map((it) => ({ editId: it.editId, comment: it.comment.trim() }))
+    .map((it) => ({
+      editId: it.editId,
+      comment: cleanCommentForPrompt(it.comment).trim(),
+    }))
     .filter((it) => it.comment.length > 0);
 
   if (lines.length === 0) return '';
@@ -487,4 +505,37 @@ export function formatRejectionBatch(items: RejectionItem[]): string {
 
   const body = lines.map((l) => `[${l.editId}] ${l.comment}`).join('\n');
   return `${header}\n\n${body}\n`;
+}
+
+/**
+ * Strip @-mention sentinels from a comment string. Pure / no React
+ * imports so it stays tree-shakeable. Duplicated here (rather than
+ * imported from `components/mentions/parseMentions.ts`) to keep the
+ * `utils/` layer free of UI dependencies — the source of truth for
+ * the sentinel format is the OPEN / CLOSE constants below.
+ */
+const MENTION_OPEN = '\u200B[[mention:';
+const MENTION_CLOSE = ']]\u200B';
+export function cleanCommentForPrompt(text: string): string {
+  if (!text) return '';
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    const open = text.indexOf(MENTION_OPEN, i);
+    if (open === -1) {
+      out += text.slice(i);
+      break;
+    }
+    out += text.slice(i, open);
+    const bodyStart = open + MENTION_OPEN.length;
+    const close = text.indexOf(MENTION_CLOSE, bodyStart);
+    if (close === -1) {
+      // Unterminated sentinel — keep the rest as plain text so the
+      // user does not silently lose typed content.
+      out += text.slice(open);
+      break;
+    }
+    i = close + MENTION_CLOSE.length;
+  }
+  return out;
 }

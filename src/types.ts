@@ -160,6 +160,14 @@ export interface CommentRound {
    * edit in response to a single batch send.
    */
   applied: ProposedEditRationale[];
+  /**
+   * Document mentions (`@`-references) the user attached to this
+   * round's comment body. Empty / undefined for rounds created
+   * before the mentions feature shipped. Persisted with the round
+   * so a comment that already includes references stays intact
+   * across reloads.
+   */
+  mentions?: MentionToken[];
 }
 
 /**
@@ -238,3 +246,41 @@ export type CommentOp =
       editId: string;
     }
   | { kind: 'delete'; comment: Comment };
+
+/**
+ * A user-attached reference to another document (or a section of one)
+ * inside a chat message or a comment. Inserted via the `@` picker
+ * and rendered as an inline chip in the input.
+ *
+ * The `documentTitle` is captured at insert time so a later rename of
+ * the source document does not silently change the chip's visible
+ * text. If the source document is deleted, callers should treat the
+ * chip as "(deleted)" and drop the mention from the prompt context.
+ *
+ * `paragraphIndexes` is empty for `kind === 'doc'` (the whole document
+ * is referenced) and contains 0-based paragraph indexes into the
+ * source document's paragraph list for `kind === 'doc-section'`.
+ * Paragraph boundaries match `buildDocOutline` in `src/api/chat.ts`
+ * (one paragraph per `\n`).
+ */
+export type MentionKind = 'doc' | 'doc-section';
+
+export interface MentionToken {
+  /** Local uuid used as the textarea sentinel id and the React key. */
+  id: string;
+  kind: MentionKind;
+  /** Source document id (lookup key in `useStore.documents`). */
+  documentId: string;
+  /**
+   * Source document title captured at insert time. Used as the chip
+   * label so the chip stays stable across renames.
+   */
+  documentTitle: string;
+  /**
+   * 0-based paragraph indexes into the source document. Empty for
+   * whole-document mentions; one or more entries for section-scoped
+   * mentions.
+   */
+  paragraphIndexes: number[];
+  createdAt: number;
+}

@@ -10,7 +10,7 @@
 // This module is the single source of truth for the URL shape so the
 // search params can be updated in one place if Google changes the
 // public AI Mode deep-link in the future.
-import type { ChatMessage } from '@/types';
+import type { ChatMessage, DocumentRecord, MentionToken } from '@/types';
 import { DEFAULT_SYSTEM_MESSAGE } from '@/api/chat';
 
 // Base URL for Google's AI Mode deep-link. `udm=50` selects the
@@ -45,7 +45,16 @@ const MAX_DOC_PREVIEW_CHARS = 2000;
 export function buildGoogleAiModeUrl(
   messages: ChatMessage[],
   systemMessage: string | undefined,
-  currentDocument: { title: string; content: string } | null | undefined
+  currentDocument: { title: string; content: string } | null | undefined,
+  /**
+   * Optional @-document references. Each resolved doc is wrapped
+   * in a short `[Context — document "<title>"]` block so the
+   * AI Mode page still sees the references; the size of the
+   * preview is capped via `MAX_DOC_PREVIEW_CHARS` so the URL
+   * stays under the 6,000-char limit.
+   */
+  referencedDocuments?: MentionToken[],
+  documentLookup?: (id: string) => DocumentRecord | null
 ): string {
   const effectiveSystem =
     (systemMessage && systemMessage.trim()) || DEFAULT_SYSTEM_MESSAGE;
@@ -66,6 +75,32 @@ export function buildGoogleAiModeUrl(
         `${preview}\n` +
         `[End context]\n\n`
     );
+  }
+
+  // Append @-referenced documents. Each one is wrapped in the same
+  // `[Context — document "<title>"]` block as the current doc, with
+  // the same preview cap. We dedupe by documentId so a user who
+  // references the same doc twice (e.g. once as a whole doc and
+  // again for a specific section) does not blow up the URL.
+  if (referencedDocuments && referencedDocuments.length > 0 && documentLookup) {
+    const seen = new Set<string>();
+    for (const token of referencedDocuments) {
+      if (seen.has(token.documentId)) continue;
+      const doc = documentLookup(token.documentId);
+      if (!doc || !doc.content.trim()) continue;
+      seen.add(token.documentId);
+      const title = doc.title?.trim() || 'Untitled';
+      const preview =
+        doc.content.length > MAX_DOC_PREVIEW_CHARS
+          ? doc.content.slice(0, MAX_DOC_PREVIEW_CHARS) +
+            '\n[…truncated…]'
+          : doc.content;
+      parts.push(
+        `[Context — referenced document "${title}"]\n` +
+          `${preview}\n` +
+          `[End context]\n\n`
+      );
+    }
   }
 
   if (effectiveSystem.trim()) {

@@ -51,3 +51,7 @@ Saved prompts can fill the Chat input, including the current selection. See [Pro
 ## Staged rejection comments
 
 If you **Reject with feedback** on a proposed-edit card, Chat shows how many rejection comments are staged. Use **Send n rejection comments** to send them together, or **Clear staged** to drop them. Details: [Proposed edits](proposed-edits.md).
+
+## Reference other documents with `@`
+
+Type `@` in the chat input to attach another document to the message. Pick a doc, optionally narrow it to specific paragraphs, and the reference rides along with your message. The model sees the referenced doc in the system prompt. Details: [Reference other documents](reference-other-documents.md).

@@ -12,49 +12,43 @@
 > See [Credits](#credits) for details.
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/darrylschaefer/ai-text-editor/blob/main/LICENSE)
-[![v0.4.6](https://img.shields.io/badge/version-0.4.6-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6)
+[![v0.4.7](https://img.shields.io/badge/version-0.4.7-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.7)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-
-**Using the app?** Start with the [user guide](./docs/README.md) — getting started, writing, comments, Chat, settings, shortcuts, and troubleshooting.
 
 ---
 
-## What's new in v0.4.6
+## What's new in v0.4.7
 
-> Auto-snapshot before Send / Apply All, credit-risk cover-memo
-> Rationale Rules with bold+underlined keywords, ProposedEditCard Split
-> view as Preview-style markdown, and a draggable Write / Preview
-> divider with Preview-style rendering in Revision History.
+> `@`-document references across chat, comments (new + re-edit), and
+> Proposed Edit card rejections. The model sees the referenced doc(s)
+> in the system prompt; the chat history stays readable because
+> mention sentinels are stripped from the user-visible message.
 
 Highlights:
 
-1. **Auto-snapshot on Chat actions.** Chat **Send** and **Apply N
-   changes** now save a revision (`Before AI send` / `Before Apply
-   All`) before mutating the document, so the prior state is
-   recoverable from Revision history.
-2. **Credit-risk cover-memo Rationale Rules.** Default rules are
-   written as a credit-risk cover memo proposing amendments to bank
-   policies / procedures / guidelines. Point 3 expands into `3.1`
-   (risk the Bank faced before), `3.2` (risk the amendment
-   mitigates), and `3.3` (why risk management is stronger after).
-   Keywords are bold **and** underlined (`**<u>…</u>**`).
-3. **ProposedEditCard Split = Editor Preview.** Split view now
-   renders Original and Proposed as Preview-style markdown columns
-   (full-document markdown), keeping the existing Inline line-diff
-   for byte-level comparison.
-4. **Draggable Write / Preview divider.** The Split editor divider
-   is now draggable; the write-pane share is stored as
-   `layout.editorSplitPct` (20–80%, persisted).
-5. **Revision history Preview.** The right pane defaults to a
-   Preview-style markdown rendering of the selected snapshot, with a
-   **Diff** toggle for the existing line diff.
-6. **Settings always shows the live default.** Stale frozen
-   Rationale Rules / System Message overrides are now cleared on
-   rehydration and the textarea mirrors the current built-in
-   (instead of the old frozen text).
+1. **`@`-references in chat, comments, and rejection feedback.**
+   Type `@` in the chat input, in a new comment, in the comment
+   popover's edit box, or in a Proposed Edit card's **Comment
+   (optional)** to open a doc picker. Pick a document, optionally
+   narrow it to specific paragraphs, and a compound chip appears
+   above the input. On send, every reference is folded into the
+   system prompt as a `sys-referenced-doc-N` message.
+2. **Whole-doc or section-scoped.** The default reference sends a
+   token-cheap outline (≤ 60 chars / paragraph). Tick one or more
+   paragraphs in the section picker to inline the verbatim text
+   instead (≤ 4,000 chars total across all picked sections).
+3. **Persisted, deletable, click-to-edit.** Chips survive reloads
+   (per round on comments, transient on rejections). Click the
+   section line on a chip to re-open the picker; `×` removes it.
+4. **Works with Google AI Mode too.** The keyless provider's deep-
+   link payload also receives the referenced docs so the AI Mode
+   tab sees the same context the OpenAI path does.
+5. **Dark-mode contrast for the rejection textarea.** Explicit
+   light/dark tokens so the cream text on a dark field is readable
+   without changing the rest of the card.
 
-See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.4.6
-changelog and the v0.4.5 entry above for prior highlights.
+See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.4.7
+changelog and the v0.4.6 entry above for prior highlights.
 
 ---
 
@@ -148,6 +142,11 @@ toggles in the topbar.
   and every comment into one chat turn. The reply comes back as
   the same proposed-edit cards, one per comment. See
   [Comment + Send to AI](#comment--send-to-ai) for the full flow.
+- **`@`-document references (v0.4.7+)** — type `@` while writing a
+  comment to attach another document (or a specific paragraph of
+  one) to the outgoing batch. See
+  [@-document references](#-document-references-chat--comments) for
+  the full flow, including the popover's re-edit mode.
 
 ### Persistence + privacy
 
@@ -389,6 +388,61 @@ keeping the same contracts. See [RELEASE_NOTES.md](./RELEASE_NOTES.md).
 
 ---
 
+## @-document references (chat + comments)
+
+Type `@` in any of these surfaces to attach another document (or a
+specific paragraph of one) to the outgoing turn:
+
+- the **chat input** (right-hand panel)
+- a **new comment** (select text → toolbar **Comment**)
+- a **comment popover** in edit mode (open a comment badge → **Edit**)
+- a **Proposed Edit card's Comment (optional)** (rejection feedback)
+
+### How it works
+
+1. The picker auto-opens when you type `@` and stays open as you
+   filter by title.
+2. After picking a doc, a second picker lists its paragraphs
+   (numbered with the same 60-char preview the AI sees). Tick one
+   or more to scope the reference to just those paragraphs, or
+   press **Whole document** for the default (token-cheap outline).
+3. The pill shows the doc title on top and the section summary on
+   the bottom (`full document` or `§ preview +N more`). Click the
+   bottom line to re-open the section picker. The `×` removes the
+   reference.
+4. On **Send** (chat) / **Send to AI** (comments) / **Send N
+   rejection comments** (proposed edits), each reference is folded
+   into the prompt as a separate system message that names the doc
+   and inlines either the compact outline (default) or the verbatim
+   paragraph text (section-scoped, capped at 4,000 chars across all
+   picked sections to keep the prompt bounded).
+5. References are persisted with each comment round, so reloading
+   the app keeps them. A reference whose source doc was deleted
+   shows as `(deleted)` in the chip and is dropped from the prompt.
+6. **In a comment popover's read view**, the reference renders as
+   an inline clickable pill — clicking it switches the editor to
+   the referenced document so you can read the source in context.
+
+### Keyboard
+
+- `↑` / `↓` — move through the picker
+- `Enter` / `Tab` — confirm the highlighted row
+- `Space` (section picker) — toggle the current paragraph
+- `Esc` — close the picker (does not consume the `@` you typed)
+
+### Where it lives
+
+- `src/components/mentions/MentionInput.tsx` — the shared @-aware
+  input. Backed by a real `<textarea>` (sentinel sequences for
+  mentions, painted as chips in a row above the textarea).
+- `src/components/mentions/DocPicker.tsx` — first-stage doc list.
+- `src/components/mentions/SectionPicker.tsx` — second-stage
+  paragraph multi-select.
+- `src/api/chat.ts` `buildRequestMessages` — appends
+  `sys-referenced-doc-N` messages per reference.
+
+---
+
 ## OCR / PDF import
 
 The editor toolbar's **Import text from photos or PDFs** button
@@ -547,6 +601,7 @@ per-release notes also ship on the GitHub release pages.
 
 | Version | Highlights |
 | --- | --- |
+| [v0.4.7](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.7) | `@`-document references in chat, comments (new + re-edit), and rejection feedback. Whole-doc or section-scoped. Persisted on comment rounds. Dark-mode contrast for the rejection textarea. |
 | [v0.4.6](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6) | Auto-snapshot on Send / Apply All, credit-risk cover-memo Rationale Rules with bold+underlined keywords, ProposedEditCard Split as Preview-style markdown, draggable Write / Preview divider, Revision history Preview pane, live-default Settings sync. |
 | [v0.4.5](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.5) | Comment **rounds** + **rationales**, Settings Rationale Rules, Apply re-anchors to replacement, leaner prompts, **Predict** off by default. |
 | [v0.4.1](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.1) | **Send to AI** whole-document consistency; per-comment context; doc outline instead of verbatim document. |

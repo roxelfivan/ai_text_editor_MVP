@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useStore } from '@/store/useStore';
-import type { ProposedEdit } from '@/types';
+import type { MentionToken, ProposedEdit } from '@/types';
 import { lineDiff } from '@/utils/diff';
 import { remarkPlugins, rehypePlugins } from '@/utils/markdown';
 import { applyEdit, applyEditAtCaret, findEditAnchor } from '@/utils/proposedEdit';
 import { ResizeHandle } from '@/components/ResizeHandle';
+import { MentionInput } from '@/components/mentions/MentionInput';
 import {
   useDragResize,
   applyHandle,
@@ -39,10 +40,16 @@ interface Props {
   committed?: boolean;
   /**
    * Notify the parent that the user wants to stage this card's comment for
-   * a batched send. Called with the trimmed comment text. If the comment is
-   * empty, the parent should treat the call as a plain rejection instead.
+   * a batched send. Called with the comment text (which may include
+   * @-mention sentinel sequences) and the list of @-document references
+   * the user attached. If the comment is empty, the parent should treat
+   * the call as a plain rejection instead.
    */
-  onStageReject?: (info: { editId: string; comment: string }) => void;
+  onStageReject?: (info: {
+    editId: string;
+    comment: string;
+    mentions: MentionToken[];
+  }) => void;
 }
 
 type CardStatus =
@@ -99,8 +106,15 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
   const [viewMode, setViewMode] = useState<ViewMode>('split');
   // Free-text comment the user typed to explain a reject. Held locally
   // until they click "Reject with feedback", at which point we hand it up
-  // to ChatPanel so it can batch with sibling rejections.
+  // to ChatPanel so it can batch with sibling rejections. The raw
+  // textarea value (with any @-mention sentinel sequences) is kept
+  // here so we can hand the full body to the parent on stage.
   const [comment, setComment] = useState('');
+  // @-document references the user attached to the comment. Lifted
+  // out of MentionInput so the staged state can survive the textarea
+  // becoming read-only, and so the parent can include them in the
+  // rejection prompt.
+  const [mentions, setMentions] = useState<MentionToken[]>([]);
   // Ref to the card's root element, used to read its actual rendered size
   // when a drag starts (so a card that auto-sizes to its parent resizes
   // smoothly from its real on-screen dimensions rather than from the
@@ -281,19 +295,25 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
   };
 
   const handleRejectWithFeedback = () => {
+    // Decide if the comment is "non-empty" after stripping @-mention
+    // sentinels. A card whose only content is a single @-doc reference
+    // (no plain prose) should still count as a rejection-with-feedback
+    // — the referenced doc is the rejection's substance.
     const trimmed = comment.trim();
-    if (!trimmed) {
-      // No comment typed: fall back to a plain reject so the user isn't
-      // stuck with a button that does nothing.
+    const hasContent = trimmed.length > 0;
+    if (!hasContent && mentions.length === 0) {
+      // No comment typed and no @-references: fall back to a plain
+      // reject so the user isn't stuck with a button that does nothing.
       setStatus({ kind: 'rejected' });
       return;
     }
     if (onStageReject) {
-      onStageReject({ editId: edit.id, comment: trimmed });
+      onStageReject({ editId: edit.id, comment, mentions });
       // Keep `comment` populated so the user can still see what they
       // typed. The textarea flips to read-only when `staged` is true, so
       // the card visually settles into a "waiting to send" state without
-      // erasing the user's text.
+      // erasing the user's text. `mentions` is kept too so the chip
+      // bar above the textarea stays in sync.
     } else {
       // No parent wiring: behave like a plain reject so the card doesn't
       // get stuck open forever.
@@ -490,18 +510,20 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
         >
           Comment (optional)
         </label>
-        <textarea
-          id={`pe-comment-${messageId}-${edit.id}`}
+        <MentionInput
           value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          disabled={status.kind === 'applied'}
-          readOnly={!!staged}
-          placeholder="Why reject? (sent to the AI as revision feedback)"
-          rows={2}
-          className={`w-full p-1.5 rounded text-xs outline-none resize-none transition-colors ${
+          onChange={(v) => {
+            setComment(v.text);
+            setMentions(v.mentions);
+          }}
+          ariaLabel={`Rejection comment for ${edit.id}`}
+          placeholder="Why reject? (sent to the AI as revision feedback) — type @ to reference a document"
+          className="ape-field pe-comment__textarea"
+          disabled={status.kind === 'applied' || !!staged}
+          containerClassName={`pe-comment__input ${
             staged
-              ? 'border border-cyber-clay/50 dark:border-cyber-cyan/60 bg-cyber-clay/5 dark:bg-cyber-cyan/10 text-cyber-clay dark:text-cyber-cyan cursor-default'
-              : 'ape-field focus:ring-1 focus:ring-cyber-clay dark:focus:ring-cyber-cyan'
+              ? 'pe-comment__input--staged'
+              : ''
           }`}
         />
         <div className="mt-1.5 flex items-center justify-between gap-2">
@@ -514,11 +536,15 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
             type="button"
             className="btn-cyan-sm disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleRejectWithFeedback}
-            disabled={status.kind === 'applied' || !comment.trim() || staged}
+            disabled={
+              status.kind === 'applied' ||
+              staged ||
+              (!comment.trim() && mentions.length === 0)
+            }
             title={
               staged
                 ? 'Already staged'
-                : 'Stage this rejection with the typed comment'
+                : 'Stage this rejection with the typed comment and any @-references'
             }
           >
             Reject with feedback

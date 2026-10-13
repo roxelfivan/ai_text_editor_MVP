@@ -66,3 +66,7 @@ Expand or collapse rounds with the **+** / **−** controls when there is more t
 2. **Send to AI** again.
 3. **Apply** the new card.
 4. Open the badge and compare Round 1 and Round 2.
+
+## Reference other documents
+
+Type `@` in the composer (or in the popover's edit box) to attach another document to the comment. The reference shows up as an inline pill in the popover's read view; clicking the pill switches the editor to the referenced document. Details: [Reference other documents](reference-other-documents.md).
