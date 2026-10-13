@@ -15,6 +15,8 @@
 [![v0.4.6](https://img.shields.io/badge/version-0.4.6-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
+**Using the app?** Start with the [user guide](./docs/README.md) — getting started, writing, comments, Chat, settings, shortcuts, and troubleshooting.
+
 ---
 
 ## What's new in v0.4.6
