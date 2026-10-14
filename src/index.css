@@ -1578,6 +1578,43 @@ html.dark .mention-input__chipbar:has(.mention-chip) {
   width: 100%;
 }
 
+/* Inline chip overlay. Sits on top of the textarea; each
+   .mention-input__overlay-chip is a transparent clickable region
+   positioned over a mention's caption text in the prose. Default
+   state is fully transparent so the prose reads naturally; hover
+   lights up a soft pill so the user can see what's clickable. */
+.mention-input__overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.mention-input__overlay-chip {
+  position: absolute;
+  pointer-events: auto;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.mention-input__overlay-chip:hover:not(:disabled),
+.mention-input__overlay-chip:focus-visible:not(:disabled) {
+  background: rgba(157, 124, 78, 0.18);
+  box-shadow: 0 0 0 1px rgba(157, 124, 78, 0.35) inset;
+}
+.mention-input__overlay-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+html.dark .mention-input__overlay-chip:hover:not(:disabled),
+html.dark .mention-input__overlay-chip:focus-visible:not(:disabled) {
+  background: rgba(176, 200, 178, 0.22);
+  box-shadow: 0 0 0 1px rgba(176, 200, 178, 0.45) inset;
+}
+
 .mention-popover {
   z-index: 60;
   background: #fbf7ec;
@@ -1658,6 +1695,17 @@ html.dark .mention-popover__item:hover {
   font-size: 10px;
   opacity: 0.7;
   padding-top: 1px;
+}
+.mention-popover__level {
+  flex: 0 0 auto;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 10px;
+  opacity: 0.7;
+  padding-top: 1px;
+  min-width: 1.5em;
+}
+.mention-popover__level--preamble {
+  opacity: 0.55;
 }
 .mention-popover__preview {
   flex: 1;

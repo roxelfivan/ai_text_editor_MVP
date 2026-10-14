@@ -12,43 +12,34 @@
 > See [Credits](#credits) for details.
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/darrylschaefer/ai-text-editor/blob/main/LICENSE)
-[![v0.4.7](https://img.shields.io/badge/version-0.4.7-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.7)
+[![v0.4.8](https://img.shields.io/badge/version-0.4.8-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.8)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 ---
 
-## What's new in v0.4.7
+## What's new in v0.4.8
 
-> `@`-document references across chat, comments (new + re-edit), and
-> Proposed Edit card rejections. The model sees the referenced doc(s)
-> in the system prompt; the chat history stays readable because
-> mention sentinels are stripped from the user-visible message.
+> Heading-grouped `@` section picks, parent→child cascade, Cancel,
+> and inline `§…` captions in the textarea. Section-scoped sends
+> still inline only the picked paragraphs — not the whole document.
 
 Highlights:
 
-1. **`@`-references in chat, comments, and rejection feedback.**
-   Type `@` in the chat input, in a new comment, in the comment
-   popover's edit box, or in a Proposed Edit card's **Comment
-   (optional)** to open a doc picker. Pick a document, optionally
-   narrow it to specific paragraphs, and a compound chip appears
-   above the input. On send, every reference is folded into the
-   system prompt as a `sys-referenced-doc-N` message.
-2. **Whole-doc or section-scoped.** The default reference sends a
-   token-cheap outline (≤ 60 chars / paragraph). Tick one or more
-   paragraphs in the section picker to inline the verbatim text
-   instead (≤ 4,000 chars total across all picked sections).
-3. **Persisted, deletable, click-to-edit.** Chips survive reloads
-   (per round on comments, transient on rejections). Click the
-   section line on a chip to re-open the picker; `×` removes it.
-4. **Works with Google AI Mode too.** The keyless provider's deep-
-   link payload also receives the referenced docs so the AI Mode
-   tab sees the same context the OpenAI path does.
-5. **Dark-mode contrast for the rejection textarea.** Explicit
-   light/dark tokens so the cream text on a dark field is readable
-   without changing the rest of the card.
+1. **Heading-grouped section picker.** After `@` + pick a doc, the
+   second stage lists Markdown headings (ATX / Setext) instead of
+   every paragraph line. No headings → previous paragraph fallback.
+2. **Parent → child cascade + Cancel.** Ticking a parent selects
+   all descendant sections; child ticks do not force the parent.
+   **Cancel** closes without attaching a mention.
+3. **Inline `§…` marker in the textarea.** The same caption as the
+   chip (`§ Title +N more`) appears in the prose at the caret;
+   click it (or the chip section line) to re-edit the pick.
+4. **Token scope unchanged.** Whole-doc → outline only. Section
+   pick → verbatim picked paragraphs only (≤ 4,000 chars / doc,
+   ≤ 8,000 chars turn-wide across referenced docs).
 
-See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.4.7
-changelog and the v0.4.6 entry above for prior highlights.
+See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.4.8
+changelog and the v0.4.7 entry below for prior `@`-reference work.
 
 ---
 
@@ -142,9 +133,9 @@ toggles in the topbar.
   and every comment into one chat turn. The reply comes back as
   the same proposed-edit cards, one per comment. See
   [Comment + Send to AI](#comment--send-to-ai) for the full flow.
-- **`@`-document references (v0.4.7+)** — type `@` while writing a
-  comment to attach another document (or a specific paragraph of
-  one) to the outgoing batch. See
+- **`@`-document references (v0.4.7+ / v0.4.8 headings)** — type
+  `@` while writing a comment to attach another document, then
+  narrow by heading section (or whole doc). See
   [@-document references](#-document-references-chat--comments) for
   the full flow, including the popover's re-edit mode.
 
@@ -402,20 +393,23 @@ specific paragraph of one) to the outgoing turn:
 
 1. The picker auto-opens when you type `@` and stays open as you
    filter by title.
-2. After picking a doc, a second picker lists its paragraphs
-   (numbered with the same 60-char preview the AI sees). Tick one
-   or more to scope the reference to just those paragraphs, or
-   press **Whole document** for the default (token-cheap outline).
-3. The pill shows the doc title on top and the section summary on
-   the bottom (`full document` or `§ preview +N more`). Click the
-   bottom line to re-open the section picker. The `×` removes the
-   reference.
+2. After picking a doc, a second picker lists **heading sections**
+   when the Markdown has ATX / Setext headings (v0.4.8). Tick one
+   or more sections to scope the reference; ticking a parent
+   cascades to its descendants. Documents without headings fall
+   back to the paragraph list. Or choose **Whole document** for
+   the default token-cheap outline.
+3. A compound chip appears above the input (title + `§…` summary),
+   and the same `§…` caption is inserted in the textarea at the
+   caret (v0.4.8). Click the chip's section line or the inline
+   caption to re-open the picker; `×` removes the reference.
+   **Cancel** on the section picker aborts without attaching.
 4. On **Send** (chat) / **Send to AI** (comments) / **Send N
    rejection comments** (proposed edits), each reference is folded
    into the prompt as a separate system message that names the doc
    and inlines either the compact outline (default) or the verbatim
-   paragraph text (section-scoped, capped at 4,000 chars across all
-   picked sections to keep the prompt bounded).
+   text of **only the picked paragraphs** (section-scoped, capped
+   at 4,000 chars per doc / 8,000 turn-wide — not the full document).
 5. References are persisted with each comment round, so reloading
    the app keeps them. A reference whose source doc was deleted
    shows as `(deleted)` in the chip and is dropped from the prompt.
@@ -426,18 +420,20 @@ specific paragraph of one) to the outgoing turn:
 ### Keyboard
 
 - `↑` / `↓` — move through the picker
-- `Enter` / `Tab` — confirm the highlighted row
-- `Space` (section picker) — toggle the current paragraph
-- `Esc` — close the picker (does not consume the `@` you typed)
+- `Enter` / `Tab` — confirm the highlighted row / Confirm
+- `Space` (section picker) — toggle the current section (cascade)
+- `Esc` — Cancel / close the picker (does not consume the `@`)
 
 ### Where it lives
 
-- `src/components/mentions/MentionInput.tsx` — the shared @-aware
-  input. Backed by a real `<textarea>` (sentinel sequences for
-  mentions, painted as chips in a row above the textarea).
+- `src/components/mentions/MentionInput.tsx` — shared @-aware
+  input: plain caption + ZWSP in the textarea, chips above,
+  serialize/hydrate against sentinels for the LLM.
 - `src/components/mentions/DocPicker.tsx` — first-stage doc list.
-- `src/components/mentions/SectionPicker.tsx` — second-stage
-  paragraph multi-select.
+- `src/components/mentions/SectionPicker.tsx` — heading-grouped
+  (or paragraph) multi-select with cascade + Cancel.
+- `src/hooks/useDocumentMentions.ts` — heading section detection
+  and descendant cascade indexes.
 - `src/api/chat.ts` `buildRequestMessages` — appends
   `sys-referenced-doc-N` messages per reference.
 
@@ -625,6 +621,7 @@ per-release notes also ship on the GitHub release pages.
 
 | Version | Highlights |
 | --- | --- |
+| [v0.4.8](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.8) | Heading-grouped `@` section picker, parent→child cascade, Cancel, inline `§…` captions in the textarea. Section sends stay scoped to picked paragraphs only. |
 | [v0.4.7](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.7) | `@`-document references in chat, comments (new + re-edit), and rejection feedback. Whole-doc or section-scoped. Persisted on comment rounds. Dark-mode contrast for the rejection textarea. |
 | [v0.4.6](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6) | Auto-snapshot on Send / Apply All, structured Rationale Rules with bold+underlined keywords, ProposedEditCard Split as Preview-style markdown, draggable Write / Preview divider, Revision history Preview pane, live-default Settings sync. |
 | [v0.4.5](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.5) | Comment **rounds** + **rationales**, Settings Rationale Rules, Apply re-anchors to replacement, leaner prompts, **Predict** off by default. |

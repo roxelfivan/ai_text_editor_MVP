@@ -271,7 +271,10 @@ export type CommentOp =
  * is referenced) and contains 0-based paragraph indexes into the
  * source document's paragraph list for `kind === 'doc-section'`.
  * Paragraph boundaries match `buildDocOutline` in `src/api/chat.ts`
- * (one paragraph per `\n`).
+ * (one paragraph per `\n`). The section picker groups these by
+ * markdown heading / sub-heading (blank-line blocks when a doc has
+ * no headings) and expands a picked section into the paragraph
+ * indexes it covers.
  */
 export type MentionKind = 'doc' | 'doc-section';
 

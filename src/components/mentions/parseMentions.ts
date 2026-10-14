@@ -246,21 +246,138 @@ function parseSentinelBody(body: string): MentionToken | null {
 
 /**
  * Build a stable label for a mention's chip (lower line). For whole-
- * doc mentions returns the section count string ("full document");
- * for section-scoped mentions returns the first picked paragraph's
- * preview + "+N more" when more than one was picked.
+ * doc mentions returns "full document". For section-scoped mentions,
+ * prefers heading-section titles when a section resolver is provided
+ * (so a multi-paragraph heading block reads as one § title), and
+ * falls back to the first picked paragraph's preview otherwise.
  */
 export function summarizeMention(
   token: MentionToken,
-  getParagraphPreview: (docId: string, paragraphIndex: number) => string | null
+  getParagraphPreview: (docId: string, paragraphIndex: number) => string | null,
+  getSectionTitles?: (docId: string, paragraphIndexes: number[]) => string[]
 ): string {
   if (token.kind === 'doc' || token.paragraphIndexes.length === 0) {
     return 'full document';
   }
+  const titles = getSectionTitles?.(
+    token.documentId,
+    token.paragraphIndexes
+  );
+  if (titles && titles.length > 0) {
+    if (titles.length === 1) return `§ ${titles[0]}`;
+    return `§ ${titles[0]} +${titles.length - 1} more`;
+  }
   const first = token.paragraphIndexes[0];
-  const preview = getParagraphPreview(token.documentId, first) ?? `paragraph ${first + 1}`;
+  const preview =
+    getParagraphPreview(token.documentId, first) ??
+    `paragraph ${first + 1}`;
   if (token.paragraphIndexes.length === 1) {
     return `§ ${preview}`;
   }
   return `§ ${preview} +${token.paragraphIndexes.length - 1} more`;
+}
+
+/**
+ * Insertion plan for re-encoding mentions into a raw value.
+ * `plainStart` points at a single ZWSP marker in the plain text.
+ */
+export interface MentionPosition {
+  plainStart: number;
+  plainEnd: number;
+}
+
+/**
+ * Build a raw value (with sentinels) from plain text and a set of
+ * mention positions. The mention's range [plainStart, plainEnd)
+ * covers the inline caption + a trailing ZWSP marker; both are
+ * stripped from the output and replaced by the sentinel, so the
+ * LLM sees a clean prose-with-sentinels value without the
+ * duplicated caption text. Sentinels are inserted at each
+ * mention's `plainStart`, in document order. Overlapping /
+ * out-of-order positions are dropped.
+ */
+export function serializeRawWithMentions(
+  plainText: string,
+  positions: Map<string, MentionPosition>,
+  mentions: MentionToken[]
+): string {
+  const ordered = mentions
+    .map((m) => ({ m, p: positions.get(m.id) }))
+    .filter((x): x is { m: MentionToken; p: MentionPosition } => !!x.p)
+    .sort((a, b) => a.p.plainStart - b.p.plainStart);
+
+  let out = '';
+  let cursor = 0;
+  for (const { m, p } of ordered) {
+    if (p.plainStart < cursor) continue;
+    out += plainText.slice(cursor, p.plainStart);
+    out += buildSentinel(m);
+    // Skip the inline caption + ZWSP in the plain text — the
+    // sentinel above carries the same metadata for the LLM.
+    cursor = p.plainEnd;
+  }
+  out += plainText.slice(cursor);
+  return out;
+}
+
+/**
+ * Inverse of `serializeRawWithMentions`. Parses a raw value, returning
+ * the sentinel-stripped plain text, the list of mentions, and a
+ * Map<mentionId, MentionPosition> giving each mention's position
+ * in the PLAIN text (not the raw value).
+ */
+export function parseRawWithMentions(
+  value: string
+): {
+  plain: string;
+  mentions: MentionToken[];
+  positions: Map<string, MentionPosition>;
+} {
+  const { plain, mentions: scanned } = parseMentionsWithRanges(value);
+  const positions = new Map<string, MentionPosition>();
+  let plainCursor = 0;
+  let rawCursor = 0;
+  for (const { token, start, end } of scanned) {
+    plainCursor += start - rawCursor;
+    positions.set(token.id, { plainStart: plainCursor, plainEnd: plainCursor });
+    rawCursor = end;
+  }
+  return { plain, mentions: scanned.map((s) => s.token), positions };
+}
+
+/**
+ * Compute the common-prefix and common-suffix lengths of two strings
+ * so callers can derive the changed range. Used by the @-mention
+ * textarea to shift mention positions after a user edit without
+ * doing a full re-tokenise on every keystroke.
+ *
+ * Returns:
+ *  - `prefixLen`  chars equal at the start of both strings
+ *  - `oldEnd`     index in `oldText` where the unchanged tail starts
+ *                 (i.e. `oldText.slice(oldEnd)` is the unchanged suffix)
+ *  - `newEnd`     index in `newText` where the unchanged tail starts
+ *
+ * The changed region in `oldText` is `[prefixLen, oldEnd)`, in
+ * `newText` it is `[prefixLen, newEnd)`. Either side may be empty
+ * (pure insertion or pure deletion).
+ */
+export function plainTextDiff(
+  oldText: string,
+  newText: string
+): { prefixLen: number; oldEnd: number; newEnd: number } {
+  const minLen = Math.min(oldText.length, newText.length);
+  let prefix = 0;
+  while (prefix < minLen && oldText[prefix] === newText[prefix]) prefix++;
+  let suffix = 0;
+  while (
+    suffix < minLen - prefix &&
+    oldText[oldText.length - 1 - suffix] === newText[newText.length - 1 - suffix]
+  ) {
+    suffix++;
+  }
+  return {
+    prefixLen: prefix,
+    oldEnd: oldText.length - suffix,
+    newEnd: newText.length - suffix,
+  };
 }

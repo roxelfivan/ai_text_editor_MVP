@@ -1,3 +1,54 @@
+## v0.4.8 — Heading-grouped @-mention sections + inline § captions
+
+Feature release on top of [v0.4.7](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.7). The `@` section picker groups a referenced document by its Markdown headings (instead of every paragraph line), and the selected scope appears as a readable `§…` caption both on the chip bar and inside the textarea. Selecting a parent heading cascades to its descendant sections; Cancel aborts without attaching a mention. Prompt scoping is unchanged: section picks still send only the picked paragraphs (capped), not the whole document.
+
+### Added
+
+- **Heading-grouped section picker.** After picking a document with `@`, the second stage lists Markdown heading sections (ATX `#`…`######` and Setext underlines). Each row is a heading title; ticking it selects that heading's paragraph indexes. Documents without headings fall back to the previous blank-line / paragraph list.
+- **Parent → child cascade.** Ticking a parent heading selects (or deselects) all descendant heading sections under it. Child ticks do not force the parent on.
+- **Cancel** on the section picker closes without creating or updating a mention (the typed `@` query text is left as-is).
+- **Inline `§…` captions in the textarea.** When you confirm a section pick, a reader-friendly caption (e.g. `§ 4.1 Title +3 more`) is inserted in the prose at the caret, matching the chip summary. A trailing zero-width space anchors the mention for delete/edit. Captions are stripped when serializing to sentinels for the LLM; they are re-hydrated when the parent re-feeds the raw value so the marker stays visible.
+- **Clickable inline overlay.** Clicking the in-textarea caption re-opens the section picker (same as clicking the chip's section line).
+- **`npm run test:heading-sections`** — harness for heading detection edge cases (ATX indent, trailing `#`, setext-after-ATX, cascade indexes).
+
+### Changed
+
+- **Section summary on chips** prefers heading titles when a section resolver is available (`§ <first title> +N more`), falling back to paragraph previews when the doc has no headings.
+- **Mention ranges** in the textarea are caption + ZWSP (`[plainStart, plainEnd)`), not zero-width sentinel slots. `serializeRawWithMentions` replaces that range with the sentinel; `parseRawWithMentions` + display hydrate restore the caption for editing.
+- **Section picker UX** — Cancel + Confirm; cascade toggle; clearer empty / no-headings states.
+
+### Token / prompt behavior (unchanged contract)
+
+- Whole-doc mention → compact outline only.
+- Section-scoped mention → verbatim text of **picked paragraph indexes only** (≤ 4,000 chars per doc, ≤ 8,000 chars turn-wide across referenced docs). Not the full document.
+- Picking a high-level heading can still pull in many descendant paragraphs — that is intentional cascade scope.
+
+### Keyboard
+
+- `↑` / `↓` — move through the heading (or paragraph) list
+- `Enter` / `Tab` — confirm the highlighted row / Confirm selection
+- `Space` — toggle the current section (with cascade)
+- `Esc` — Cancel / close the picker
+
+### Internal
+
+- `src/hooks/useDocumentMentions.ts` — heading section detection (`HeadingSection`), `descendantSectionIndexes`, ATX indent / trailing-hash / setext-after-ATX guards.
+- `src/components/mentions/SectionPicker.tsx` — heading rows, cascade toggle, Cancel.
+- `src/components/mentions/MentionInput.tsx` — plain-text display with caption + ZWSP, hydrate-on-value-sync, overlay chip rects, equality guards to avoid resync loops.
+- `src/components/mentions/parseMentions.ts` — range-aware serialize/parse; caption strip on serialize.
+- `src/components/mentions/MentionChip.tsx` — section-title-aware summary.
+- `src/types.ts` — heading-section related typing as needed by the picker.
+- `src/index.css` — inline mention overlay styles.
+- `scripts/test-heading-sections.mjs` — Node harness for heading logic.
+
+### Verification
+
+- `npm run test:heading-sections` — harness cases pass.
+- `npm run typecheck` / `npm run build` — clean.
+- Manual: `@` → pick doc → tick heading (parent cascades) → Confirm → `§…` visible in textarea and chip bar; Cancel leaves no mention; Send still scopes referenced content to picked sections only.
+
+---
+
 ## v0.4.7 — @-document references in chat, comments, and rejection feedback
 
 Feature release on top of [v0.4.6](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6). The chat input, comment composer, comment popover (edit mode), and Proposed Edit card's **Comment (optional)** all support an `@`-trigger that lets the user attach another document (or a specific paragraph of one) to the outgoing turn. The referenced document(s) are folded into the system prompt alongside the current document, so the model sees exactly what the user pointed at.

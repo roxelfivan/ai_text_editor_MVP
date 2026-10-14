@@ -19,6 +19,8 @@ interface Props {
   onEditSections: () => void;
   /** Preview resolver from useDocumentMentions. */
   getParagraphPreview: (docId: string, paragraphIndex: number) => string | null;
+  /** Optional heading-section title resolver for chip summaries. */
+  getSectionTitles?: (docId: string, paragraphIndexes: number[]) => string[];
 }
 
 export function MentionChip({
@@ -27,9 +29,10 @@ export function MentionChip({
   onDelete,
   onEditSections,
   getParagraphPreview,
+  getSectionTitles,
 }: Props) {
   const summary = isAvailable
-    ? summarizeMention(token, getParagraphPreview)
+    ? summarizeMention(token, getParagraphPreview, getSectionTitles)
     : '(deleted)';
   const title = isAvailable
     ? token.documentTitle || 'Untitled'
