@@ -4,6 +4,8 @@ ApEditor is a **local-first AI markdown editor**. You write in one window, comme
 
 This guide is for people using the app. It covers every screen and everyday task.
 
+**In the app:** click **?** in the top bar (or press `Ctrl+/` / `⌘/`) to open these same pages as a themed Help site. Help follows your Light / Dark theme.
+
 ## What you can do
 
 - Write Markdown in **Write**, **Preview**, or **Split** view
@@ -14,12 +16,12 @@ This guide is for people using the app. It covers every screen and everyday task
 - Save and restore **revisions**
 - Import text from photos or PDFs
 - Get optional inline **Predict** suggestions while you type
-- Reference other documents with `@` — type `@` in chat, comments, or rejection feedback to attach another doc (or a specific paragraph) to the outgoing turn. See [Reference other documents (`@`)](reference-other-documents.md).
+- Reference other documents with `@` — attach another doc or its headings (`§…`) in chat, comments, or rejection feedback. See [Reference other documents (`@`)](reference-other-documents.md).
 
 ## Start here
 
 1. [Getting started](getting-started.md) — first launch, connect AI, first document
-2. [Your workspace](workspace.md) — layout, theme, panels
+2. [Your workspace](workspace.md) — layout, theme, panels, Help
 3. [Documents](documents.md) — create, rename, switch, delete
 4. [Writing](writing.md) — editor, formatting, Predict
 5. [Comments](comments.md) — highlights, badges, Send to AI
@@ -28,7 +30,7 @@ This guide is for people using the app. It covers every screen and everyday task
 8. [Prompt library](prompt-library.md) — saved prompts
 9. [Revision history](revisions.md) — snapshots and restore
 10. [Import from photos or PDFs](import.md)
-11. [Reference other documents (`@`)](reference-other-documents.md) — attach a doc to any message
+11. [Reference other documents (`@`)](reference-other-documents.md) — attach a doc or heading sections
 12. [Settings](settings.md)
 13. [Keyboard shortcuts](keyboard-shortcuts.md)
 14. [Privacy and your data](privacy.md)

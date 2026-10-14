@@ -7,8 +7,8 @@ Comments let you mark a passage, write what you want changed, and send every not
 1. In **Write** (or the Write side of **Split**), select the passage.
 2. Click **Comment** on the toolbar. The button is disabled until you have a selection.
 3. Type in the composer (**Write a comment… type @ to reference a document**).
-   - Type `@` to attach another document (or a specific paragraph of one) to the comment — see [Reference other documents](reference-other-documents.md).
-4. Click **Save**, or press `Ctrl+Enter` / `⌘Enter`. **Cancel** or Escape discards the draft.
+   - Type `@` to attach another document or its headings — see [Reference other documents](reference-other-documents.md).
+4. Click **Save**, or press `Ctrl+Enter` / `⌘Enter`. **Cancel** or Escape discards the draft. The comment body itself still needs text; `@` chips alone are not enough to Save a new comment.
 
 The passage is highlighted. A numbered badge appears in the margin (1, 2, 3… in document order).
 

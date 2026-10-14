@@ -20,7 +20,7 @@ Closing the tab or restarting the computer does **not** wipe this. Another brows
 
 You send data when you:
 
-- **Send** a Chat message, **Send to AI** comments, or send rejection feedback — to the **Minimax or OpenAI endpoint** you configured
+- **Send** a Chat message, **Send to AI** comments, or send rejection feedback — to the **Minimax or OpenAI endpoint** you configured (including any `@`-referenced documents attached to that turn)
 - **Import** a photo or PDF — recognition is local; the extracted text is then sent to that same endpoint to format as Markdown
 - Use **Google AI Mode** — Google’s site loads in a new tab with a prompt you chose to open there
 

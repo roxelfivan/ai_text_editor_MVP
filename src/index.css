@@ -352,6 +352,20 @@ html.dark .prose-md strong {
   @apply text-paper-base;
 }
 
+/* Help docs overlay — slightly roomier tables / lists than editor Preview. */
+.help-docs-article.prose-md h1 {
+  @apply text-3xl mt-0 mb-4;
+}
+.help-docs-article.prose-md table {
+  @apply w-full text-sm;
+}
+.help-docs-article.prose-md th {
+  @apply bg-paper-elevated/80 text-left font-semibold;
+}
+html.dark .help-docs-article.prose-md th {
+  @apply bg-ape-elevated/80;
+}
+
 /* =========================================================================
    Diff viewer
    ========================================================================= */

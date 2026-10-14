@@ -50,7 +50,8 @@ You will see **Applied all n change(s).** or **Applied x of y changes (z skipped
 Use this when you want the model to try again with your reason:
 
 1. Optionally fill **Comment (optional)** — *Why reject? (sent to the AI as revision feedback) — type @ to reference a document*
-   - Type `@` to attach another document (or a specific paragraph of one) to the rejection reason. See [Reference other documents](reference-other-documents.md).
+   - Type `@` to attach another document or heading sections. See [Reference other documents](reference-other-documents.md).
+   - You can stage feedback with `@` chips even if the comment box is empty.
 2. Click **Reject with feedback**
 
 The reason is **staged**, not sent yet. While staged, the comment is read-only but the attached chips (including any `@`-references) stay visible so you can review what you're about to send. The tip reads: *Staged. Click "Send rejection comments" in the message footer to send.* If you leave the box empty, you can still use plain **Reject**.

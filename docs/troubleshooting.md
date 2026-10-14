@@ -58,3 +58,15 @@ Allow pop-ups for the site, then use **Open in AI Mode** or **Re-open AI Mode ta
 ## Debug numbers on the toolbar
 
 **Debug Mode** is on in Settings. Turn it off and **Save** if you do not need completion counters.
+
+## `@` picker shows No matching documents
+
+The picker lists every document **except** the one you are editing. Create or open a second document in the sidebar, then type `@` again.
+
+## `@` chip says (deleted)
+
+The source document was removed. Delete the chip or pick another document. Deleted references are not sent to the AI.
+
+## Where is the user guide?
+
+Click **?** in the top bar, or press `Ctrl+/` / `⌘/`. Help uses the same Light / Dark theme as the app.
