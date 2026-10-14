@@ -1,5 +1,11 @@
 /// <reference types="vite/client" />
 
+/** Markdown user-guide pages imported as raw strings for in-app Help. */
+declare module '*.md?raw' {
+  const content: string;
+  export default content;
+}
+
 interface ImportMetaEnv {
   readonly VITE_DEFAULT_API_ENDPOINT?: string;
   readonly VITE_DEFAULT_MODEL?: string;

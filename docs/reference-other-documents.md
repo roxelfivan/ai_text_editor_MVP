@@ -1,97 +1,132 @@
 # Reference other documents with `@`
 
-Type `@` in any of these surfaces to attach another document (or a
-specific paragraph of one) to the outgoing turn:
+Type `@` in any of these places to attach **another** document (or selected
+headings / sections from it) to the outgoing turn:
 
 - the **chat input** (right-hand panel)
 - a **new comment** (select text → toolbar **Comment**)
 - a **comment popover** in edit mode (open a comment badge → **Edit**)
-- a **Proposed Edit card's Comment (optional)** (rejection feedback)
+- a **Proposed Edit** card’s **Comment (optional)** (rejection feedback)
 
-The reference is folded into the AI prompt as a separate system
-message so the model sees the exact document you pointed at. The
-chat history itself stays readable: the mention is rendered as a
-chip in the input / popover, and the user-visible body shows only
-the prose you typed.
+The reference is folded into the AI prompt as a separate system message so
+the model sees the document you pointed at. Your visible message stays
+readable: chips and short `§…` captions stand in for the attachment.
+
+The document you are editing is **not** listed in the picker (you already
+have that context). You need at least one other document in the sidebar.
 
 ## Quick start
 
-1. Type `@` in any of the surfaces above. A doc picker opens at the
-   caret, listing every other document in the **Documents** panel.
-2. Pick a document — a second picker lists its paragraphs
-   (numbered with the same 60-char preview the AI sees).
-3. Tick one or more paragraphs to scope the reference, or press
-   **Whole document** for the default (token-cheap outline).
-4. A chip appears above the input. The top line is the doc title;
-   the bottom line is the section summary (`full document` or
-   `§ preview +N more`). The chip is deletable (×) and click-to-edit
-   (click the bottom line to re-open the section picker).
-5. Send as normal (Send / Send to AI / Send N rejection comments).
-   The reference rides along with the message.
+1. Type `@`. A document picker opens, listing every other document. Type
+   more letters to filter. If nothing matches, you see **No matching
+   documents.**
+2. Pick a document. A **section picker** opens for that title.
+3. Tick one or more headings / sections, or click **Whole document**.
+4. Click **Use selection** (or **Whole document**). **Cancel** or Escape
+   closes without changing the reference and leaves the `@…` text as you
+   typed it.
+5. A chip appears above the input. The top line is the document title;
+   the bottom line is the scope (`full document`, or `§ Heading` /
+   `§ Heading +N more`). An inline `§…` caption can also appear in the
+   text. Click the chip summary or the caption to change sections.
+6. Send as usual (**Send**, **Send to AI**, or **Send n rejection
+   comments**). The reference rides along.
 
-## Whole-document vs section-scoped
+## Heading-grouped sections
 
-- **Whole document** is the default. The model sees a compact
-  outline (one line per paragraph, ≤ 60 chars each) — enough to
-  reason about the document's shape without burning the prompt
-  budget.
-- **Section-scoped** is what you pick when the question is about
-  a specific passage. The model sees the verbatim text of the
-  picked paragraphs (≤ 4,000 chars total across all picked
-  sections), so it can quote / propose edits against the exact
-  wording. If the picked text would exceed the cap, ApEditor
-  falls back to the outline plus a truncation note.
+The section list is built from Markdown headings (`#` … `######`). Text
+before the first heading appears as a preamble row (`¶`). Documents with
+no headings fall back to paragraph-style blocks in the same picker.
+
+- Parent ticks **cascade to children** (sub-headings under that heading).
+- Unticking a parent clears its descendants too.
+- Ticking a child alone does **not** force the parent on.
+- Level badges show `H1`…`H6` (or `¶` for the preamble).
+- Missing titles show as **(untitled section)**.
+- An empty source document shows **Empty document.**
+
+The footer shows **n selected**, plus **Whole document**, **Cancel**, and
+**Use selection** (**Use selection** stays disabled until at least one
+section is ticked).
+
+## Whole document vs section-scoped
+
+| Scope | What the model sees |
+| --- | --- |
+| **Whole document** | A compact outline (about one short line per paragraph) — good for compare / shape questions, cheaper on tokens |
+| **Section-scoped** | The **verbatim** text of the paragraphs inside the headings you picked |
+
+Caps (so long references do not blow the prompt):
+
+- About **4,000 characters** of verbatim section text **per referenced document**
+- About **8,000 characters** across **all** references in one turn — later
+  references may fall back to outline form if the budget is used up
+
+## Inline `§` captions
+
+When you confirm a section (or whole-doc) reference, ApEditor can insert a
+short caption in the text (for example `§ Risk Owners`). Captions are for
+you to read and click; they are not sent as the model’s source of truth —
+the chip and the system prompt carry the real attachment.
+
+- Click the caption (or the chip’s bottom line) to re-open the section
+  picker for that document.
+- If the source document was deleted, the chip shows **(deleted)** and
+  that reference is dropped from the prompt.
 
 ## Keyboard
 
-- `↑` / `↓` — move through the picker
-- `Enter` / `Tab` — confirm the highlighted row
-- `Space` (section picker) — toggle the current paragraph
-- `Esc` — close the picker (does not consume the `@` you typed)
+### Document picker
+
+| Shortcut | Action |
+| --- | --- |
+| `↑` / `↓` | Move through documents |
+| `Enter` / `Tab` | Pick the highlighted document |
+| `Esc` | Close (does not remove the `@` you typed) |
+
+### Section picker
+
+| Shortcut | Action |
+| --- | --- |
+| `↑` / `↓` | Move through sections |
+| `Space` / `Enter` | Toggle the highlighted section (parent cascade) |
+| `Esc` | **Cancel** — close without applying |
+| Click **Use selection** | Confirm the ticked sections |
+| Click **Whole document** | Reference the entire document |
 
 ## What the model sees
 
-Each reference becomes a separate system message:
+Each reference becomes a separate system message naming the document and
+inlining either the outline (whole-doc) or the picked section text.
+Several references on one message are allowed; the same document is not
+duplicated.
 
-- `sys-referenced-doc-1` — names the doc and inlines either the
-  compact outline (whole-doc) or the verbatim paragraph text
-  (section-scoped).
-- `sys-referenced-doc-2`, `…-3`, etc. — same shape, one per
-  referenced doc. References to the same doc are deduped.
-
-The current document is still passed in `sys-current-doc`, so the
-AI understands both "the document you're editing" and the other
-docs the user pointed at. The Google AI Mode (keyless) path
-includes the same references, wrapped in `[Context — referenced
-document "<title>"]` blocks.
+The current document is still described in the usual current-doc system
+message. On **Google AI Mode (no key)**, references appear as
+`[Context — referenced document "…"]` blocks in the opened prompt
+(length-limited for the URL).
 
 ## Reading references back
 
-In a **comment popover's read view**, each reference renders as an
-inline clickable pill. Clicking the pill switches the editor to
-the referenced document so you can read the source in context.
+In a **comment popover’s read view**, each reference is a clickable pill.
+Click it to switch the editor to that document.
 
-## Persistence and deletion
+## Persistence
 
-- **Comments** — references are persisted on each comment round
-  (`CommentRound.mentions`), so they survive reloads. Re-editing a
-  comment (Edit) reopens the picker with the round's references
-  pre-selected, so you can add, remove, or re-pick.
-- **Rejection feedback** — references are transient. They live on
-  the staged rejection entry; once you Send / Clear staged, the
-  card is gone.
-- **Deleted source doc** — the chip flips to `(deleted)` and is
-  dropped from the prompt.
+- **Comments** — references are saved on each comment round, so they
+  survive reloads. **Edit** reopens them so you can add, remove, or
+  re-pick sections.
+- **Rejection feedback** — references live on the staged rejection until
+  you **Send n rejection comments** or **Clear staged**. You can stage
+  feedback with `@` chips even if the comment box is empty.
+- **Deleted source** — chip shows **(deleted)** and is omitted from the
+  prompt.
 
 ## Tips
 
-- Use whole-document references when the question is
-  cross-document ("compare this with…"). The model uses both
-  outlines to answer.
-- Use section-scoped references when the question is about a
-  specific passage ("is this paragraph consistent with § Risks
-  in `<Other Doc>`?"). The model gets the verbatim text and can
-  quote it back.
-- You can attach multiple references to the same message — they
-  appear as a stack of chips, and the prompt carries one
-  `sys-referenced-doc-N` per deduped doc.
+- Use **Whole document** for cross-document questions (“compare this
+  with…”).
+- Use heading sections when you need exact wording (“is this consistent
+  with § Risks in the other memo?”).
+- Keep a second document in the sidebar — with only one document, the
+  `@` picker has nothing to list.

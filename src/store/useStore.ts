@@ -333,12 +333,17 @@ the only setup. Or choose **Google AI Mode (no key)** in Settings if
 you prefer opening Google AI Mode in a new tab instead. The chat
 panel on the right can then answer questions and rewrite passages.
 
-## 2. ✍️ Just write
+## 2. ❓ Open Help anytime
+
+**Click ? in the top bar** (or press \`⌘/Ctrl + /\`) for the full
+user guide. Help uses the same Light / Dark theme as the app.
+
+## 3. ✍️ Just write
 
 **Type in Write.** Markdown renders live in Preview. Use the editor
 view dropdown to switch **Write**, **Preview**, or **Split**.
 
-## 3. 💬 Comment on a passage
+## 4. 💬 Comment on a passage
 
 **Select text → click Comment in the editor toolbar → write your
 note.** A highlight and a numbered margin badge mark the passage.
@@ -348,13 +353,20 @@ article plus every comment as one batch. \`⌘/Ctrl + Z\` undoes the
 last comment change. Comments that can no longer be found show as
 **Outdated**.
 
-## 4. 💾 Save a snapshot
+## 5. @ Reference another document
+
+**Type @ in Chat, a comment, or rejection feedback.** Pick another
+document, then **Whole document** or tick headings and **Use
+selection**. A chip (and often a § caption) shows what you attached.
+You need at least two documents in the sidebar.
+
+## 6. 💾 Save a snapshot
 
 **Click Save in the editor toolbar** when you like a draft. Open
 **Revision history** (clock, top bar) later to diff and restore
 (\`⌘/Ctrl + h\`).
 
-## 5. 📚 Use a saved prompt
+## 7. 📚 Use a saved prompt
 
 **Open Prompt library** (bookmark, top bar) or press \`⌘/Ctrl + ,\`.
 Click any prompt to drop it into the chat input, or write your own
@@ -362,7 +374,7 @@ and ask the AI to rewrite / shorten / expand the selection. Check
 **include selection** in the chat panel when you want the selected
 text sent with your message.
 
-## 6. ✅ Apply or Reject AI edits
+## 8. ✅ Apply or Reject AI edits
 
 **AI rewrites show up as cards** with a rationale. Click **Apply** or
 **Reject** on each one. For several changes in one reply, use
@@ -371,13 +383,13 @@ badge to read the rationale (multi-round history if you follow up).
 If a quote no longer matches the document, click in the editor and
 use **Force-apply…**.
 
-## 7. ✨ Get sentence suggestions while writing
+## 9. ✨ Get sentence suggestions while writing
 
 **Predict starts off.** Click **Predict** (or \`⌘/Ctrl + \\\`) to turn
 it on and request a suggestion. Press \`Tab\` or **Accept** to insert,
 \`Esc\` or **Reject** to dismiss.
 
-## 8. 📷 Import text from photos or PDFs
+## 10. 📷 Import text from photos or PDFs
 
 **Click Import text from photos or PDFs in the editor toolbar.** Pick
 an image or a PDF. Recognition stays in the browser; the extracted

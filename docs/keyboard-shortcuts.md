@@ -11,6 +11,8 @@ Global shortcuts are ignored while you are typing in a text field, so they do no
 | `Ctrl+.` / `⌘.` | Open Settings |
 | `Ctrl+,` / `⌘,` | Open Prompt library |
 | `Ctrl+H` / `⌘H` | Open Revision history |
+| `Ctrl+/` / `⌘/` (or `?`) | Open Help — user guide |
+| `Esc` | Close Help (when Help is open) |
 | `Ctrl+B` / `⌘B` | Show or hide the Documents sidebar (not while the editor is focused) |
 | `Ctrl+Shift+C` / `⌘Shift+C` | Show or hide Chat |
 
@@ -47,7 +49,8 @@ card's **Comment (optional)**).
 
 | Shortcut | Action |
 | --- | --- |
-| `↑` / `↓` | Move through the picker |
-| `Enter` / `Tab` | Confirm the highlighted row |
-| `Space` (section picker) | Toggle the current paragraph |
-| `Esc` | Close the picker (does not consume the `@` you typed) |
+| `↑` / `↓` | Move through the list |
+| `Enter` / `Tab` (doc picker) | Pick the highlighted document |
+| `Space` / `Enter` (section picker) | Toggle the highlighted section (parent cascade) |
+| **Use selection** / **Whole document** | Confirm the reference |
+| `Esc` | Cancel / close (does not consume the `@` you typed) |

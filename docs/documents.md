@@ -23,6 +23,8 @@ Click a title in the sidebar. The top bar shows `/` plus that title.
 
 Each document has its own Chat thread. Switching documents switches the conversation too.
 
+Other documents can be attached to a Chat or comment turn with `@`. The picker lists every document **except** the one you are editing. See [Reference other documents](reference-other-documents.md).
+
 ## Rename
 
 - Click the pencil (**Rename**) on the row, or

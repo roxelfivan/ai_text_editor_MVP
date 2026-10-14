@@ -49,14 +49,20 @@ Type in the center pane. Your work auto-saves in the browser. Next to the title 
 1. Highlight a sentence in **Write** (or the Write side of **Split**).
 2. In Chat, leave **include selection** checked (it is on by default).
 3. Type a request, for example `Make this more concise.`
-4. Click **Send**, or press `Ctrl+Enter` / `⌘Enter`.
+4. Optionally type `@` to attach **another** document or its headings — see [Reference other documents](reference-other-documents.md).
+5. Click **Send**, or press `Ctrl+Enter` / `⌘Enter`.
 
 The assistant reply may include **proposed-edit cards**. Open [Proposed edits](proposed-edits.md) to apply or reject them one by one.
 
 Alternatively, select text, click **Comment**, write a note, then use **Send to AI** under the editor. That path is covered in [Comments](comments.md).
 
+## Open the Help guide anytime
+
+Click **?** in the top bar (or press `Ctrl+/` / `⌘/`) to open this user guide inside the app. It uses the same Light / Dark theme as the editor.
+
 ## Next steps
 
 - [Your workspace](workspace.md) — hide panels, change theme, resize columns
 - [Writing](writing.md) — Write / Preview / Split, bold/italic/underline, Predict
+- [Reference other documents (`@`)](reference-other-documents.md) — attach other docs to a turn
 - [Settings](settings.md) — system message, temperature, UI font size

@@ -15,7 +15,7 @@
 [![v0.4.8](https://img.shields.io/badge/version-0.4.8-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.8)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**Using the app?** Start with the [user guide](./docs/README.md) — getting started, writing, comments, Chat, settings, shortcuts, and troubleshooting.
+**Using the app?** Start with the [user guide](./docs/README.md), or click **?** in the top bar (in-app Help renders the same pages and follows Light / Dark mode).
 
 ---
 
@@ -244,6 +244,7 @@ higher for more creative brainstorming. Persisted in `localStorage`.
 | `⌘ / Ctrl + .` | Open **Settings** |
 | `⌘ / Ctrl + ,` | Open **Prompt library** |
 | `⌘ / Ctrl + H` | Open **Revision history** |
+| `⌘ / Ctrl + /` (or `?`) | Open **Help** (user guide) |
 | `⌘ / Ctrl + B` | Toggle sidebar (deferred when inside the editor) |
 | `⌘ / Ctrl + Shift + C` | Toggle chat panel |
 | `⌘ / Ctrl + B / I / U` (in editor) | Bold / Italic / Underline |
@@ -500,17 +501,18 @@ the result at your caret.
 ## User guide
 
 A longer, task-oriented walkthrough of every screen lives under
-[`docs/`](docs/). Start at the [table of contents](docs/README.md),
-or jump straight to one of the v0.4.7 pages:
+[`docs/`](docs/). In the running app, click **?** in the top bar (or
+`⌘/Ctrl + /`) to open the same pages as a themed Help site — Light /
+Dark matches the editor. Start at the [table of contents](docs/README.md):
 
 - [Getting started](docs/getting-started.md) — first launch, connect AI, first document
-- [Your workspace](docs/workspace.md) — layout, theme, panels
+- [Your workspace](docs/workspace.md) — layout, theme, panels, Help
 - [Documents](docs/documents.md) — create, rename, switch, delete
 - [Writing](docs/writing.md) — editor, formatting, Predict
 - [Comments](docs/comments.md) — highlights, badges, Send to AI
 - [Chat](docs/chat.md) — messages, selection, Google AI Mode
 - [Proposed edits](docs/proposed-edits.md) — Apply, Reject, Force-apply
-- [Reference other documents (`@`)](docs/reference-other-documents.md) — attach a doc to any message *(v0.4.7)*
+- [Reference other documents (`@`)](docs/reference-other-documents.md) — attach a doc or heading sections *(v0.4.7 / v0.4.8)*
 - [Prompt library](docs/prompt-library.md) — saved prompts
 - [Revision history](docs/revisions.md) — snapshots and restore
 - [Import from photos or PDFs](docs/import.md)
@@ -535,6 +537,8 @@ src/
 │                            # rationale rules, comment-batch notes.
 ├── config/
 │   └── providers.tsx        # MiniMax / OpenAI / Google AI Mode presets.
+├── docs/
+│   └── catalog.ts           # Loads `docs/*.md` for in-app Help (synced).
 ├── store/
 │   └── useStore.ts          # zustand store + localStorage persistence
 │                            # (documents, chats, comments/rounds, API).
@@ -561,6 +565,7 @@ src/
     ├── CommentComposer.tsx  # Floating composer after **Comment**.
     ├── CommentPopover.tsx   # Edit / Delete + multi-round Rationale UI.
     ├── CommentTray.tsx      # **Send to AI** tray under the editor.
+    ├── HelpDocs.tsx         # Themed Help overlay (renders docs/*.md).
     ├── PromptLibrary.tsx
     ├── ProposedEditCard.tsx # Apply / Reject cards for AI diffs.
     ├── RevisionHistory.tsx
@@ -576,7 +581,8 @@ persisted to `localStorage` under the `ai-text-editor-mvp` key
 (including comment `rounds` and applied rationales). Messages between
 components use `window` `CustomEvent`s (`mvp:editor-selection`,
 `mvp:fill-chat`, `mvp:send-comments`, `mvp:chat-streaming`,
-`mvp:mark-comments-sent`, `mvp:insert-text`, `mvp:select-range`)
+`mvp:mark-comments-sent`, `mvp:insert-text`, `mvp:select-range`,
+`mvp:open-help`)
 to keep the editor / chat / comment layer loosely coupled.
 
 ---

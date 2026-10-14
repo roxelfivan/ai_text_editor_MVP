@@ -6,9 +6,11 @@ import { ChatPanel } from '@/components/ChatPanel';
 import { PromptLibrary } from '@/components/PromptLibrary';
 import { RevisionHistory } from '@/components/RevisionHistory';
 import { SettingsModal } from '@/components/SettingsModal';
+import { HelpDocs } from '@/components/HelpDocs';
 import { EdgeAnchor } from '@/components/EdgeAnchor';
 import { applyThemeClass } from '@/utils/theme';
 import { requiresApiKey } from '@/config/providers';
+import { isHelpPageId, type HelpPageId } from '@/docs/catalog';
 
 // Inputs that are safe to treat as "the user is typing" for the purpose
 // of deferring global shortcuts. Lifted to module scope so the regex
@@ -25,10 +27,12 @@ function Topbar({
   onOpenSettings,
   onOpenPrompts,
   onOpenRevisions,
+  onOpenHelp,
 }: {
   onOpenSettings: () => void;
   onOpenPrompts: () => void;
   onOpenRevisions: () => void;
+  onOpenHelp: () => void;
 }) {
   const theme = useStore((s) => s.theme);
   const toggleTheme = useStore((s) => s.toggleTheme);
@@ -55,6 +59,17 @@ function Topbar({
         </span>
       )}
       <div className="flex-1" />
+      <button
+        type="button"
+        className="btn-icon-square"
+        onClick={onOpenHelp}
+        title="Help — user guide"
+        aria-label="Help — user guide"
+      >
+        <span className="text-base font-semibold leading-none" aria-hidden>
+          ?
+        </span>
+      </button>
       <button
         type="button"
         className="btn-icon-square"
@@ -141,6 +156,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [promptsOpen, setPromptsOpen] = useState(false);
   const [revisionsOpen, setRevisionsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpPage, setHelpPage] = useState<HelpPageId>('home');
 
   const theme = useStore((s) => s.theme);
   const api = useStore((s) => s.api);
@@ -182,8 +199,8 @@ export default function App() {
   }, [api.apiKey, api.provider]);
 
   // Hotkey: ⌘/Ctrl + . opens settings; ⌘/Ctrl + , opens prompts;
-  // ⌘/Ctrl + h opens history; ⌘/Ctrl + b toggles the sidebar;
-  // ⌘/Ctrl + Shift + c toggles the chat panel.
+  // ⌘/Ctrl + h opens history; ⌘/Ctrl + / opens Help; ⌘/Ctrl + b
+  // toggles the sidebar; ⌘/Ctrl + Shift + c toggles the chat panel.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -209,6 +226,11 @@ export default function App() {
       } else if (e.key.toLowerCase() === 'h') {
         e.preventDefault();
         setRevisionsOpen(true);
+      } else if (e.key === '/' || e.key === '?') {
+        // Help — `?` is Shift+/ on many layouts; accept both.
+        e.preventDefault();
+        setHelpPage('home');
+        setHelpOpen(true);
       } else if (e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setSidebarCollapsed(!useStore.getState().sidebarCollapsed);
@@ -225,6 +247,19 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [setChatCollapsed, setChatOpen, setSidebarCollapsed]);
 
+  // Deep-link into Help from other UI (e.g. `mvp:open-help`).
+  useEffect(() => {
+    const onOpenHelp = (e: Event) => {
+      const detail = (e as CustomEvent<unknown>).detail;
+      const page =
+        typeof detail === 'string' && isHelpPageId(detail) ? detail : 'home';
+      setHelpPage(page);
+      setHelpOpen(true);
+    };
+    window.addEventListener('mvp:open-help', onOpenHelp);
+    return () => window.removeEventListener('mvp:open-help', onOpenHelp);
+  }, []);
+
   return (
     <div className="h-full flex flex-col relative">
       {!topbarCollapsed && (
@@ -232,6 +267,10 @@ export default function App() {
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenPrompts={() => setPromptsOpen(true)}
           onOpenRevisions={() => setRevisionsOpen(true)}
+          onOpenHelp={() => {
+            setHelpPage('home');
+            setHelpOpen(true);
+          }}
         />
       )}
       <div className="flex-1 flex min-h-0 relative">
@@ -285,6 +324,11 @@ export default function App() {
       <RevisionHistory
         open={revisionsOpen}
         onClose={() => setRevisionsOpen(false)}
+      />
+      <HelpDocs
+        open={helpOpen}
+        initialPage={helpPage}
+        onClose={() => setHelpOpen(false)}
       />
     </div>
   );
