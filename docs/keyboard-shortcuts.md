@@ -38,3 +38,16 @@ Global shortcuts are ignored while you are typing in a text field, so they do no
 | --- | --- |
 | `Ctrl+Enter` / `⌘Enter` | Save in the composer or popover |
 | `Esc` | Cancel the composer, or close the popover |
+
+## `@`-document picker
+
+Active while the doc / section picker is open (triggered by typing
+`@` in chat, comments, the popover's edit box, or a Proposed Edit
+card's **Comment (optional)**).
+
+| Shortcut | Action |
+| --- | --- |
+| `↑` / `↓` | Move through the picker |
+| `Enter` / `Tab` | Confirm the highlighted row |
+| `Space` (section picker) | Toggle the current paragraph |
+| `Esc` | Close the picker (does not consume the `@` you typed) |

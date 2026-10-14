@@ -1,14 +1,15 @@
 {
   "name": "ai-text-editor-mvp",
   "private": true,
-  "version": "0.4.6",
+  "version": "0.4.8",
   "type": "module",
   "description": "Minimal local-first AI markdown editor (MVP).",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "test:heading-sections": "node scripts/test-heading-sections.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.0.13",

@@ -5,6 +5,8 @@ import {
   clampCommentBody,
   clampToContainer,
 } from '@/utils/comments';
+import type { MentionToken } from '@/types';
+import { MentionInput } from '@/components/mentions/MentionInput';
 
 /**
  * Inline composer for a brand-new comment. Opened from the toolbar
@@ -17,10 +19,12 @@ import {
 interface Props {
   /** Initial body (used when re-opening an existing draft). */
   initialBody?: string;
+  /** Initial mentions to pre-populate (used when re-opening an existing comment). */
+  initialMentions?: MentionToken[];
   /** Selection rect (already translated to editor-pane coords). */
   position: { left: number; top: number; right: number; bottom: number } | null;
-  /** Save handler — receives the trimmed (but full) body. */
-  onSave: (body: string) => void;
+  /** Save handler — receives the trimmed body and any attached mentions. */
+  onSave: (body: string, mentions: MentionToken[]) => void;
   /** Cancel / close handler. */
   onCancel: () => void;
   /** When true, the composer is positioned as a bottom sheet. */
@@ -43,6 +47,7 @@ interface Props {
 
 export function CommentComposer({
   initialBody = '',
+  initialMentions,
   position,
   onSave,
   onCancel,
@@ -50,7 +55,13 @@ export function CommentComposer({
   containerBounds,
 }: Props) {
   const [body, setBody] = useState(initialBody);
-  const ref = useRef<HTMLTextAreaElement>(null);
+  // Document mentions attached to the current draft. The MentionInput
+  // emits the live list whenever the user picks / edits / removes a
+  // mention, so the comment can be saved with the same set of
+  // references the user attached.
+  const [mentions, setMentions] = useState<MentionToken[]>(
+    initialMentions ?? []
+  );
   const wrapperRef = useRef<HTMLDivElement>(null);
   // The composer's actual rendered size, captured after mount so we
   // can clamp its top-left to stay inside `containerBounds`. We
@@ -88,31 +99,19 @@ export function CommentComposer({
     }
   }, []);
 
-  // Auto-focus the textarea when the composer opens so the user can
-  // start typing immediately. Mobile keyboards respect the focus call
-  // and bring up the soft keyboard without an extra tap.
+  // Auto-focus is handled by MentionInput via the `autoFocus` prop.
+  // The composer's outer wrapper still cancels on Escape regardless
+  // of which element has focus.
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    // Defer to next tick so the textarea is mounted + visible.
-    queueMicrotask(() => {
-      try {
-        el.focus({ preventScroll: true });
-      } catch {
-        el.focus();
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
       }
-      // Place the caret at the end of the existing body so the user
-      // doesn't have to click to continue typing.
-      const len = body.length;
-      try {
-        el.setSelectionRange(len, len);
-      } catch {
-        /* ignore */
-      }
-    });
-  }, [body.length]);
-
-  // Escape key cancels.
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onCancel]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -131,7 +130,7 @@ export function CommentComposer({
 
   const handleSave = () => {
     if (!canSave) return;
-    onSave(clampCommentBody(body));
+    onSave(clampCommentBody(body), mentions);
   };
 
   const style: React.CSSProperties | undefined = bottomSheet
@@ -197,22 +196,20 @@ export function CommentComposer({
       // outside-tap by the parent (which would close it).
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <textarea
-        ref={ref}
+      <MentionInput
         value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Write a comment…"
-        rows={4}
-        // 44 × 44 px minimum tap target is enforced via min-height on
-        // the textarea in CSS, not as a literal size.
-        className="cm-composer__textarea"
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            handleSave();
-          }
+        onChange={(v) => {
+          setBody(v.text);
+          setMentions(v.mentions);
         }}
-        aria-label="Comment body"
+        onSubmit={handleSave}
+        ariaLabel="Comment body"
+        placeholder="Write a comment… type @ to reference a document"
+        className="cm-composer__textarea"
+        autoFocus
+        // The MentionInput's internal textarea already accepts ⌘/Ctrl+Enter
+        // via onSubmit; the outer composer is responsible for the rest of
+        // the layout (footer, count, actions).
       />
       <div className="cm-composer__footer">
         <span

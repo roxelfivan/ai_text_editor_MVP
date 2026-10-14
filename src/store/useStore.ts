@@ -9,6 +9,7 @@ import type {
   CommentOp,
   CommentRound,
   DocumentRecord,
+  MentionToken,
   ProposedEditRationale,
   Prompt,
   Revision,
@@ -260,7 +261,17 @@ export interface StoreState {
   // the input `Comment` — each `set(...)` builds a new array so React
   // re-renders fire correctly.
   addComment: (comment: Comment) => void;
-  updateCommentBody: (id: string, body: string) => void;
+  /**
+   * Update the latest round's body. Optional `mentions` replaces the
+   * round's @-document references (used when the user re-edits a
+   * comment via the popover's MentionInput). When omitted, existing
+   * mentions on the round are preserved.
+   */
+  updateCommentBody: (
+    id: string,
+    body: string,
+    mentions?: MentionToken[]
+  ) => void;
   /**
    * Append a new round to an existing comment. Used when the user
    * adds a follow-up body on a revised passage (after an AI edit
@@ -598,7 +609,7 @@ export const useStore = create<StoreState>()(
             }),
           };
         }),
-      updateCommentBody: (id, body) =>
+      updateCommentBody: (id, body, mentions) =>
         set((s) => {
           const entry = findCommentEntry(s.comments, id);
           if (!entry) return s;
@@ -606,6 +617,19 @@ export const useStore = create<StoreState>()(
           const lastIdx = comment.rounds.length - 1;
           const lastRound = comment.rounds[lastIdx];
           const now = Date.now();
+          // When the caller supplies `mentions`, use that list; when
+          // omitted, preserve whatever the prior round already had
+          // (older callers / body-only edits).
+          const nextMentions: MentionToken[] | undefined =
+            mentions !== undefined
+              ? mentions.length > 0
+                ? mentions
+                : undefined
+              : lastRound.mentions && lastRound.mentions.length > 0
+                ? lastRound.mentions
+                : undefined;
+          const priorIds = (lastRound.mentions ?? []).map((m) => m.id).join(',');
+          const nextIds = (nextMentions ?? []).map((m) => m.id).join(',');
           // If the latest round was already sent to the AI, a body
           // edit is a NEW round (follow-up), not an in-place rewrite.
           // Overwriting would erase the prior round's comment body
@@ -613,7 +637,7 @@ export const useStore = create<StoreState>()(
           // the wrong round — which is why the popover only showed
           // "Round 1" after a second Send.
           if (lastRound.sent) {
-            if (body.trim() === lastRound.body.trim()) {
+            if (body.trim() === lastRound.body.trim() && priorIds === nextIds) {
               return s;
             }
             const newRound: CommentRound = {
@@ -627,6 +651,7 @@ export const useStore = create<StoreState>()(
               outdated: lastRound.outdated,
               sent: false,
               applied: [],
+              ...(nextMentions ? { mentions: nextMentions } : {}),
             };
             const next: Comment = {
               ...comment,
@@ -653,6 +678,11 @@ export const useStore = create<StoreState>()(
             body,
             updatedAt: now,
           };
+          if (nextMentions) {
+            updatedRound.mentions = nextMentions;
+          } else {
+            delete updatedRound.mentions;
+          }
           const next: Comment = {
             ...comment,
             body,

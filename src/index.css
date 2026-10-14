@@ -442,6 +442,47 @@ html.dark .diff-remove {
   @apply px-3 py-2 border-t border-paper-hairline
     bg-paper-elevated/70;
 }
+/* MentionInput used inside a ProposedEditCard's comment box. Sized
+   to match the previous 2-row textarea so the card layout does not
+   jump when mentions are attached. */
+.proposed-edit-card .pe-comment__input {
+  width: 100%;
+}
+.proposed-edit-card .pe-comment__input .mention-input__textarea,
+.proposed-edit-card .pe-comment__textarea {
+  min-height: 56px;
+  max-height: 140px;
+  padding: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+/* Explicit light/dark colors: without these the textarea inherits the
+   card's cream text onto a light field background in dark mode
+   (near-zero contrast). Match ape-field tokens. */
+.proposed-edit-card .pe-comment__input .mention-input__textarea {
+  background: #ffffff;
+  color: #171614;
+  border: 1px solid #e5dfd3;
+}
+html.dark .proposed-edit-card .pe-comment__input .mention-input__textarea {
+  background: #12100e;
+  color: #efe9da;
+  border-color: #2a2825;
+}
+html.dark .proposed-edit-card .pe-comment__input .mention-input__textarea::placeholder {
+  color: #7a7468;
+}
+.proposed-edit-card .pe-comment__input--staged .mention-input__textarea {
+  border-color: rgba(120, 144, 90, 0.5);
+  background: rgba(120, 144, 90, 0.05);
+  color: #2f3a1f;
+  cursor: default;
+}
+html.dark .proposed-edit-card .pe-comment__input--staged .mention-input__textarea {
+  border-color: rgba(176, 200, 178, 0.6);
+  background: #161410;
+  color: #efe9da;
+}
 
 /* Dark overrides for the proposed edit card. */
 html.dark .proposed-edit-card {
@@ -787,8 +828,13 @@ html.dark .cm-popover {
 }
 html.dark .cm-composer__textarea,
 html.dark .cm-popover__textarea {
-  background: #1c1a17;
+  background: #12100e;
   border-color: #2a2825;
+  color: #efe9da;
+}
+html.dark .cm-composer__textarea::placeholder,
+html.dark .cm-popover__textarea::placeholder {
+  color: #7a7468;
 }
 html.dark .cm-composer__textarea:focus,
 html.dark .cm-popover__textarea:focus {
@@ -876,6 +922,34 @@ html.dark .cm-popover__btn--primary:disabled {
   background: #2a2825;
   color: #5a554a;
   border-color: #2a2825;
+}
+
+/* Inline reference pill in the comment popover's read view. Renders
+   the @-mention inline alongside the body text. */
+.cm-popover__ref {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(120, 144, 90, 0.12);
+  border: 1px solid rgba(120, 144, 90, 0.35);
+  color: #2f3a1f;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.cm-popover__ref--deleted {
+  opacity: 0.6;
+  text-decoration: line-through;
+  cursor: not-allowed;
+}
+html.dark .cm-popover__ref {
+  background: rgba(176, 200, 178, 0.15);
+  border-color: rgba(176, 200, 178, 0.35);
+  color: #d8e6da;
 }
 
 .cm-popover__header {
@@ -1472,4 +1546,335 @@ html.dark .cm-undo-toast {
     border-top-color: #2a2825;
     background: #1c1a17;
   }
+}
+
+/* =========================================================================
+   @-Document Mention picker + chip styles
+   -------------------------------------------------------------------------
+   - `.mention-input` is the outer container (textarea + chip bar).
+   - `.mention-popover` is the @-trigger doc picker / section picker.
+   - `.mention-chip` is the inline pill in the chip bar above the
+     textarea.
+   ========================================================================= */
+.mention-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mention-input__chipbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px dashed transparent;
+}
+.mention-input__chipbar:has(.mention-chip) {
+  border-bottom-color: rgba(157, 124, 78, 0.25);
+}
+html.dark .mention-input__chipbar:has(.mention-chip) {
+  border-bottom-color: rgba(176, 200, 178, 0.25);
+}
+.mention-input__textarea {
+  width: 100%;
+}
+
+/* Inline chip overlay. Sits on top of the textarea; each
+   .mention-input__overlay-chip is a transparent clickable region
+   positioned over a mention's caption text in the prose. Default
+   state is fully transparent so the prose reads naturally; hover
+   lights up a soft pill so the user can see what's clickable. */
+.mention-input__overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.mention-input__overlay-chip {
+  position: absolute;
+  pointer-events: auto;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.mention-input__overlay-chip:hover:not(:disabled),
+.mention-input__overlay-chip:focus-visible:not(:disabled) {
+  background: rgba(157, 124, 78, 0.18);
+  box-shadow: 0 0 0 1px rgba(157, 124, 78, 0.35) inset;
+}
+.mention-input__overlay-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+html.dark .mention-input__overlay-chip:hover:not(:disabled),
+html.dark .mention-input__overlay-chip:focus-visible:not(:disabled) {
+  background: rgba(176, 200, 178, 0.22);
+  box-shadow: 0 0 0 1px rgba(176, 200, 178, 0.45) inset;
+}
+
+.mention-popover {
+  z-index: 60;
+  background: #fbf7ec;
+  border: 1px solid #e5dfd3;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(23, 22, 20, 0.12);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: #171614;
+}
+html.dark .mention-popover {
+  background: #1c1a17;
+  border-color: #2a2825;
+  color: #efe9da;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.mention-popover__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e5dfd3;
+  background: rgba(247, 242, 231, 0.6);
+}
+html.dark .mention-popover__header {
+  border-bottom-color: #2a2825;
+  background: rgba(247, 242, 231, 0.04);
+}
+.mention-popover__title {
+  font-weight: 600;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mention-popover__hint {
+  font-size: 10px;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+.mention-popover__list {
+  flex: 1;
+  overflow-y: auto;
+}
+.mention-popover__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.mention-popover__item--active,
+.mention-popover__item:hover {
+  background: rgba(120, 144, 90, 0.12);
+}
+html.dark .mention-popover__item--active,
+html.dark .mention-popover__item:hover {
+  background: rgba(176, 200, 178, 0.16);
+}
+.mention-popover__item--row {
+  align-items: flex-start;
+}
+.mention-popover__icon {
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+.mention-popover__index {
+  flex: 0 0 auto;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 10px;
+  opacity: 0.7;
+  padding-top: 1px;
+}
+.mention-popover__level {
+  flex: 0 0 auto;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 10px;
+  opacity: 0.7;
+  padding-top: 1px;
+  min-width: 1.5em;
+}
+.mention-popover__level--preamble {
+  opacity: 0.55;
+}
+.mention-popover__preview {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+.mention-popover__checkbox {
+  flex: 0 0 auto;
+  width: 14px;
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.85;
+}
+.mention-popover__checkbox--checked {
+  color: #5b6f3c;
+}
+html.dark .mention-popover__checkbox--checked {
+  color: #b0c8b2;
+}
+.mention-popover__footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid #e5dfd3;
+  background: rgba(247, 242, 231, 0.6);
+}
+html.dark .mention-popover__footer {
+  border-top-color: #2a2825;
+  background: rgba(247, 242, 231, 0.04);
+}
+.mention-popover__count {
+  font-size: 10px;
+  opacity: 0.7;
+}
+.mention-popover__btn {
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 8px;
+  border: 1px solid #d6cfbe;
+  background: #fbf7ec;
+  color: #171614;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.mention-popover__btn:hover:not(:disabled) {
+  background: #f0e9d6;
+}
+.mention-popover__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.mention-popover__btn--primary {
+  background: #5b6f3c;
+  color: #fbf7ec;
+  border-color: #5b6f3c;
+}
+.mention-popover__btn--primary:hover:not(:disabled) {
+  background: #6a8046;
+}
+html.dark .mention-popover__btn {
+  background: #1c1a17;
+  border-color: #2a2825;
+  color: #efe9da;
+}
+html.dark .mention-popover__btn:hover:not(:disabled) {
+  background: #25221e;
+}
+html.dark .mention-popover__btn--primary {
+  background: #b0c8b2;
+  color: #1c1a17;
+  border-color: #b0c8b2;
+}
+html.dark .mention-popover__btn--primary:hover:not(:disabled) {
+  background: #c4d8c6;
+}
+.mention-popover__empty {
+  padding: 10px 12px;
+  font-size: 12px;
+  opacity: 0.7;
+  text-align: center;
+}
+
+.mention-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 240px;
+  border-radius: 6px;
+  background: rgba(120, 144, 90, 0.12);
+  border: 1px solid rgba(120, 144, 90, 0.35);
+  color: #2f3a1f;
+  font-size: 11px;
+  line-height: 1.2;
+  overflow: hidden;
+  user-select: none;
+}
+html.dark .mention-chip {
+  background: rgba(176, 200, 178, 0.15);
+  border-color: rgba(176, 200, 178, 0.35);
+  color: #d8e6da;
+}
+.mention-chip--deleted {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+.mention-chip__top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 6px;
+  font-weight: 600;
+}
+.mention-chip__icon {
+  flex: 0 0 auto;
+}
+.mention-chip__title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.mention-chip__close {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+.mention-chip__close:hover {
+  background: rgba(120, 144, 90, 0.25);
+}
+.mention-chip__bottom {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 2px 6px 4px;
+  border: none;
+  border-top: 1px solid rgba(120, 144, 90, 0.25);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mention-chip__bottom:disabled {
+  cursor: not-allowed;
+}
+.mention-chip__bottom:not(:disabled):hover {
+  background: rgba(120, 144, 90, 0.18);
+}
+html.dark .mention-chip__bottom {
+  border-top-color: rgba(176, 200, 178, 0.25);
+}
+html.dark .mention-chip__bottom:not(:disabled):hover {
+  background: rgba(176, 200, 178, 0.18);
 }

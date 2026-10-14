@@ -1,4 +1,5 @@
-import type { ProposedEdit } from '@/types';
+import type { MentionToken, ProposedEdit } from '@/types';
+import { parseMentions as parseMentionsFromSentinels } from '@/components/mentions/parseMentions';
 
 export type ProposedEditSegment =
   | { kind: 'text'; payload: string }
@@ -459,6 +460,14 @@ export interface RejectionItem {
   editId: string;
   /** The user's free-text comment. Trimmed before formatting. */
   comment: string;
+  /**
+   * @-document references the user attached to the rejection comment.
+   * Empty / undefined for cards where the user did not use `@`.
+   * When the staged rejections are committed, the merged mention
+   * list is forwarded to the prompt builder so the model sees the
+   * referenced doc(s) alongside the rejection batch.
+   */
+  mentions?: MentionToken[];
 }
 
 /**
@@ -472,10 +481,20 @@ export interface RejectionItem {
  *
  * Items with empty/whitespace-only comments are skipped — those should
  * have used the plain "Reject" button instead.
+ *
+ * The `comment` strings passed in may contain @-mention sentinel
+ * sequences (e.g. `\u200B[[mention:…]]\u200B`). We strip those here
+ * via `cleanCommentForPrompt` before formatting so the user-visible
+ * chat message is plain prose — the referenced docs are conveyed
+ * separately through the prompt builder's `referencedDocuments`
+ * argument.
  */
 export function formatRejectionBatch(items: RejectionItem[]): string {
   const lines = items
-    .map((it) => ({ editId: it.editId, comment: it.comment.trim() }))
+    .map((it) => ({
+      editId: it.editId,
+      comment: cleanCommentForPrompt(it.comment).trim(),
+    }))
     .filter((it) => it.comment.length > 0);
 
   if (lines.length === 0) return '';
@@ -487,4 +506,17 @@ export function formatRejectionBatch(items: RejectionItem[]): string {
 
   const body = lines.map((l) => `[${l.editId}] ${l.comment}`).join('\n');
   return `${header}\n\n${body}\n`;
+}
+
+/**
+ * Strip @-mention sentinels from a comment string. Thin wrapper
+ * around the canonical parser in `components/mentions/parseMentions.ts`
+ * so there is a single source of truth for the sentinel format.
+ * The `components/mentions/parseMentions.ts` module is pure (no
+ * React / DOM imports), so the `utils/` layer can depend on it
+ * without dragging in UI tree-shake weight.
+ */
+export function cleanCommentForPrompt(text: string): string {
+  if (!text) return '';
+  return parseMentionsFromSentinels(text).plain;
 }

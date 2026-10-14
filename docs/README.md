@@ -14,6 +14,7 @@ This guide is for people using the app. It covers every screen and everyday task
 - Save and restore **revisions**
 - Import text from photos or PDFs
 - Get optional inline **Predict** suggestions while you type
+- Reference other documents with `@` — type `@` in chat, comments, or rejection feedback to attach another doc (or a specific paragraph) to the outgoing turn. See [Reference other documents (`@`)](reference-other-documents.md).
 
 ## Start here
 
@@ -27,10 +28,11 @@ This guide is for people using the app. It covers every screen and everyday task
 8. [Prompt library](prompt-library.md) — saved prompts
 9. [Revision history](revisions.md) — snapshots and restore
 10. [Import from photos or PDFs](import.md)
-11. [Settings](settings.md)
-12. [Keyboard shortcuts](keyboard-shortcuts.md)
-13. [Privacy and your data](privacy.md)
-14. [Troubleshooting](troubleshooting.md)
+11. [Reference other documents (`@`)](reference-other-documents.md) — attach a doc to any message
+12. [Settings](settings.md)
+13. [Keyboard shortcuts](keyboard-shortcuts.md)
+14. [Privacy and your data](privacy.md)
+15. [Troubleshooting](troubleshooting.md)
 
 ## How ApEditor feels different
 

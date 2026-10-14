@@ -12,7 +12,8 @@ If you have never sent a message, Chat shows: *Ask anything, or highlight text i
 
 ## Send a message (Minimax or OpenAI)
 
-1. Type in the box (*Ask, or ⌘/Ctrl+Enter to send…*).
+1. Type in the box (*Ask, or ⌘/Ctrl+Enter to send… type @ to reference a document*).
+   - Type `@` to attach another document (or a specific paragraph of one) to the message — see [Reference other documents](reference-other-documents.md).
 2. Optionally check **include selection** so the highlighted editor text is sent with the message.
 3. **paste selection (n)** inserts the highlight into the input if you would rather see it in the box.
 4. Click **Send** or press `Ctrl+Enter` / `⌘Enter`.
@@ -51,3 +52,7 @@ Saved prompts can fill the Chat input, including the current selection. See [Pro
 ## Staged rejection comments
 
 If you **Reject with feedback** on a proposed-edit card, Chat shows how many rejection comments are staged. Use **Send n rejection comments** to send them together, or **Clear staged** to drop them. Details: [Proposed edits](proposed-edits.md).
+
+## Reference other documents with `@`
+
+Type `@` in the chat input to attach another document to the message. Pick a doc, optionally narrow it to specific paragraphs, and the reference rides along with your message. The model sees the referenced doc in the system prompt. Details: [Reference other documents](reference-other-documents.md).

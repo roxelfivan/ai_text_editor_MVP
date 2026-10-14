@@ -8,6 +8,16 @@ export interface ChatMessage {
   content: string;
   // Optional context included at send time (e.g. selected text from the editor).
   selection?: string;
+  /**
+   * Optional provider-specific metadata attached at request-assembly
+   * time. Currently used to thread Anthropic / OpenAI prompt-
+   * cache `cache_control` breakpoints through the messages array;
+   * the request layer (`streamChatCompletion`) does NOT forward
+   * this field on its own — it has to be deliberately read and
+   * routed. Kept generic so future fields (e.g. `priority`) can
+   * ride along without a type change.
+   */
+  metadata?: Record<string, unknown>;
   createdAt: number;
 }
 
@@ -160,6 +170,14 @@ export interface CommentRound {
    * edit in response to a single batch send.
    */
   applied: ProposedEditRationale[];
+  /**
+   * Document mentions (`@`-references) the user attached to this
+   * round's comment body. Empty / undefined for rounds created
+   * before the mentions feature shipped. Persisted with the round
+   * so a comment that already includes references stays intact
+   * across reloads.
+   */
+  mentions?: MentionToken[];
 }
 
 /**
@@ -238,3 +256,75 @@ export type CommentOp =
       editId: string;
     }
   | { kind: 'delete'; comment: Comment };
+
+/**
+ * A user-attached reference to another document (or a section of one)
+ * inside a chat message or a comment. Inserted via the `@` picker
+ * and rendered as an inline chip in the input.
+ *
+ * The `documentTitle` is captured at insert time so a later rename of
+ * the source document does not silently change the chip's visible
+ * text. If the source document is deleted, callers should treat the
+ * chip as "(deleted)" and drop the mention from the prompt context.
+ *
+ * `paragraphIndexes` is empty for `kind === 'doc'` (the whole document
+ * is referenced) and contains 0-based paragraph indexes into the
+ * source document's paragraph list for `kind === 'doc-section'`.
+ * Paragraph boundaries match `buildDocOutline` in `src/api/chat.ts`
+ * (one paragraph per `\n`). The section picker groups these by
+ * markdown heading / sub-heading (blank-line blocks when a doc has
+ * no headings) and expands a picked section into the paragraph
+ * indexes it covers.
+ */
+export type MentionKind = 'doc' | 'doc-section';
+
+/**
+ * Semantic reason for why a document was `@`-mentioned. Lets the
+ * prompt builder emit a per-doc focus hint so the LLM can prioritize
+ * the most relevant passages instead of re-reading the whole
+ * referenced doc. Defaults to `'context'` when the picker does not
+ * set it; existing chips therefore keep working unchanged.
+ */
+export type MentionReason =
+  | 'context' // general background reading
+  | 'style' // user wants voice / tone match
+  | 'facts' // user wants to fact-check / reuse numbers / entities
+  | 'terminology' // user wants consistent vocabulary / definitions
+  | 'compare'; // user is asking the model to compare with this doc
+
+export interface MentionToken {
+  /** Local uuid used as the textarea sentinel id and the React key. */
+  id: string;
+  kind: MentionKind;
+  /** Source document id (lookup key in `useStore.documents`). */
+  documentId: string;
+  /**
+   * Source document title captured at insert time. Used as the chip
+   * label so the chip stays stable across renames.
+   */
+  documentTitle: string;
+  /**
+   * 0-based paragraph indexes into the source document. Empty for
+   * whole-document mentions; one or more entries for section-scoped
+   * mentions.
+   */
+  paragraphIndexes: number[];
+  createdAt: number;
+  /**
+   * Optional semantic intent for this mention. Defaults to
+   * `'context'` when omitted. Stored and round-tripped through the
+   * textarea sentinel so a chip's intent survives reload. Picker
+   * can leave it unset; existing chips keep working.
+   */
+  reason?: MentionReason;
+  /**
+   * Optional id of the `Comment`/`ChatMessage` that introduced this
+   * mention. Chat messages use their own id; comments use the comment
+   * id. Used by `buildRequestMessages` to emit a per-comment
+   * `[comment -> referenced docs]` cross-reference map so the model
+   * knows WHY each referenced doc was pulled in for that comment.
+   * Null for legacy mentions (the cross-reference map is silently
+   * omitted in that case).
+   */
+  referrerId?: string | null;
+}

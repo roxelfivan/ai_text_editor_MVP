@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid';
 import ReactMarkdown from 'react-markdown';
 import { useStore } from '@/store/useStore';
 import { buildRequestMessages, streamChatCompletion, ApiError } from '@/api/chat';
-import type { ChatMessage, ProposedEdit } from '@/types';
+import type { ChatMessage, MentionToken, ProposedEdit } from '@/types';
 import { ProposedEditCard } from '@/components/ProposedEditCard';
 import { ResizeHandle } from '@/components/ResizeHandle';
 import { useDragResize, clamp, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH } from '@/hooks/useDragResize';
@@ -12,6 +12,8 @@ import { formatCommentBatch } from '@/utils/comments';
 import { remarkPlugins, rehypePlugins } from '@/utils/markdown';
 import { buildGoogleAiModeUrl } from '@/utils/googleAiMode';
 import { requiresApiKey } from '@/config/providers';
+import { MentionInput } from '@/components/mentions/MentionInput';
+import { parseMentions } from '@/components/mentions/parseMentions';
 
 // Maximum fraction of the viewport width the chat panel is allowed to
 // occupy. The static MAX_CHAT_WIDTH is still used as a floor so the panel
@@ -41,16 +43,25 @@ export function ChatPanel() {
   const setIncludeSelection = useStore((s) => s.setIncludeSelection);
 
   const [input, setInput] = useState('');
+  // Document mentions attached to the current chat input. Populated by
+  // the MentionInput when the user picks a doc (and optionally a set
+  // of paragraphs) via the @ picker. Forwarded to buildRequestMessages
+  // alongside the current document so the model sees the referenced
+  // doc(s) in the system prompt.
+  const [mentions, setMentions] = useState<MentionToken[]>([]);
   const [selection, setSelection] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Per-assistant-message staged rejection comments. Keyed by the
   // assistant message id so multiple in-flight replies can each have their
-  // own batch. Value entries are the (editId, comment) pairs the user has
-  // queued via "Reject with feedback"; a card flips to its staged outline
-  // when its entry is present.
+  // own batch. Value entries are the (editId, comment, mentions) tuples
+  // the user has queued via "Reject with feedback"; a card flips to its
+  // staged outline when its entry is present.
   const [stagedRejections, setStagedRejections] = useState<
-    Record<string, Array<{ editId: string; comment: string }>>
+    Record<
+      string,
+      Array<{ editId: string; comment: string; mentions: MentionToken[] }>
+    >
   >({});
   // After a staged-rejection batch is committed, the matching cards need
   // to disappear without a re-render flash. We flip them into a
@@ -117,6 +128,7 @@ export function ChatPanel() {
       const detail = (
         e as CustomEvent<{
           commentIds: string[];
+          mentionsByCommentId?: Record<string, MentionToken[]>;
         }>
       ).detail;
       if (!detail || !Array.isArray(detail.commentIds)) return;
@@ -130,6 +142,27 @@ export function ChatPanel() {
         (c) => detail.commentIds.includes(c.id) && !c.outdated
       );
       if (comments.length === 0) return;
+      // Gather document mentions attached to each comment's latest
+      // round. Prefer the event payload (most recent) and fall back
+      // to reading the round's stored `mentions` so the prompt still
+      // includes references for comments created before this
+      // listener was updated to forward the payload.
+      const seen = new Set<string>();
+      const mergedMentions: MentionToken[] = [];
+      const payload = detail.mentionsByCommentId ?? {};
+      for (const c of comments) {
+        const list =
+          payload[c.id] ??
+          (c.rounds.length > 0
+            ? c.rounds[c.rounds.length - 1].mentions
+            : undefined) ??
+          [];
+        for (const m of list) {
+          if (seen.has(m.id)) continue;
+          seen.add(m.id);
+          mergedMentions.push(m);
+        }
+      }
       const body = formatCommentBatch(docSnap.content, comments);
       const userMsg: ChatMessage = {
         id: uuid(),
@@ -175,8 +208,19 @@ export function ChatPanel() {
           buildRequestMessages(
             history,
             api.systemMessage,
-            docSnap ? { title: docSnap.title, content: docSnap.content } : null,
-            api.rationaleRulesOverride
+            docSnap
+              ? { title: docSnap.title, content: docSnap.content, id: docSnap.id }
+              : null,
+            api.rationaleRulesOverride,
+            mergedMentions,
+            documentLookup,
+            // Pass through the per-comment mapping so the prompt
+            // builder can emit the `[comment -> referenced docs]`
+            // cross-reference map. Prefer the fresh payload, fall
+            // back to the round-stored mentions (same merge logic
+            // as `mergedMentions` above so the two arrays stay in
+            // sync — first-emission wins per mention id).
+            payload
           ),
           api,
           {
@@ -219,6 +263,7 @@ export function ChatPanel() {
     appendMessage,
     updateLastAssistant,
     api,
+    mentions,
   ]);
 
   // Auto-scroll to bottom on new messages / streaming.
@@ -257,15 +302,28 @@ export function ChatPanel() {
     return null;
   }
 
+  // Document lookup for @-mention resolution. Re-reads from the live
+  // store on every call so a doc switch between Send and the model
+  // call still resolves correctly.
+  const documentLookup = (id: string) =>
+    useStore.getState().documents.find((d) => d.id === id) ?? null;
+
   const handleSend = async () => {
     if (!currentDocumentId) return;
-    const text = input.trim();
+    // Strip mention sentinels from the displayed text so the user
+    // message that gets persisted / sent to the model does not carry
+    // opaque `[[mention:…]]` sequences. The chips in the UI are the
+    // canonical representation; the message body should be the prose
+    // the user typed.
+    const { plain } = parseMentions(input);
+    const text = plain.trim();
     if (!text || streaming) return;
     // Snapshot current document before the AI turn so the user can
     // restore via Revision history if later applies go wrong.
     useStore.getState().saveRevision(currentDocumentId, 'Before AI send');
     setError(null);
     setInput('');
+    setMentions([]);
 
     const docSnap = useStore.getState().documents.find(
       (d) => d.id === currentDocumentId
@@ -291,7 +349,9 @@ export function ChatPanel() {
       const url = buildGoogleAiModeUrl(
         history,
         api.systemMessage,
-        docSnap ? { title: docSnap.title, content: docSnap.content } : null
+        docSnap ? { title: docSnap.title, content: docSnap.content } : null,
+        mentions,
+        documentLookup
       );
       const assistantMsg: ChatMessage = {
         id: uuid(),
@@ -329,7 +389,20 @@ export function ChatPanel() {
     let acc = '';
     try {
       await streamChatCompletion(
-        buildRequestMessages(history, api.systemMessage, docSnap ? { title: docSnap.title, content: docSnap.content } : null, api.rationaleRulesOverride),
+        buildRequestMessages(
+          history,
+          api.systemMessage,
+          docSnap
+            ? { title: docSnap.title, content: docSnap.content, id: docSnap.id }
+            : null,
+          api.rationaleRulesOverride,
+          mentions,
+          documentLookup,
+          // Chat messages have no per-comment bucket — pass
+          // `undefined` so the cross-reference map (comment-batch
+          // only) is silently dropped.
+          undefined
+        ),
         api,
         {
           signal: abortRef.current.signal,
@@ -388,21 +461,40 @@ export function ChatPanel() {
   };
 
   // Stage a rejection-with-feedback for a given assistant message. If the
-  // same (editId, comment) pair is already staged (e.g. the user double-
-  // clicked the button) we keep just one entry.
+  // same (editId, comment, mentions) tuple is already staged (e.g. the
+  // user double-clicked the button) we keep just one entry.
   const stageReject = (
     messageId: string,
-    info: { editId: string; comment: string }
+    info: { editId: string; comment: string; mentions: MentionToken[] }
   ) => {
+    // Reject if there is no comment prose AND no @-references. A card
+    // that only has an @-reference (no plain text) is still a valid
+    // rejection — the referenced doc IS the rejection's substance.
     const trimmed = info.comment.trim();
-    if (!trimmed) return;
+    if (!trimmed && info.mentions.length === 0) return;
     setStagedRejections((prev) => {
       const existing = prev[messageId] ?? [];
+      // Dedup by (editId, comment, mentions-by-id). Two cards with
+      // the same text + same @-refs collapse to one entry.
+      const sameMentions = (a: MentionToken[], b: MentionToken[]) => {
+        if (a.length !== b.length) return false;
+        const ids = new Set(a.map((m) => m.id));
+        return b.every((m) => ids.has(m.id));
+      };
       const dup = existing.some(
-        (e) => e.editId === info.editId && e.comment === trimmed
+        (e) =>
+          e.editId === info.editId &&
+          e.comment === info.comment &&
+          sameMentions(e.mentions, info.mentions)
       );
       if (dup) return prev;
-      return { ...prev, [messageId]: [...existing, { editId: info.editId, comment: trimmed }] };
+      return {
+        ...prev,
+        [messageId]: [
+          ...existing,
+          { editId: info.editId, comment: info.comment, mentions: info.mentions },
+        ],
+      };
     });
   };
 
@@ -420,6 +512,19 @@ export function ChatPanel() {
         return next;
       });
       return;
+    }
+    // Gather @-document references attached to each rejection. The
+    // body of the user message has the sentinels stripped by
+    // `formatRejectionBatch`, so the references have to be conveyed
+    // separately via `referencedDocuments` in the prompt builder.
+    const seen = new Set<string>();
+    const mergedMentions: MentionToken[] = [];
+    for (const it of items) {
+      for (const m of it.mentions) {
+        if (seen.has(m.id)) continue;
+        seen.add(m.id);
+        mergedMentions.push(m);
+      }
     }
     const userMsg: ChatMessage = {
       id: uuid(),
@@ -448,8 +553,10 @@ export function ChatPanel() {
     // store for the updated messages and run the same flow as handleSend
     // (minus the textarea). We replicate the stream setup here rather
     // than reshare code, since handleSend is tied to the local `input`
-    // state.
-    void runAssistantReplyAfterCommit(userMsg);
+    // state. The rejection-card mentions are forwarded as
+    // `extraMentions` so the prompt builder emits a `sys-referenced-doc-N`
+    // message for each referenced document.
+    void runAssistantReplyAfterCommit(userMsg, mergedMentions);
   };
 
   const clearStagedRejections = (messageId: string) => {
@@ -567,7 +674,16 @@ export function ChatPanel() {
   // handleSend but is keyed off an already-appended user message
   // instead of the textarea contents. Returns when the stream ends;
   // errors are surfaced via the same `error` state.
-  const runAssistantReplyAfterCommit = async (userMsg: ChatMessage) => {
+  //
+  // `extraMentions` lets the caller attach @-document references
+  // gathered from comment rounds that have their own mentions.
+  // Defaults to the current chat-panel `mentions` so the regular
+  // `handleSend` path (which already passed mentions to its own
+  // `streamChatCompletion` call) is unchanged.
+  const runAssistantReplyAfterCommit = async (
+    userMsg: ChatMessage,
+    extraMentions?: MentionToken[]
+  ) => {
     if (!currentDocumentId) return;
     const docSnap = useStore.getState().documents.find(
       (d) => d.id === currentDocumentId
@@ -581,6 +697,7 @@ export function ChatPanel() {
     };
     appendMessage(currentDocumentId, assistantMsg);
     const history = [...historyFromStore, userMsg, assistantMsg];
+    const effectiveMentions = extraMentions ?? mentions;
     setStreaming(true);
     setError(null);
     window.dispatchEvent(new CustomEvent('mvp:chat-streaming', { detail: { streaming: true } }));
@@ -588,7 +705,20 @@ export function ChatPanel() {
     let acc = '';
     try {
       await streamChatCompletion(
-        buildRequestMessages(history, api.systemMessage, docSnap ? { title: docSnap.title, content: docSnap.content } : null, api.rationaleRulesOverride),
+        buildRequestMessages(
+          history,
+          api.systemMessage,
+          docSnap
+            ? { title: docSnap.title, content: docSnap.content, id: docSnap.id }
+            : null,
+          api.rationaleRulesOverride,
+          effectiveMentions,
+          documentLookup,
+          // The staged-rejection path has no per-comment grouping
+          // by design (one rejection body covers many edits in a
+          // single user message). Drop the cross-reference map.
+          undefined
+        ),
         api,
         {
           signal: abortRef.current.signal,
@@ -777,19 +907,18 @@ export function ChatPanel() {
                 </button>
               )}
             </div>
-            <textarea
+            <MentionInput
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  void handleSend();
-                }
+              onChange={(v) => {
+                setInput(v.text);
+                setMentions(v.mentions);
               }}
+              onSubmit={() => void handleSend()}
+              ariaLabel="Chat message"
               placeholder={
                 isKeyless
-                  ? 'Ask, or ⌘/Ctrl+Enter to open in Google AI Mode…'
-                  : 'Ask, or ⌘/Ctrl+Enter to send…'
+                  ? 'Ask, or ⌘/Ctrl+Enter to open in Google AI Mode… type @ to reference a document'
+                  : 'Ask, or ⌘/Ctrl+Enter to send… type @ to reference a document'
               }
               className="w-full h-24 p-2 text-sm ape-field resize-none font-sans"
             />
@@ -836,9 +965,13 @@ function MessageBubble({
   onClearApplyAllSummary,
 }: {
   message: ChatMessage;
-  staged: Array<{ editId: string; comment: string }>;
+  staged: Array<{ editId: string; comment: string; mentions: MentionToken[] }>;
   committed: Record<string, true>;
-  onStageReject: (info: { editId: string; comment: string }) => void;
+  onStageReject: (info: {
+    editId: string;
+    comment: string;
+    mentions: MentionToken[];
+  }) => void;
   onCommit: () => void;
   onClearStaged: () => void;
   onApplyAll: () => void;
@@ -983,9 +1116,13 @@ function AssistantContent({
   content: string;
   docId: string | null;
   messageId: string;
-  staged: Array<{ editId: string; comment: string }>;
+  staged: Array<{ editId: string; comment: string; mentions: MentionToken[] }>;
   committed: Record<string, true>;
-  onStageReject: (info: { editId: string; comment: string }) => void;
+  onStageReject: (info: {
+    editId: string;
+    comment: string;
+    mentions: MentionToken[];
+  }) => void;
 }) {
   if (!content) {
     return <span className="opacity-60">thinking…</span>;

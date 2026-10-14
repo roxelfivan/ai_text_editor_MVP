@@ -18,7 +18,7 @@ import {
   reanchorAll,
   clampCommentBody,
 } from '@/utils/comments';
-import type { Comment } from '@/types';
+import type { Comment, MentionToken } from '@/types';
 import { CommentLayer } from '@/components/CommentLayer';
 import { CommentMargin } from '@/components/CommentMargin';
 import { CommentComposer } from '@/components/CommentComposer';
@@ -742,7 +742,7 @@ export function Editor() {
 
   // Handler: save a brand-new comment.
   const handleSaveComment = useCallback(
-    (body: string) => {
+    (body: string, mentions: MentionToken[]) => {
       if (!doc || !pendingSelection) return;
       const text = clampCommentBody(body);
       if (!text.trim()) return;
@@ -779,6 +779,11 @@ export function Editor() {
             outdated: false,
             sent: false,
             applied: [],
+            // Persist the @-document references the user attached
+            // to this round. Empty / undefined means "no mentions";
+            // older comments without the field still serialize
+            // cleanly because `mentions` is optional.
+            ...(mentions.length > 0 ? { mentions } : {}),
           },
         ],
       };
@@ -834,21 +839,39 @@ export function Editor() {
 
   // Handler: send the comments batch to the AI.
   const handleSendToAi = useCallback(() => {
-      if (!doc) return;
-      // Build the message body and dispatch via a custom event the
-      // ChatPanel listens for. This keeps the editor / chat coupling
-      // one-way (chat listens; editor dispatches) and avoids a direct
-      // import of the chat's internals.
-      const sendable = currentComments.filter((c) => !c.outdated);
-      if (sendable.length === 0) return;
-      window.dispatchEvent(
-        new CustomEvent('mvp:send-comments', {
-          detail: {
-            commentIds: sendable.map((c) => c.id),
-          },
-        })
-      );
-    },
+    if (!doc) return;
+    // Build the message body and dispatch via a custom event the
+    // ChatPanel listens for. This keeps the editor / chat coupling
+    // one-way (chat listens; editor dispatches) and avoids a direct
+    // import of the chat's internals.
+    const sendable = currentComments.filter((c) => !c.outdated);
+    if (sendable.length === 0) return;
+    // Gather @-document references attached to each comment's
+    // latest round. Forwarded to the chat panel so the prompt can
+    // include the referenced docs alongside the comment batch.
+    // Attach the comment's id as `referrerId` on each mention so the
+    // prompt builder can emit a per-comment
+    // `[comment -> referenced docs]` cross-reference map. Existing
+    // mentions without a reason get `'context'` for the same reason.
+    const mentionsByCommentId: Record<string, MentionToken[]> = {};
+    for (const c of sendable) {
+      const last = c.rounds[c.rounds.length - 1];
+      if (!last?.mentions || last.mentions.length === 0) continue;
+      mentionsByCommentId[c.id] = last.mentions.map((m) => ({
+        ...m,
+        referrerId: m.referrerId ?? c.id,
+        reason: m.reason ?? 'context',
+      }));
+    }
+    window.dispatchEvent(
+      new CustomEvent('mvp:send-comments', {
+        detail: {
+          commentIds: sendable.map((c) => c.id),
+          mentionsByCommentId,
+        },
+      })
+    );
+  },
     [doc, currentComments]
   );
 
@@ -1475,7 +1498,9 @@ export function Editor() {
                     }
                     position={popoverPosition}
                     containerBounds={paneBounds}
-                    onSaveBody={(id, body) => updateCommentBody(id, body)}
+                    onSaveBody={(id, body, mentions) =>
+                      updateCommentBody(id, body, mentions)
+                    }
                     onDelete={(id) => deleteComment(id)}
                     onClose={() => {
                       setActiveCommentId(null);

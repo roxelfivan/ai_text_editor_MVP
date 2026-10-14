@@ -6,7 +6,8 @@ Comments let you mark a passage, write what you want changed, and send every not
 
 1. In **Write** (or the Write side of **Split**), select the passage.
 2. Click **Comment** on the toolbar. The button is disabled until you have a selection.
-3. Type in the composer (**Write a comment…**).
+3. Type in the composer (**Write a comment… type @ to reference a document**).
+   - Type `@` to attach another document (or a specific paragraph of one) to the comment — see [Reference other documents](reference-other-documents.md).
 4. Click **Save**, or press `Ctrl+Enter` / `⌘Enter`. **Cancel** or Escape discards the draft.
 
 The passage is highlighted. A numbered badge appears in the margin (1, 2, 3… in document order).
@@ -66,3 +67,7 @@ Expand or collapse rounds with the **+** / **−** controls when there is more t
 2. **Send to AI** again.
 3. **Apply** the new card.
 4. Open the badge and compare Round 1 and Round 2.
+
+## Reference other documents
+
+Type `@` in the composer (or in the popover's edit box) to attach another document to the comment. The reference shows up as an inline pill in the popover's read view; clicking the pill switches the editor to the referenced document. Details: [Reference other documents](reference-other-documents.md).

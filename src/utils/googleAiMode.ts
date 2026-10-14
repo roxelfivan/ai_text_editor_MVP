@@ -10,8 +10,8 @@
 // This module is the single source of truth for the URL shape so the
 // search params can be updated in one place if Google changes the
 // public AI Mode deep-link in the future.
-import type { ChatMessage } from '@/types';
-import { DEFAULT_SYSTEM_MESSAGE } from '@/api/chat';
+import type { ChatMessage, DocumentRecord, MentionToken } from '@/types';
+import { buildReferencedDocMessage, DEFAULT_SYSTEM_MESSAGE } from '@/api/chat';
 
 // Base URL for Google's AI Mode deep-link. `udm=50` selects the
 // generative-AI tab on google.com/search. The query string is appended
@@ -27,11 +27,11 @@ export const GOOGLE_AI_MODE_URL = 'https://www.google.com/search?udm=50';
 // shorten the request manually.
 const MAX_URL_LENGTH = 6000;
 
-// Cap on the size of the "current document" preview we attach to the
-// prompt. AI Mode does not need the whole multi-megabyte document to
-// answer a question; a short summary + the first chunk is plenty and
-// keeps the resulting URL well within the limit.
-const MAX_DOC_PREVIEW_CHARS = 2000;
+// AI Mode hard cap on the size of the "current document" preview we
+// attach to the prompt. Stays under the 6 KB URL headroom even on
+// multi-megabyte docs. Wrapped in a `[Context — document ...]`
+// bracket so the AI Mode web UI parses it correctly.
+const MAX_CURRENT_DOC_PREVIEW_CHARS = 1500;
 
 /**
  * Build a Google AI Mode search URL that pre-fills the prompt.
@@ -41,24 +41,42 @@ const MAX_DOC_PREVIEW_CHARS = 2000;
  * (no system role, no selection markers, no proposed-edit fences).
  * Selection / system-message context are folded into the prompt as
  * short bracketed notes so the user-facing tab still has them.
+ *
+ * Referenced docs reuse the shared `buildReferencedDocMessage` from
+ * `src/api/chat.ts` so the same outline / sectioned-verbatim logic
+ * applies here. We then re-frame the result with a `[Context —
+ * referenced document "<title>"]` envelope so the AI Mode page can
+ * still surface the reference cleanly.
  */
 export function buildGoogleAiModeUrl(
   messages: ChatMessage[],
   systemMessage: string | undefined,
-  currentDocument: { title: string; content: string } | null | undefined
+  currentDocument: { title: string; content: string } | null | undefined,
+  /**
+   * Optional @-document references. Each resolved doc reuses the
+   * shared outline-vs-sectioned builder in `src/api/chat.ts` (the
+   * same one the OpenAI path uses). The output is wrapped in
+   * `[Context — referenced document "<title>"]` brackets so the
+   * AI Mode page still parses it. Section-scoped mentions still get
+   * verbatim text (capped via the same per-doc + per-turn caps the
+   * OpenAI path applies), so the user-facing tab benefits from the
+   * same prompt-engineering work — even on the keyless path.
+   */
+  referencedDocuments?: MentionToken[],
+  documentLookup?: (id: string) => DocumentRecord | null
 ): string {
   const effectiveSystem =
     (systemMessage && systemMessage.trim()) || DEFAULT_SYSTEM_MESSAGE;
   const parts: string[] = [];
 
-  // Selection / document context goes first so it is the first thing
-  // the model sees on the AI Mode page. This mirrors the wrapping the
-  // OpenAI path does in `buildRequestMessages`.
+  // Current doc first (parallel to `sys-current-doc` in the OpenAI
+  // path). The AI Mode tab does not have a doc-outline view, so we
+  // emit a short truncated preview bracketed by `[Context — …]`.
   if (currentDocument && currentDocument.content.trim()) {
     const title = currentDocument.title?.trim() || 'Untitled';
     const preview =
-      currentDocument.content.length > MAX_DOC_PREVIEW_CHARS
-        ? currentDocument.content.slice(0, MAX_DOC_PREVIEW_CHARS) +
+      currentDocument.content.length > MAX_CURRENT_DOC_PREVIEW_CHARS
+        ? currentDocument.content.slice(0, MAX_CURRENT_DOC_PREVIEW_CHARS) +
           '\n[…truncated…]'
         : currentDocument.content;
     parts.push(
@@ -66,6 +84,53 @@ export function buildGoogleAiModeUrl(
         `${preview}\n` +
         `[End context]\n\n`
     );
+  }
+
+  // Append @-referenced docs by reusing the shared builder so the
+  // same outline-vs-sectioned logic applies. We bracket the result
+  // with `[Context — referenced document "<title>"]` so the
+  // single-message AI Mode payload stays parseable. Turn-wide cap is
+  // halved vs the OpenAI path because we have a 6 KB URL ceiling
+  // instead of a multi-MB request body, and the preview is the
+  // dominant cost on this path.
+  if (referencedDocuments && referencedDocuments.length > 0 && documentLookup) {
+    // Same composite dedupe key as `buildRequestMessages` so the
+    // section-kept-on-collision behaviour is consistent across paths.
+    const seen = new Map<string, MentionToken>();
+    const ordered: { token: MentionToken; doc: DocumentRecord }[] = [];
+    for (const token of referencedDocuments) {
+      const paragraphs = [...token.paragraphIndexes].sort((a, b) => a - b);
+      const key = `${token.documentId}::${token.kind}::${paragraphs.join(',')}`;
+      if (seen.has(key)) continue;
+      const doc = documentLookup(token.documentId);
+      if (!doc || !doc.content.trim()) continue;
+      seen.set(key, token);
+      ordered.push({ token, doc });
+    }
+
+    let totalConsumed = 0;
+    // ~2 KB cap — leaves ~4 KB for the rest of the URL (system
+    // prompt + chat history + URL encoding). Slightly tighter than
+    // the OpenAI path's 8 KB budget because the URL ceiling is
+    // hard here.
+    const urlCap = 2000;
+    for (const { token, doc } of ordered) {
+      const rendered = buildReferencedDocMessage(token, doc, {
+        totalConsumed,
+        totalCap: urlCap,
+      });
+      // Wrap the shared builder output in AI Mode's
+      // `[Context — referenced document "<title>"]` envelope so
+      // the single-message web payload stays parseable.
+      const wrappedTitle = (doc.title || token.documentTitle || 'Untitled').trim();
+      const framed =
+        `[Context — referenced document "${wrappedTitle}"]\n` +
+        rendered +
+        `\n[End context]\n`;
+      parts.push(framed);
+      totalConsumed += framed.length;
+      if (totalConsumed >= urlCap) break;
+    }
   }
 
   if (effectiveSystem.trim()) {
