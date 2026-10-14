@@ -565,7 +565,7 @@ const PROPOSED_EDIT_SCHEMA_RULES: string =
   `{\n` +
   `  "id": "<short id, e.g. p1>",\n` +
   `  "summary": "<one-line change description>",\n` +
-  `  "rationale": "<REQUIRED: credit-risk cover-memo Markdown, ≥7 numbered points, ≥100 words, keywords bold+underlined — see RATIONALE RULES>",\n` +
+  `  "rationale": "<REQUIRED: structured Markdown, ≥7 numbered points, ≥100 words, keywords bold+underlined — see RATIONALE RULES>",\n` +
   `  "original": "<verbatim substring from the document>",\n` +
   `  "replacement": "<new text>"\n` +
   `}\n` +
@@ -584,16 +584,15 @@ const PROPOSED_EDIT_SCHEMA_RULES: string =
  * customized `api.rationaleRulesOverride`. Exported for Settings Reset.
  * Replaced wholesale by the user's override (schema above is kept).
  *
- * Voice: credit-risk cover memo proposing amendments to policies /
- * procedures / guidelines. Structure: 1, 2, 3.1, 3.2, 3.3, 4, 5 —
- * ≥100 words; 3.1–3.3 each ≥30 words. Markdown + bold/underline keywords.
+ * Voice: structured professional memo explaining the edit.
+ * Structure: 1, 2, 3.1, 3.2, 3.3, 4, 5 — ≥100 words; 3.1–3.3 each
+ * ≥30 words. Markdown + bold/underline keywords.
  */
 export const PROPOSED_EDIT_RULES_DEFAULT: string =
   `RATIONALE RULES ("rationale" REQUIRED, non-empty, on every ` +
   `proposed-edit):\n` +
-  `- Write as a **credit risk** cover memo proposing an amendment to ` +
-  `a bank **policy**, **procedure**, or **guideline**. Professional ` +
-  `risk-management voice; no marketing copy.\n` +
+  `- Write in a clear, **structured** professional style that ` +
+  `explains why the proposed edit is warranted. No marketing copy.\n` +
   `- GitHub-flavored Markdown (rendered in the comment popover). ` +
   `Prefer a numbered list; blank line between major points. Escape ` +
   `" as \\" and newlines as \\n inside JSON.\n` +
@@ -601,30 +600,26 @@ export const PROPOSED_EDIT_RULES_DEFAULT: string =
   `- ≥7 numbered points (1. … 2. … 3.1 … 3.2 … 3.3 … 4. … 5. …), ` +
   `each on its own line.\n` +
   `- Keywords MUST be both bold and underlined: wrap each as ` +
-  `**<u>keyword</u>**. Emphasize risk terms, control names, and ` +
-  `changed obligations — not whole sentences. No other raw HTML.\n` +
+  `**<u>keyword</u>**. Emphasize key terms, obligations, and ` +
+  `changed requirements — not whole sentences. No other raw HTML.\n` +
   `- Cover, in order:\n` +
-  `  1. Pre-change: what the prior wording said, and what **risk** ` +
-  `or control gap it left for the Bank (plain language).\n` +
+  `  1. Pre-change: what the prior wording said, and what gap or ` +
+  `problem it left (plain language).\n` +
   `  2. Post-change: what the amended wording now requires or ` +
-  `clarifies from a risk / control standpoint (plain language).\n` +
-  `  3. Risk-management rationale — why the amendment is necessary. ` +
-  `Write exactly 3 sub-points, each ≥30 words:\n` +
-  `    (3.1) Risk the Bank faced before the change (e.g. ambiguity, ` +
-  `inconsistent standards, weak underwriting language, missing ` +
-  `escalation, incomplete monitoring).\n` +
-  `    (3.2) Risk the Bank is mitigating with this amendment, and ` +
-  `how the new wording reduces that exposure in this paragraph / ` +
-  `section.\n` +
-  `    (3.3) Why the document is stronger from a risk-management ` +
-  `perspective after the change (governance, consistency with ` +
-  `related policies, auditability, prudential alignment).\n` +
+  `clarifies (plain language).\n` +
+  `  3. Why the change is necessary. Write exactly 3 sub-points, ` +
+  `each ≥30 words:\n` +
+  `    (3.1) Problem or weakness before the change (e.g. ambiguity, ` +
+  `inconsistent standards, missing guidance, incomplete coverage).\n` +
+  `    (3.2) How this amendment addresses that problem, and how ` +
+  `the new wording improves this paragraph / section.\n` +
+  `    (3.3) Why the document is stronger after the change ` +
+  `(clarity, consistency with related sections, auditability).\n` +
   `  Do not mention these rules inside the rationale.\n` +
   `  4. How the amendment answers the reviewer's comment and ` +
-  `strengthens this paragraph as a workable control statement.\n` +
-  `  5. Benefit to the full policy / procedure / guideline set ` +
-  `(portfolio consistency, Board / regulator readability, residual ` +
-  `risk reduction).\n` +
+  `strengthens this paragraph.\n` +
+  `  5. Benefit to the broader document (cross-section consistency, ` +
+  `readability, residual issues reduced).\n` +
   `- Full professional sentences, not fragments. Shown in the ` +
   `comment popover after Apply.`;
 
@@ -643,27 +638,30 @@ export function isCurrentRationaleRulesDefault(
 /**
  * Older builds showed the built-in default in Settings and, on Save,
  * wrote that full string into `rationaleRulesOverride` — freezing it
- * forever. Detect those stale frozen defaults (pre credit-risk
- * cover-memo / 3.1–3.3 numbering) so we can fall back to the current
- * built-in.
+ * forever. Detect those stale frozen defaults (credit-risk
+ * cover-memo era, pre-3a fence-shape, and 3a / Logical-reason era)
+ * so we can fall back to the current structured-style built-in.
  */
 export function isStaleRationaleRulesOverride(
   text: string | undefined | null
 ): boolean {
   const trimmed = text?.trim() ?? '';
   if (!trimmed || isCurrentRationaleRulesDefault(trimmed)) return false;
-  // Credit-risk / 3.1 era rule
-  const isCreditRisk = /credit risk/i.test(trimmed) || /\(3\.1\)/.test(trimmed);
-  if (isCreditRisk) return false;
+  // Credit-risk cover-memo era built-in (distinctive phrase).
+  const looksLikeCreditRiskEraBuiltin =
+    /\*\*credit risk\*\* cover memo/i.test(trimmed);
   // Pre-3a era default (fence-shape doc) and 3a-era default
-  // (Logical reason). Either shape, with no credit-risk markers,
-  // is a frozen built-in.
+  // (Logical reason).
   const looksLikeVeryOldBuiltin =
     /When you propose changes to the document above/i.test(trimmed) &&
     /one fence per change/i.test(trimmed);
   const looksLikeThreeAEraBuiltin =
     /\b3a\./i.test(trimmed) && /Logical reason/i.test(trimmed);
-  return looksLikeVeryOldBuiltin || looksLikeThreeAEraBuiltin;
+  return (
+    looksLikeCreditRiskEraBuiltin ||
+    looksLikeVeryOldBuiltin ||
+    looksLikeThreeAEraBuiltin
+  );
 }
 
 /**
