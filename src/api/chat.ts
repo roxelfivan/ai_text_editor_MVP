@@ -638,18 +638,20 @@ export function isCurrentRationaleRulesDefault(
 /**
  * Older builds showed the built-in default in Settings and, on Save,
  * wrote that full string into `rationaleRulesOverride` — freezing it
- * forever. Detect those stale frozen defaults (credit-risk
- * cover-memo era, pre-3a fence-shape, and 3a / Logical-reason era)
- * so we can fall back to the current structured-style built-in.
+ * forever. Detect those stale frozen defaults (prior structured
+ * default, pre-3a fence-shape, and 3a / Logical-reason era) so we
+ * can fall back to the current structured-style built-in.
  */
 export function isStaleRationaleRulesOverride(
   text: string | undefined | null
 ): boolean {
   const trimmed = text?.trim() ?? '';
   if (!trimmed || isCurrentRationaleRulesDefault(trimmed)) return false;
-  // Credit-risk cover-memo era built-in (distinctive phrase).
-  const looksLikeCreditRiskEraBuiltin =
-    /\*\*credit risk\*\* cover memo/i.test(trimmed);
+  // Prior structured built-in (bank policy / prudential fingerprint).
+  const looksLikePriorStructuredBuiltin =
+    /a bank \*\*policy\*\*, \*\*procedure\*\*, or \*\*guideline\*\*/i.test(
+      trimmed
+    ) || /prudential alignment/i.test(trimmed);
   // Pre-3a era default (fence-shape doc) and 3a-era default
   // (Logical reason).
   const looksLikeVeryOldBuiltin =
@@ -658,7 +660,7 @@ export function isStaleRationaleRulesOverride(
   const looksLikeThreeAEraBuiltin =
     /\b3a\./i.test(trimmed) && /Logical reason/i.test(trimmed);
   return (
-    looksLikeCreditRiskEraBuiltin ||
+    looksLikePriorStructuredBuiltin ||
     looksLikeVeryOldBuiltin ||
     looksLikeThreeAEraBuiltin
   );
