@@ -397,7 +397,8 @@ export function SettingsModal({ open, onClose }: Props) {
       }
       // Show a real custom override, otherwise the live built-in
       // default. Stale frozen copies of older built-ins are treated
-      // as "no override" so credit-risk cover-memo wording appears.
+      // as "no override" so the current structured-style default
+      // appears.
       if (isStaleRationaleRulesOverride(api.rationaleRulesOverride)) {
         // Clear so chat + Settings both pick up the current built-in
         // without requiring an explicit Reset click.
@@ -676,9 +677,9 @@ export function SettingsModal({ open, onClose }: Props) {
             </div>
             <p className="mt-1 text-[11px] text-paper-inkSoft dark:text-cyber-muted">
               Rules the AI follows when writing the per-edit rationale
-              (credit-risk cover-memo Markdown, keywords
-              bold+underlined) shown in each comment popover. Leave
-              empty to use the built-in default.
+              (structured Markdown, keywords bold+underlined) shown
+              in each comment popover. Leave empty to use the
+              built-in default.
             </p>
           </div>
 

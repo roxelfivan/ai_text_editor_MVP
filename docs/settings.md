@@ -41,7 +41,7 @@ Edit the box, then **Save**. **Reset** restores the built-in default. Changes ap
 
 ## Rationale rules
 
-These rules shape the **rationale** on each proposed edit (what you read on the comment badge after **Apply**). The default is a long, structured **credit-risk cover-memo** style in Markdown, with numbered points and important terms **bold and underlined**.
+These rules shape the **rationale** on each proposed edit (what you read on the comment badge after **Apply**). The default is a long, structured style in Markdown, with numbered points and important terms **bold and underlined**.
 
 Leave the field as the default, customize it, or **Reset**. An empty field after save uses the built-in default.
 
