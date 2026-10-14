@@ -1,17 +1,19 @@
 // SectionPicker — second-stage popup after a doc is picked in the
-// `@` flow. Lists every paragraph (numbered + preview) with
-// checkboxes. Multi-select: user can pick one, several, or skip and
-// reference the whole document. Clicking outside / pressing Escape
-// keeps the current selection.
+// `@` flow. Lists heading / sub-heading sections (with a blank-line
+// fallback when the doc has no headings) with checkboxes. Multi-
+// select: user can pick one, several, or skip and reference the whole
+// document. Clicking outside / pressing Escape keeps the current
+// selection.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DocumentRecord } from '@/types';
-import type { ParagraphInfo } from '@/hooks/useDocumentMentions';
+import type { HeadingSection } from '@/hooks/useDocumentMentions';
+import { sectionsMatchingSelection } from '@/hooks/useDocumentMentions';
 
 interface Props {
   doc: DocumentRecord;
-  paragraphs: ParagraphInfo[];
-  /** Initial selection (0-based paragraph indexes). */
+  sections: HeadingSection[];
+  /** Initial selection (0-based paragraph indexes from the mention). */
   initialSelection: number[];
   /** Pixels (in viewport coords) for the popover's top-left. */
   anchor: { left: number; top: number };
@@ -23,36 +25,37 @@ interface Props {
 
 export function SectionPicker({
   doc,
-  paragraphs,
+  sections,
   initialSelection,
   anchor,
   onConfirm,
   onClose,
   maxHeight = 320,
 }: Props) {
-  const [selected, setSelected] = useState<Set<number>>(
-    () => new Set(initialSelection)
+  const [selected, setSelected] = useState<Set<number>>(() =>
+    new Set(sectionsMatchingSelection(sections, initialSelection))
   );
-  const [active, setActive] = useState<number>(
-    () => initialSelection[0] ?? 0
-  );
+  const [active, setActive] = useState<number>(() => {
+    const matched = sectionsMatchingSelection(sections, initialSelection);
+    return matched[0] ?? 0;
+  });
   const listRef = useRef<HTMLDivElement>(null);
 
   const all = useMemo(
-    () => paragraphs.map((_, i) => i),
-    [paragraphs]
+    () => sections.map((s) => s.index),
+    [sections]
   );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setActive((a) => Math.min(a + 1, Math.max(paragraphs.length - 1, 0)));
+        setActive((a) => Math.min(a + 1, Math.max(sections.length - 1, 0)));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setActive((a) => Math.max(a - 1, 0));
       } else if (e.key === ' ' || e.key === 'Enter') {
-        if (paragraphs[active]) {
+        if (sections[active]) {
           e.preventDefault();
           toggle(active);
         }
@@ -67,28 +70,37 @@ export function SectionPicker({
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paragraphs, active, all]);
+  }, [sections, active, all]);
 
-  const toggle = (i: number) => {
+  const toggle = (sectionIndex: number) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(i)) next.delete(i);
-      else next.add(i);
+      if (next.has(sectionIndex)) next.delete(sectionIndex);
+      else next.add(sectionIndex);
       return next;
     });
   };
 
   const confirmFull = () => onConfirm([]);
   const confirmSelection = () => {
-    const sorted = Array.from(selected).sort((a, b) => a - b);
-    onConfirm(sorted);
+    // Expand selected sections into the union of their paragraph
+    // indexes (sorted) so the prompt builder / chip storage stay on
+    // the existing paragraphIndexes contract.
+    const para = new Set<number>();
+    const sortedSections = Array.from(selected).sort((a, b) => a - b);
+    for (const si of sortedSections) {
+      const section = sections[si];
+      if (!section) continue;
+      for (const pi of section.paragraphIndexes) para.add(pi);
+    }
+    onConfirm(Array.from(para).sort((a, b) => a - b));
   };
 
   return (
     <div
       ref={listRef}
       role="dialog"
-      aria-label={`Select paragraphs from ${doc.title || 'Untitled'}`}
+      aria-label={`Select sections from ${doc.title || 'Untitled'}`}
       className="mention-popover mention-popover--section"
       style={{
         position: 'fixed',
@@ -108,27 +120,29 @@ export function SectionPicker({
           {doc.title || 'Untitled'}
         </span>
         <span className="mention-popover__hint">
-          pick paragraphs (Esc to skip)
+          pick sections (Esc to skip)
         </span>
       </div>
       <div className="mention-popover__list">
-        {paragraphs.length === 0 ? (
+        {sections.length === 0 ? (
           <div className="mention-popover__empty">Empty document.</div>
         ) : (
-          paragraphs.map((p, i) => {
+          sections.map((s, i) => {
             const isActive = i === active;
-            const isChecked = selected.has(i);
+            const isChecked = selected.has(s.index);
+            const indentLevel = s.level > 0 ? s.level - 1 : 0;
             return (
               <button
-                key={i}
+                key={s.index}
                 type="button"
                 role="option"
                 aria-selected={isChecked}
                 className={`mention-popover__item mention-popover__item--row ${
                   isActive ? 'mention-popover__item--active' : ''
                 }`}
+                style={{ paddingLeft: 8 + indentLevel * 12 }}
                 onMouseEnter={() => setActive(i)}
-                onClick={() => toggle(i)}
+                onClick={() => toggle(s.index)}
               >
                 <span
                   className={`mention-popover__checkbox ${
@@ -138,11 +152,16 @@ export function SectionPicker({
                 >
                   {isChecked ? '☑' : '☐'}
                 </span>
-                <span className="mention-popover__index">
-                  {String(i + 1).padStart(2, '0')}
+                <span
+                  className={`mention-popover__level ${
+                    s.level === 0 ? 'mention-popover__level--preamble' : ''
+                  }`}
+                  aria-hidden
+                >
+                  {s.level === 0 ? '¶' : `H${s.level}`}
                 </span>
                 <span className="mention-popover__preview">
-                  {p.preview || '(empty paragraph)'}
+                  {s.title || '(untitled section)'}
                 </span>
               </button>
             );

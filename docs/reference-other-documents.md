@@ -18,13 +18,14 @@ the prose you typed.
 
 1. Type `@` in any of the surfaces above. A doc picker opens at the
    caret, listing every other document in the **Documents** panel.
-2. Pick a document — a second picker lists its paragraphs
-   (numbered with the same 60-char preview the AI sees).
-3. Tick one or more paragraphs to scope the reference, or press
+2. Pick a document — a second picker lists its headings and
+   sub-headings (indented by level). Documents with no headings
+   fall back to blank-line blocks.
+3. Tick one or more sections to scope the reference, or press
    **Whole document** for the default (token-cheap outline).
 4. A chip appears above the input. The top line is the doc title;
    the bottom line is the section summary (`full document` or
-   `§ preview +N more`). The chip is deletable (×) and click-to-edit
+   `§ Heading +N more`). The chip is deletable (×) and click-to-edit
    (click the bottom line to re-open the section picker).
 5. Send as normal (Send / Send to AI / Send N rejection comments).
    The reference rides along with the message.
@@ -36,17 +37,19 @@ the prose you typed.
   reason about the document's shape without burning the prompt
   budget.
 - **Section-scoped** is what you pick when the question is about
-  a specific passage. The model sees the verbatim text of the
-  picked paragraphs (≤ 4,000 chars total across all picked
-  sections), so it can quote / propose edits against the exact
-  wording. If the picked text would exceed the cap, ApEditor
-  falls back to the outline plus a truncation note.
+  a specific passage. Tick a heading (or sub-heading) to include
+  that heading plus the body under it until the next heading.
+  The model sees the verbatim text of the picked sections
+  (≤ 4,000 chars total across all picked sections), so it can
+  quote / propose edits against the exact wording. If the picked
+  text would exceed the cap, ApEditor falls back to the outline
+  plus a truncation note.
 
 ## Keyboard
 
 - `↑` / `↓` — move through the picker
 - `Enter` / `Tab` — confirm the highlighted row
-- `Space` (section picker) — toggle the current paragraph
+- `Space` (section picker) — toggle the current heading section
 - `Esc` — close the picker (does not consume the `@` you typed)
 
 ## What the model sees

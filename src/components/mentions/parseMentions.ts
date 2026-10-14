@@ -246,19 +246,31 @@ function parseSentinelBody(body: string): MentionToken | null {
 
 /**
  * Build a stable label for a mention's chip (lower line). For whole-
- * doc mentions returns the section count string ("full document");
- * for section-scoped mentions returns the first picked paragraph's
- * preview + "+N more" when more than one was picked.
+ * doc mentions returns "full document". For section-scoped mentions,
+ * prefers heading-section titles when a section resolver is provided
+ * (so a multi-paragraph heading block reads as one § title), and
+ * falls back to the first picked paragraph's preview otherwise.
  */
 export function summarizeMention(
   token: MentionToken,
-  getParagraphPreview: (docId: string, paragraphIndex: number) => string | null
+  getParagraphPreview: (docId: string, paragraphIndex: number) => string | null,
+  getSectionTitles?: (docId: string, paragraphIndexes: number[]) => string[]
 ): string {
   if (token.kind === 'doc' || token.paragraphIndexes.length === 0) {
     return 'full document';
   }
+  const titles = getSectionTitles?.(
+    token.documentId,
+    token.paragraphIndexes
+  );
+  if (titles && titles.length > 0) {
+    if (titles.length === 1) return `§ ${titles[0]}`;
+    return `§ ${titles[0]} +${titles.length - 1} more`;
+  }
   const first = token.paragraphIndexes[0];
-  const preview = getParagraphPreview(token.documentId, first) ?? `paragraph ${first + 1}`;
+  const preview =
+    getParagraphPreview(token.documentId, first) ??
+    `paragraph ${first + 1}`;
   if (token.paragraphIndexes.length === 1) {
     return `§ ${preview}`;
   }

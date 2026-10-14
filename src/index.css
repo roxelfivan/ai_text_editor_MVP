@@ -1659,6 +1659,17 @@ html.dark .mention-popover__item:hover {
   opacity: 0.7;
   padding-top: 1px;
 }
+.mention-popover__level {
+  flex: 0 0 auto;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 10px;
+  opacity: 0.7;
+  padding-top: 1px;
+  min-width: 1.5em;
+}
+.mention-popover__level--preamble {
+  opacity: 0.55;
+}
 .mention-popover__preview {
   flex: 1;
   white-space: nowrap;

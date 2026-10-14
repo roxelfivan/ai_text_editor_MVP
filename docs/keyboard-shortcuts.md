@@ -49,5 +49,5 @@ card's **Comment (optional)**).
 | --- | --- |
 | `↑` / `↓` | Move through the picker |
 | `Enter` / `Tab` | Confirm the highlighted row |
-| `Space` (section picker) | Toggle the current paragraph |
+| `Space` (section picker) | Toggle the current heading section |
 | `Esc` | Close the picker (does not consume the `@` you typed) |

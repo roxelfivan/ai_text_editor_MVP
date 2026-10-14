@@ -77,9 +77,25 @@ export function MentionInput({
     documents,
     currentDocumentId,
     getDocById,
-    getParagraphs,
+    getSections,
     getParagraphPreview,
   } = useDocumentMentions();
+
+  const getSectionTitles = useCallback(
+    (docId: string, paragraphIndexes: number[]): string[] => {
+      const sections = getSections(docId);
+      if (sections.length === 0 || paragraphIndexes.length === 0) return [];
+      const selected = new Set(paragraphIndexes);
+      return sections
+        .filter(
+          (s) =>
+            s.paragraphIndexes.length > 0 &&
+            s.paragraphIndexes.every((i) => selected.has(i))
+        )
+        .map((s) => s.title);
+    },
+    [getSections]
+  );
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [mentions, setMentions] = useState<MentionToken[]>([]);
 
@@ -302,6 +318,7 @@ export function MentionInput({
                 onDelete={() => deleteMention(m.id)}
                 onEditSections={() => onEditExistingSections(m)}
                 getParagraphPreview={getParagraphPreview}
+                getSectionTitles={getSectionTitles}
               />
             );
           })}
@@ -379,7 +396,7 @@ export function MentionInput({
       {popover?.kind === 'section' && popover.pickedDoc && (
         <SectionPicker
           doc={popover.pickedDoc}
-          paragraphs={getParagraphs(popover.pickedDoc.id)}
+          sections={getSections(popover.pickedDoc.id)}
           initialSelection={
             popover.editingTokenId
               ? mentions.find((m) => m.id === popover.editingTokenId)
