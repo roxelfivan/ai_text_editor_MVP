@@ -1,3 +1,45 @@
+## v0.4.9 — Unified Format dropdown + draggable Chat / ProposedEditCard splits
+
+UI-focused release on top of [v0.4.8](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.8). The editor toolbar consolidates the two small pill groups (B/I/U and font size +/−) into a single **Format** dropdown, the Chat panel gains a draggable boundary between its messages and input areas, and every **ProposedEditCard** in Split view now has a draggable divider between the **Original** and **Proposed** columns. No prompt, store, or LLM-facing changes.
+
+### Added
+
+- **Unified Format dropdown** on the editor toolbar. A single button labelled **Format** replaces the previous two pill groups (B / I / U and + / −). Click it to open a menu with five items:
+  - **Bold** — wraps the current selection in `**...**`.
+  - **Italic** — wraps in `*...*`.
+  - **Underline** — wraps in `<u>...</u>`.
+  - **Size +** — `bumpEditorFontSize(+1)`. Disabled when the editor is at the 24 px ceiling.
+  - **Size −** — `bumpEditorFontSize(-1)`. Disabled at the 10 px floor.
+  The menu closes after any action and when the user clicks outside it. The existing `Ctrl/Cmd+B / I / U` keyboard shortcuts are unchanged; the `wrapSelection` and `bumpEditorFontSize` functions are reused as-is.
+- **Draggable Chat panel split.** A drag handle now lives between the messages area and the input area in the right-hand Chat panel. Drag up to give the messages more room, down to give the input more room. The split is persisted in `localStorage` under `ai-text-editor-mvp:chat-messages-height` and is clamped 120–1,200 px (and never eats the input area). When no value is stored, the panel falls back to the previous flex layout.
+- **Draggable Original / Proposed split on every ProposedEditCard.** In Split view, the vertical line between the two markdown columns is a drag handle. Drag it to resize the columns; the split is persisted per card (keyed by `${messageId}:${edit.id}:split`) in `localStorage` and clamped 20–80 % so neither column can collapse. The header row ("Original" / "Proposed") re-flows with the columns so the labels stay centred over their content. The unified (Inline) diff view and the 8 outer card resize handles are unchanged.
+
+### Changed
+
+- **Editor toolbar layout.** Two pill groups are gone; the toolbar now has one button (`Format`) where they used to be. The Predict / Comment / Save / Import controls are unchanged, and the toolbar still wraps cleanly on narrow widths.
+- **ProposedEditCard layout** (Split view only). The previous `grid-cols-2` is now a two-row flex (header row + content row + draggable divider). Behaviour and classes for the columns themselves (`.pe-md-split--original` / `.pe-md-split--proposed`) are preserved.
+
+### Keyboard
+
+- `Ctrl/Cmd+B`, `Ctrl/Cmd+I`, `Ctrl/Cmd+U` — bold, italic, underline (unchanged; still work while the editor is focused even with the Format menu closed).
+
+### Internal
+
+- `src/components/Editor.tsx` — `formatMenuOpen` state + `formatMenuRef`; outside-click effect targeting `[data-format-menu]`; single dropdown container replaces the two pill groups. `wrapSelection` and `bumpEditorFontSize` are unchanged.
+- `src/components/ChatPanel.tsx` — `messagesHeight` state with `localStorage` persistence, vertical `useDragResize` handle, `clampMessagesHeight` live-clamp against the live panel size, draggable divider between the scroller and the input panel. Keyboard shortcuts, streaming, and the `ResizeHandle` left-edge drag are unchanged.
+- `src/components/ProposedEditCard.tsx` — `splitPct` state with `localStorage` persistence, horizontal `useDragResize` for the column split, `MarkdownSplitPreview` refactored to a flex layout (header row + content row + 6 px draggable divider). The 8 outer resize handles, the view-mode toggle, and the unified diff view are unchanged.
+
+### Verification
+
+- `npm run typecheck` — clean.
+- `npm run build` — clean.
+- Manual:
+  - Editor: click **Format** → pick **Bold / Italic / Underline**; selection wraps; click the same item again to unwrap. Pick **Size + / Size −**; the editor text grows / shrinks. The `Ctrl/Cmd+B/I/U` shortcuts still work. The dropdown closes on outside click and after each action.
+  - Chat panel: drag the divider between the messages area and the input area; reload — the split is preserved. The Send / Stop / include-selection controls and the streaming bubble all render correctly at the new size.
+  - ProposedEditCard (Split view): drag the column divider; both columns resize live. Reload — the same card's split is preserved. Switch a card to Inline view and back — split is preserved. Drag a sibling card's divider — independent splits.
+
+---
+
 ## v0.4.8 — Heading-grouped @-mention sections + inline § captions
 
 Feature release on top of [v0.4.7](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.7). The `@` section picker groups a referenced document by its Markdown headings (instead of every paragraph line), and the selected scope appears as a readable `§…` caption both on the chip bar and inside the textarea. Selecting a parent heading cascades to its descendant sections; Cancel aborts without attaching a mention. Prompt scoping is unchanged: section picks still send only the picked paragraphs (capped), not the whole document.

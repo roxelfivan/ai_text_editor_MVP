@@ -161,6 +161,12 @@ export function Editor() {
     window.addEventListener('mvp:chat-streaming', onStream);
     return () => window.removeEventListener('mvp:chat-streaming', onStream);
   }, []);
+  // Unified "Format" dropdown — exposes Bold, Italic, Underline and
+  // the font-size +/- controls in a single menu. Replaces the two
+  // separate pill groups (font-size + inline-format) that lived in
+  // this toolbar previously.
+  const [formatMenuOpen, setFormatMenuOpen] = useState(false);
+  const formatMenuRef = useRef<HTMLDivElement>(null);
   const [undoToast, setUndoToast] = useState<{
     message: string;
     at: number;
@@ -897,6 +903,19 @@ export function Editor() {
     return () => window.removeEventListener('pointerdown', pointerHandler);
   }, [composerOpen, activeCommentId]);
 
+  // Close the Format dropdown when clicking anywhere outside of it.
+  useEffect(() => {
+    if (!formatMenuOpen) return;
+    const handler = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('[data-format-menu]')) return;
+      setFormatMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', handler);
+    return () => window.removeEventListener('pointerdown', handler);
+  }, [formatMenuOpen]);
+
   // Listen for `mvp:mark-comments-sent` events from the chat panel so
   // the editor can flip the comments to their `sent` state.
   useEffect(() => {
@@ -1127,77 +1146,127 @@ export function Editor() {
             <path d="M2 4 L5 7 L8 4" />
           </svg>
         </div>
+        {/* Unified "Format" dropdown. Replaces the previous font-size
+            (+ / −) pill and the B/I/U inline-formatting pill. The
+            trigger is the same height/shape as the neighbouring
+            toolbar controls (h-9, hairline border) and reveals a
+            menu with all five actions. Each menu item closes the
+            menu after invoking its action; clicks outside the menu
+            (see the effect near the comment composer) also close it. */}
         <div
-          className="inline-flex rounded border border-paper-hairline dark:border-cyber-border overflow-hidden text-[15px] leading-none"
-          role="group"
-          aria-label="Editor font size"
+          ref={formatMenuRef}
+          data-format-menu
+          className="relative inline-block text-[15px] leading-none"
         >
           <button
             type="button"
-            className="w-9 h-9 flex items-center justify-center text-[15px] text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-r border-paper-hairline dark:border-cyber-border"
-            onClick={() => bumpEditorFontSize(-1)}
-            disabled={editorFontSize <= 10}
-            aria-label="Decrease font size"
-            title="Decrease font size"
+            onClick={() => setFormatMenuOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={formatMenuOpen}
+            aria-label="Format"
+            title="Format — text formatting and font size"
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded border border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel text-paper-inkSoft dark:text-cyber-muted hover:border-cyber-clay dark:hover:border-cyber-cyan hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors"
           >
-            −
+            <span>Format</span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 10 10"
+              className={`h-2.5 w-2.5 transition-transform ${
+                formatMenuOpen ? 'rotate-180' : ''
+              }`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M2 4 L5 7 L8 4" />
+            </svg>
           </button>
-          <button
-            type="button"
-            className="w-9 h-9 flex items-center justify-center text-[15px] text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => bumpEditorFontSize(1)}
-            disabled={editorFontSize >= 24}
-            aria-label="Increase font size"
-            title="Increase font size"
-          >
-            +
-          </button>
-        </div>
-        {/* Inline-format toolbar: B (bold), I (italic), U (underline).
-            Mirrors the font-size group's pill shape so the row reads
-            as a single coherent toolbar. The buttons wrap the current
-            selection in the corresponding markdown / HTML marker (or
-            insert a pair at the caret if nothing is selected). The
-            same actions are also bound to Ctrl/Cmd+B/I/U via the
-            textarea's onKeyDown. */}
-        <div
-          className="inline-flex rounded border border-paper-hairline dark:border-cyber-border overflow-hidden text-[15px] leading-none"
-          role="group"
-          aria-label="Inline formatting"
-        >
-          <button
-            type="button"
-            className="w-9 h-9 flex items-center justify-center text-[15px] font-bold text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors border-r border-paper-hairline dark:border-cyber-border"
-            onClick={() => wrapSelection('bold')}
-            // Prevent the button from stealing focus on mousedown, so
-            // the focus stays on the textarea and the page does not
-            // jump to top/end after a toolbar click.
-            onMouseDown={(e) => e.preventDefault()}
-            aria-label="Bold"
-            title="Bold — wraps the selection in **...** (Ctrl/Cmd+B)"
-          >
-            B
-          </button>
-          <button
-            type="button"
-            className="w-9 h-9 flex items-center justify-center text-[15px] font-serif italic text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors border-r border-paper-hairline dark:border-cyber-border"
-            onClick={() => wrapSelection('italic')}
-            onMouseDown={(e) => e.preventDefault()}
-            aria-label="Italic"
-            title="Italic — wraps the selection in *...* (Ctrl/Cmd+I)"
-          >
-            I
-          </button>
-          <button
-            type="button"
-            className="w-9 h-9 flex items-center justify-center text-[15px] underline underline-offset-2 text-paper-inkSoft dark:text-cyber-muted hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors"
-            onClick={() => wrapSelection('underline')}
-            onMouseDown={(e) => e.preventDefault()}
-            aria-label="Underline"
-            title="Underline — wraps the selection in <u>...</u> (Ctrl/Cmd+U)"
-          >
-            U
-          </button>
+          {formatMenuOpen && (
+            <div
+              role="menu"
+              aria-label="Format menu"
+              className="absolute left-0 top-full mt-1 min-w-[180px] rounded border border-paper-hairline dark:border-cyber-border bg-paper-surface dark:bg-ape-panel shadow-lg z-50 py-1"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  wrapSelection('bold');
+                  setFormatMenuOpen(false);
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                className="w-full text-left px-3 py-1.5 text-[15px] font-bold text-paper-ink dark:text-cyber-primary hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors"
+                aria-label="Bold"
+                title="Bold — wraps the selection in **...** (Ctrl/Cmd+B)"
+              >
+                Bold
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  wrapSelection('italic');
+                  setFormatMenuOpen(false);
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                className="w-full text-left px-3 py-1.5 text-[15px] font-serif italic text-paper-ink dark:text-cyber-primary hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors"
+                aria-label="Italic"
+                title="Italic — wraps the selection in *...* (Ctrl/Cmd+I)"
+              >
+                Italic
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  wrapSelection('underline');
+                  setFormatMenuOpen(false);
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                className="w-full text-left px-3 py-1.5 text-[15px] underline underline-offset-2 text-paper-ink dark:text-cyber-primary hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors"
+                aria-label="Underline"
+                title="Underline — wraps the selection in <u>...</u> (Ctrl/Cmd+U)"
+              >
+                Underline
+              </button>
+              <div
+                className="my-1 border-t border-paper-hairline dark:border-cyber-border"
+                aria-hidden
+              />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  bumpEditorFontSize(1);
+                  setFormatMenuOpen(false);
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                disabled={editorFontSize >= 24}
+                className="w-full text-left px-3 py-1.5 text-[15px] text-paper-ink dark:text-cyber-primary hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-paper-ink dark:disabled:hover:text-cyber-primary"
+                aria-label="Size +"
+                title="Increase font size"
+              >
+                Size +
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  bumpEditorFontSize(-1);
+                  setFormatMenuOpen(false);
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                disabled={editorFontSize <= 10}
+                className="w-full text-left px-3 py-1.5 text-[15px] text-paper-ink dark:text-cyber-primary hover:bg-paper-elevated dark:hover:bg-ape-elevated hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-paper-ink dark:disabled:hover:text-cyber-primary"
+                aria-label="Size −"
+                title="Decrease font size"
+              >
+                Size −
+              </button>
+            </div>
+          )}
         </div>
         {/* Add comment for the current text selection. Icon-only;
             onMouseDown preventDefault keeps the textarea selection

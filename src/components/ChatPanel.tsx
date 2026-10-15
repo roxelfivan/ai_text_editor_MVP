@@ -102,6 +102,9 @@ export function ChatPanel() {
   // Listen for selection events from the editor, fill-chat from PromptLibrary,
   // and window resize to re-clamp the chat width against the 2/3 viewport cap.
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f49967'},body:JSON.stringify({sessionId:'f49967',location:'ChatPanel.tsx:useEffect-mount',message:'ChatPanel useEffect mounting; listener re-registered',data:{deps:{currentDocumentId,streaming,mentionsLen:mentions.length}},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     const onSel = (e: Event) => {
       const detail = (e as CustomEvent<{ text: string }>).detail;
       setSelection(detail?.text ?? '');
@@ -125,6 +128,9 @@ export function ChatPanel() {
     // comments, append it, then stream the assistant reply through
     // the same pipeline as a normal chat send.
     const onSendComments = async (e: Event) => {
+      // #region agent log
+      fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f49967'},body:JSON.stringify({sessionId:'f49967',location:'ChatPanel.tsx:onSendComments-entry',message:'mvp:send-comments handler entered',data:{hasDetail:!!e,type:typeof e},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const detail = (
         e as CustomEvent<{
           commentIds: string[];
@@ -133,6 +139,16 @@ export function ChatPanel() {
       ).detail;
       if (!detail || !Array.isArray(detail.commentIds)) return;
       if (!currentDocumentId || streaming) return;
+      // #region agent log
+      try {
+        // Try to read `documentLookup` here - if it's in TDZ, we'll see a synchronous throw.
+        const _lookup = documentLookup;
+        fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f49967'},body:JSON.stringify({sessionId:'f49967',location:'ChatPanel.tsx:onSendComments-preDocSnap',message:'onSendComments: pre-docSnap; documentLookup is a function',data:{currentDocumentId,docLookupType:typeof _lookup,mentionsLen:mentions.length},timestamp:Date.now()})}).catch(()=>{});
+      } catch (err) {
+        fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f49967'},body:JSON.stringify({sessionId:'f49967',location:'ChatPanel.tsx:onSendComments-docLookupTDZ',message:'TDZ accessing documentLookup in onSendComments',data:{err:String(err),errName:(err as Error)?.name,errMsg:(err as Error)?.message},timestamp:Date.now()})}).catch(()=>{});
+        throw err;
+      }
+      // #endregion
       const docSnap = useStore
         .getState()
         .documents.find((d) => d.id === currentDocumentId);
@@ -293,6 +309,72 @@ export function ChatPanel() {
     },
   });
 
+  // Vertical split between the messages (output) area and the input
+  // area. Persisted in localStorage so the user's preferred split
+  // survives reloads. Defaults to 60% of the panel height, clamped
+  // to a sensible range on render. Dragging the divider updates
+  // this height; the input area below fills the remaining space.
+  const [messagesHeight, setMessagesHeight] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(
+        'ai-text-editor-mvp:chat-messages-height'
+      );
+      if (!raw) return 0; // 0 ⇒ "use default (60% of panel)"
+      const n = parseInt(raw, 10);
+      if (!Number.isFinite(n)) return 0;
+      // Clamp to a sane range: 120 ≤ n ≤ 1200. Stale values that fall
+      // outside this range are treated as 0 (use default) rather than
+      // collapsed, so a tiny/oversized stored value cannot trap the
+      // user with a 0-px or screen-filling messages area.
+      if (n < 120 || n > 1200) return 0;
+      return n;
+    } catch {
+      return 0;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'ai-text-editor-mvp:chat-messages-height',
+        String(messagesHeight)
+      );
+    } catch {
+      /* ignore quota errors */
+    }
+  }, [messagesHeight]);
+  // Clamp the messages height against the live panel height so the
+  // divider cannot drag the input area off-screen. The min keeps the
+  // input area (Send button + textarea) usable; the max keeps the
+  // messages area from pushing the input off the bottom.
+  const clampMessagesHeight = (px: number): number => {
+    const panel = containerRef.current;
+    const max = panel ? Math.max(160, panel.clientHeight - 180) : 1000;
+    return Math.min(max, Math.max(120, px));
+  };
+  const messagesHeightAnchor = useRef<number>(messagesHeight);
+  const messagesHeightStart = useRef<number>(messagesHeight);
+  const { start: beginMessagesResize } = useDragResize({
+    mode: 'axis',
+    axis: 'vertical',
+    onDelta: ({ dy }) => {
+      // dy is cumulative from drag start; dragging DOWN grows the
+      // messages area (so we ADD dy to the start height). The anchor
+      // is converted to an absolute height and clamped on the fly.
+      messagesHeightAnchor.current =
+        messagesHeightStart.current + dy;
+      setMessagesHeight(
+        clampMessagesHeight(messagesHeightAnchor.current)
+      );
+    },
+  });
+  const onMessagesHandleDown = (
+    e: React.PointerEvent<HTMLDivElement>
+  ) => {
+    messagesHeightStart.current = messagesHeight;
+    messagesHeightAnchor.current = messagesHeight;
+    beginMessagesResize('top', e);
+  };
+
   if (!chatOpen || chatCollapsed) {
     // When the panel is closed (topbar Chat toggle) or explicitly
     // collapsed (edge-anchor), render nothing. The edge-anchor button
@@ -309,6 +391,9 @@ export function ChatPanel() {
     useStore.getState().documents.find((d) => d.id === id) ?? null;
 
   const handleSend = async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f49967'},body:JSON.stringify({sessionId:'f49967',location:'ChatPanel.tsx:handleSend-entry',message:'handleSend entered',data:{hasInput:!!input,inputLen:input.length,mentionsLen:mentions.length,isKeyless:!requiresApiKey(api.provider)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!currentDocumentId) return;
     // Strip mention sentinels from the displayed text so the user
     // message that gets persisted / sent to the model does not carry
@@ -774,7 +859,23 @@ export function ChatPanel() {
         </button>
       </div>
 
-      <div ref={scrollerRef} className="flex-1 overflow-y-auto p-3 space-y-3 bg-paper-base dark:bg-ape-base">
+      {/* Messages (output) area. The height is drag-resizable via the
+          divider below. When `messagesHeight` is 0 (default / no
+          stored value) we fall back to `flex-1` so the input area
+          pins to the bottom and the messages area fills the rest of
+          the panel — the same behaviour as before this feature
+          existed. Once the user drags once, the explicit pixel height
+          takes over and the input area below becomes whatever space
+          remains. */}
+      <div
+        ref={scrollerRef}
+        className={
+          messagesHeight > 0
+            ? 'overflow-y-auto p-3 space-y-3 bg-paper-base dark:bg-ape-base min-h-0 shrink-0'
+            : 'flex-1 overflow-y-auto p-3 space-y-3 bg-paper-base dark:bg-ape-base min-h-0'
+        }
+        style={messagesHeight > 0 ? { height: `${messagesHeight}px` } : undefined}
+      >
         {!messages.length && (
           <p className="text-sm text-paper-inkSoft dark:text-cyber-muted">
             Ask anything, or highlight text in the editor and send a prompt from
@@ -841,6 +942,30 @@ export function ChatPanel() {
             {error}
           </div>
         )}
+      </div>
+
+      {/* Draggable divider between the messages (output) area and the
+          input area. Mirrors the editor's suggestion-panel handle so
+          the two dividers look and feel consistent. The 8px-tall
+          strip is the hit target; a 4px-wide centred pill is the
+          visual affordance. Pointer-drag updates `messagesHeight`
+          above; the messages div re-renders with the new height
+          and the input panel below fills the remaining space. */}
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize chat messages area"
+        aria-valuenow={messagesHeight}
+        aria-valuemin={120}
+        aria-valuemax={1200}
+        onPointerDown={onMessagesHandleDown}
+        className="relative shrink-0 h-2 cursor-ns-resize group flex items-center justify-center border-t border-paper-hairline dark:border-cyber-border bg-paper-panel dark:bg-ape-panel hover:bg-paper-elevated dark:hover:bg-ape-elevated transition-colors"
+        data-chat-messages-handle
+      >
+        <span
+          aria-hidden
+          className="block w-12 h-1 rounded-full bg-paper-hairline dark:bg-cyber-border group-hover:bg-cyber-clay/60 dark:group-hover:bg-cyber-cyan/60 transition-colors"
+        />
       </div>
 
       <div className="border-t border-paper-hairline dark:border-cyber-border p-3 space-y-2 bg-paper-panel dark:bg-ape-panel">

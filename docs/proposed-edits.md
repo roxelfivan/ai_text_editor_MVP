@@ -6,7 +6,7 @@ When the AI wants to change the document, the reply includes one or more **cards
 
 Each card has a short **summary** (or **Proposed edit** if none was given) and a change id.
 
-**Split** (default) shows two rendered Markdown columns: **Original** and **Proposed**. Empty sides show *Empty*.
+**Split** (default) shows two rendered Markdown columns: **Original** and **Proposed**. Empty sides show *Empty*. Drag the vertical divider between the two columns to resize them — the split is remembered per card across reloads, and is clamped so neither side can collapse.
 
 **Inline** shows a line-by-line diff of the same two texts.
 

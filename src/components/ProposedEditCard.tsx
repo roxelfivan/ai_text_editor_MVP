@@ -200,6 +200,68 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
       beginResize(handle, e);
     };
 
+  // Per-card column split between the "Original" and "Proposed" panes
+  // in Split view mode. Persisted in localStorage keyed by the same
+  // `${messageId}:${edit.id}` we use for the card size, so each
+  // card remembers its own split across reloads. 50 = equal split.
+  // The valid range is 20..80 so neither column can collapse.
+  const splitStorageKey = `${messageId}:${edit.id}:split`;
+  const [splitPct, setSplitPct] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(
+        `ai-text-editor-mvp:pe-split:${splitStorageKey}`
+      );
+      if (!raw) return 50;
+      const n = parseInt(raw, 10);
+      if (!Number.isFinite(n)) return 50;
+      return Math.min(80, Math.max(20, n));
+    } catch {
+      return 50;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `ai-text-editor-mvp:pe-split:${splitStorageKey}`,
+        String(splitPct)
+      );
+    } catch {
+      /* ignore quota errors */
+    }
+  }, [splitPct, splitStorageKey]);
+  // Drag wiring for the column split. Uses horizontal axis mode so
+  // dx translates directly into a column-width delta. The split
+  // percentage is clamped 20..80 on every tick to keep both
+  // columns usable.
+  const splitStartPctRef = useRef<number>(splitPct);
+  const { start: beginSplitDrag } = useDragResize({
+    mode: 'axis',
+    axis: 'horizontal',
+    onDelta: ({ dx }) => {
+      // Convert pixel delta to a percentage of the current row width.
+      // We measure the parent of the drag handle (the content row)
+      // lazily via the closure in `onSplitHandleDown`, so this
+      // handler reads the stored row width off a ref instead of
+      // querying the DOM every move.
+      const row = splitRowRef.current;
+      if (!row) return;
+      const w = row.clientWidth;
+      if (w <= 0) return;
+      const deltaPct = (dx / w) * 100;
+      setSplitPct((prev) => {
+        const next = prev + deltaPct;
+        return Math.min(80, Math.max(20, next));
+      });
+    },
+  });
+  const splitRowRef = useRef<HTMLDivElement>(null);
+  const onSplitHandleDown = (
+    e: React.PointerEvent<HTMLDivElement>
+  ) => {
+    splitStartPctRef.current = splitPct;
+    beginSplitDrag('left', e);
+  };
+
   if (status.kind === 'rejected' || status.kind === 'committed') return null;
 
   const handleApply = () => {
@@ -427,6 +489,9 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
           <MarkdownSplitPreview
             original={edit.original}
             replacement={edit.replacement}
+            splitPct={splitPct}
+            onSplitPointerDown={onSplitHandleDown}
+            splitRowRef={splitRowRef}
           />
         ) : (
           <div className="pe-diff-unified">
@@ -590,37 +655,93 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
  * Side-by-side reader preview: Original and Proposed as full markdown
  * columns (same ReactMarkdown + prose-md stack as the Editor Preview
  * tab). Not line-synced — use Inline for a textual +/- diff.
+ *
+ * Layout: two horizontal flex rows — a header row (Original | Proposed)
+ * and a content row (Original | divider | Proposed). The divider
+ * between the content columns is draggable; the percentage of the row
+ * given to the Original column is controlled by the parent and clamped
+ * 20..80. The header row uses the same widths so the labels stay
+ * aligned with their columns.
  */
 function MarkdownSplitPreview({
   original,
   replacement,
+  splitPct,
+  onSplitPointerDown,
+  splitRowRef,
 }: {
   original: string;
   replacement: string;
+  splitPct: number;
+  onSplitPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
+  splitRowRef: React.RefObject<HTMLDivElement>;
 }) {
+  const proposedPct = 100 - splitPct;
   return (
-    <div className="grid grid-cols-2 text-xs min-h-0">
-      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#a83232] dark:text-cyber-danger/80 border-b border-r border-paper-hairline dark:border-cyber-border bg-[rgba(190,50,50,0.06)] dark:bg-cyber-danger/5">
-        Original
-      </div>
-      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#1f6f3e] dark:text-cyber-cyan/80 border-b border-paper-hairline dark:border-cyber-border bg-[rgba(0,130,70,0.08)] dark:bg-cyber-cyan/5">
-        Proposed
-      </div>
-      <div className="min-h-0 overflow-auto border-r border-paper-hairline dark:border-cyber-border bg-[rgba(190,50,50,0.06)] dark:bg-cyber-danger/10 px-2 py-1.5 prose-md pe-md-split pe-md-split--original">
-        <ReactMarkdown
-          remarkPlugins={remarkPlugins}
-          rehypePlugins={rehypePlugins}
+    <div className="flex flex-col text-xs min-h-0 h-full">
+      {/* Header row — flex widths mirror the content row below so
+          "Original" and "Proposed" stay centred over their columns. */}
+      <div className="flex shrink-0 min-w-0 border-b border-paper-hairline dark:border-cyber-border">
+        <div
+          className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#a83232] dark:text-cyber-danger/80 border-r border-paper-hairline dark:border-cyber-border bg-[rgba(190,50,50,0.06)] dark:bg-cyber-danger/5 text-center"
+          style={{ width: `${splitPct}%` }}
         >
-          {original || '*Empty*'}
-        </ReactMarkdown>
-      </div>
-      <div className="min-h-0 overflow-auto bg-[rgba(0,130,70,0.08)] dark:bg-cyber-cyan/10 px-2 py-1.5 prose-md pe-md-split pe-md-split--proposed">
-        <ReactMarkdown
-          remarkPlugins={remarkPlugins}
-          rehypePlugins={rehypePlugins}
+          Original
+        </div>
+        <div
+          className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#1f6f3e] dark:text-cyber-cyan/80 bg-[rgba(0,130,70,0.08)] dark:bg-cyber-cyan/5 text-center"
+          style={{ width: `${proposedPct}%` }}
         >
-          {replacement || '*Empty*'}
-        </ReactMarkdown>
+          Proposed
+        </div>
+      </div>
+      {/* Content row with a draggable divider between the two
+          columns. min-h-0 lets the columns shrink below their
+          content's natural height so the parent's flex-1 works
+          inside the card's pe-diff scroll area. */}
+      <div
+        ref={splitRowRef}
+        className="flex flex-1 min-h-0 min-w-0"
+      >
+        <div
+          className="min-h-0 min-w-0 overflow-auto border-r border-paper-hairline dark:border-cyber-border bg-[rgba(190,50,50,0.06)] dark:bg-cyber-danger/10 px-2 py-1.5 prose-md pe-md-split pe-md-split--original"
+          style={{ width: `${splitPct}%` }}
+        >
+          <ReactMarkdown
+            remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePlugins}
+          >
+            {original || '*Empty*'}
+          </ReactMarkdown>
+        </div>
+        {/* Draggable column divider. 6px wide, ew-resize cursor,
+            full height of the content row. Visually transparent
+            on its own — the column borders on either side are the
+            affordance — but its background brightens on hover so
+            the user sees the grabbable strip. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize Original / Proposed columns"
+          aria-valuenow={splitPct}
+          aria-valuemin={20}
+          aria-valuemax={80}
+          onPointerDown={onSplitPointerDown}
+          data-pe-split-handle
+          className="shrink-0 cursor-col-resize bg-paper-hairline/40 dark:bg-cyber-border/40 hover:bg-cyber-clay/60 dark:hover:bg-cyber-cyan/60 transition-colors"
+          style={{ width: 6, touchAction: 'none', userSelect: 'none' }}
+        />
+        <div
+          className="min-h-0 min-w-0 overflow-auto bg-[rgba(0,130,70,0.08)] dark:bg-cyber-cyan/10 px-2 py-1.5 prose-md pe-md-split pe-md-split--proposed"
+          style={{ width: `${proposedPct}%` }}
+        >
+          <ReactMarkdown
+            remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePlugins}
+          >
+            {replacement || '*Empty*'}
+          </ReactMarkdown>
+        </div>
       </div>
     </div>
   );

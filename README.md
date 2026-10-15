@@ -12,36 +12,45 @@
 > See [Credits](#credits) for details.
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/darrylschaefer/ai-text-editor/blob/main/LICENSE)
-[![v0.4.8](https://img.shields.io/badge/version-0.4.8-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.8)
+[![v0.4.9](https://img.shields.io/badge/version-0.4.9-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.9)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **Using the app?** Start with the [user guide](./docs/README.md), or click **?** in the top bar (in-app Help renders the same pages and follows Light / Dark mode).
 
 ---
 
-## What's new in v0.4.8
+## What's new in v0.4.9
 
-> Heading-grouped `@` section picks, parent→child cascade, Cancel,
-> and inline `§…` captions in the textarea. Section-scoped sends
-> still inline only the picked paragraphs — not the whole document.
+> A small UI-focused release: the editor's inline-formatting and
+> font-size toolbar controls collapse into a single **Format**
+> dropdown, the chat panel gets a draggable boundary between its
+> messages and input areas, and every proposed-edit card's Split
+> view now has a draggable divider between the **Original** and
+> **Proposed** columns.
 
 Highlights:
 
-1. **Heading-grouped section picker.** After `@` + pick a doc, the
-   second stage lists Markdown headings (ATX / Setext) instead of
-   every paragraph line. No headings → previous paragraph fallback.
-2. **Parent → child cascade + Cancel.** Ticking a parent selects
-   all descendant sections; child ticks do not force the parent.
-   **Cancel** closes without attaching a mention.
-3. **Inline `§…` marker in the textarea.** The same caption as the
-   chip (`§ Title +N more`) appears in the prose at the caret;
-   click it (or the chip section line) to re-edit the pick.
-4. **Token scope unchanged.** Whole-doc → outline only. Section
-   pick → verbatim picked paragraphs only (≤ 4,000 chars / doc,
-   ≤ 8,000 chars turn-wide across referenced docs).
+1. **Unified Format dropdown.** The two toolbar pills that used to
+   hold **B** / **I** / **U** and **+** / **−** are now a single
+   **Format** button. Click it to reveal a menu with **Bold**,
+   **Italic**, **Underline**, **Size +**, and **Size −** in one
+   place. All five actions and the existing Ctrl/Cmd+B/I/U
+   shortcuts behave exactly as before — only the toolbar
+   presentation changed.
+2. **Draggable Chat panel split.** The horizontal line between
+   the messages area and the input area in the Chat panel is now
+   a drag handle. Drag it up to give the messages more room, or
+   down to give the input more room. The split persists across
+   reloads via `localStorage`.
+3. **Draggable Original / Proposed split.** Every
+   **ProposedEditCard** (in Split view) now has a vertical drag
+   handle between the **Original** and **Proposed** markdown
+   columns. The two columns resize live as you drag; the split
+   is clamped 20–80 % and remembered per card across reloads.
 
-See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.4.8
-changelog and the v0.4.7 entry below for prior `@`-reference work.
+See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.4.9
+changelog and the v0.4.8 entry below for prior section-picker
+work.
 
 ---
 
@@ -629,6 +638,7 @@ per-release notes also ship on the GitHub release pages.
 
 | Version | Highlights |
 | --- | --- |
+| [v0.4.9](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.9) | Unified **Format** dropdown (B/I/U + font size), draggable Chat panel messages/input split, draggable Original / Proposed columns in every **ProposedEditCard**. |
 | [v0.4.8](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.8) | Heading-grouped `@` section picker, parent→child cascade, Cancel, inline `§…` captions in the textarea. Section sends stay scoped to picked paragraphs only. |
 | [v0.4.7](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.7) | `@`-document references in chat, comments (new + re-edit), and rejection feedback. Whole-doc or section-scoped. Persisted on comment rounds. Dark-mode contrast for the rejection textarea. |
 | [v0.4.6](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6) | Auto-snapshot on Send / Apply All, structured Rationale Rules with bold+underlined keywords, ProposedEditCard Split as Preview-style markdown, draggable Write / Preview divider, Revision history Preview pane, live-default Settings sync. |

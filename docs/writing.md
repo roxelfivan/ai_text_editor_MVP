@@ -18,19 +18,19 @@ You can comment only in **Write** or on the Write side of **Split**. Select text
 
 ## Bold, italic, underline
 
-Select text, then:
+Select text, then click **Format** in the toolbar and pick **Bold**, **Italic**, or **Underline** from the menu.
 
-| Button | Shortcut | Markdown |
+| Menu item | Shortcut | Markdown |
 | --- | --- | --- |
-| **B** | `Ctrl+B` / `⌘B` | `**bold**` |
-| **I** | `Ctrl+I` / `⌘I` | `*italic*` |
-| **U** | `Ctrl+U` / `⌘U` | `<u>underline</u>` |
+| **Bold** | `Ctrl+B` / `⌘B` | `**bold**` |
+| **Italic** | `Ctrl+I` / `⌘I` | `*italic*` |
+| **Underline** | `Ctrl+U` / `⌘U` | `<u>underline</u>` |
 
-Click the same control again to unwrap the markers. These shortcuts work while the editor is focused.
+The keyboard shortcuts work while the editor is focused, even if the **Format** menu is closed. Click the same menu item again to unwrap the markers. The dropdown closes after each action; click outside it to dismiss without acting.
 
 ## Editor font size
 
-Use **−** and **+** on the toolbar. Range is 10–24 pixels. This does not change menus or Chat — those use UI font size in [Settings](settings.md).
+Open the **Format** menu on the toolbar and pick **Size +** or **Size −**. Range is 10–24 pixels. The buttons disable at the upper and lower bounds. This does not change menus or Chat — those use UI font size in [Settings](settings.md).
 
 ## Predict (optional sentence completion)
 
