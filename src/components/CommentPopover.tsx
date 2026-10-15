@@ -38,6 +38,7 @@ import {
   MAX_POPOVER_HEIGHT,
   type ResizeHandle as HandleName,
 } from '@/hooks/useDragResize';
+import { popoverSizeKey as storagePopoverSizeKey } from '@/utils/storage';
 
 /**
  * Non-modal read/edit popover for a single comment. Anchored to a
@@ -757,7 +758,7 @@ function formatRelativeTime(at: number): string {
  * namespaced under the same key prefix the editor already uses.
  */
 function popoverSizeKey(commentId: string): string {
-  return `ai-text-editor-mvp:popover-size:${commentId}`;
+  return storagePopoverSizeKey(commentId);
 }
 
 /**

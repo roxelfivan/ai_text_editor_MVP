@@ -12,7 +12,7 @@
 > See [Credits](#credits) for details.
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/darrylschaefer/ai-text-editor/blob/main/LICENSE)
-[![v0.4.9](https://img.shields.io/badge/version-0.4.9-blueviolet.svg)](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.9)
+[![v0.4.9](https://img.shields.io/badge/version-0.4.9-blueviolet.svg)](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **Using the app?** Start with the [user guide](./docs/README.md), or click **?** in the top bar (in-app Help renders the same pages and follows Light / Dark mode).
@@ -165,8 +165,8 @@ toggles in the topbar.
 ## Quick start
 
 ```bash
-git clone https://github.com/roxelfivan/ai_text_editor_MVP.git
-cd ai_text_editor_MVP
+git clone https://github.com/roxelfivan/apeditor.git
+cd apeditor
 npm install
 npm run dev
 ```
@@ -586,7 +586,7 @@ src/
 ```
 
 State lives in a single zustand store (`src/store/useStore.ts`),
-persisted to `localStorage` under the `ai-text-editor-mvp` key
+persisted to `localStorage` under the `apeditor` key
 (including comment `rounds` and applied rationales). Messages between
 components use `window` `CustomEvent`s (`mvp:editor-selection`,
 `mvp:fill-chat`, `mvp:send-comments`, `mvp:chat-streaming`,
@@ -638,19 +638,19 @@ per-release notes also ship on the GitHub release pages.
 
 | Version | Highlights |
 | --- | --- |
-| [v0.4.9](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.9) | Unified **Format** dropdown (B/I/U + font size), draggable Chat panel messages/input split, draggable Original / Proposed columns in every **ProposedEditCard**. |
-| [v0.4.8](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.8) | Heading-grouped `@` section picker, parent→child cascade, Cancel, inline `§…` captions in the textarea. Section sends stay scoped to picked paragraphs only. |
-| [v0.4.7](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.7) | `@`-document references in chat, comments (new + re-edit), and rejection feedback. Whole-doc or section-scoped. Persisted on comment rounds. Dark-mode contrast for the rejection textarea. |
-| [v0.4.6](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6) | Auto-snapshot on Send / Apply All, structured Rationale Rules with bold+underlined keywords, ProposedEditCard Split as Preview-style markdown, draggable Write / Preview divider, Revision history Preview pane, live-default Settings sync. |
-| [v0.4.5](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.5) | Comment **rounds** + **rationales**, Settings Rationale Rules, Apply re-anchors to replacement, leaner prompts, **Predict** off by default. |
-| [v0.4.1](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.1) | **Send to AI** whole-document consistency; per-comment context; doc outline instead of verbatim document. |
-| [v0.4.0](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.0) | **Comment** + **Send to AI**, **Google AI Mode (no key)**, title-case **Predict**, Welcome quick start. |
-| [v0.3.4](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.4) | Import → Markdown, OCR works under CSP, security hardening, topbar icons. |
-| [v0.3.3](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.3) | **Apply All** for proposed edits, B/I/U toolbar, Debug Mode, global UI font size. |
-| [v0.3.2](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.2) | Debug mode, mobile-friendly editor, manual Predict. |
-| [v0.3.1](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.1) | Inline sentence completion, roomier toolbar. |
-| [v0.3.0](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.3.0) | ApEditor design system, transparent wordmark, redesigned toolbar. |
-| [v0.2.x](https://github.com/roxelfivan/ai_text_editor_MVP/releases?q=v0.2) | Earlier UI overhauls, bug fixes. |
+| [v0.4.9](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9) | Unified **Format** dropdown (B/I/U + font size), draggable Chat panel messages/input split, draggable Original / Proposed columns in every **ProposedEditCard**. |
+| [v0.4.8](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.8) | Heading-grouped `@` section picker, parent→child cascade, Cancel, inline `§…` captions in the textarea. Section sends stay scoped to picked paragraphs only. |
+| [v0.4.7](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.7) | `@`-document references in chat, comments (new + re-edit), and rejection feedback. Whole-doc or section-scoped. Persisted on comment rounds. Dark-mode contrast for the rejection textarea. |
+| [v0.4.6](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.6) | Auto-snapshot on Send / Apply All, structured Rationale Rules with bold+underlined keywords, ProposedEditCard Split as Preview-style markdown, draggable Write / Preview divider, Revision history Preview pane, live-default Settings sync. |
+| [v0.4.5](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.5) | Comment **rounds** + **rationales**, Settings Rationale Rules, Apply re-anchors to replacement, leaner prompts, **Predict** off by default. |
+| [v0.4.1](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.1) | **Send to AI** whole-document consistency; per-comment context; doc outline instead of verbatim document. |
+| [v0.4.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.0) | **Comment** + **Send to AI**, **Google AI Mode (no key)**, title-case **Predict**, Welcome quick start. |
+| [v0.3.4](https://github.com/roxelfivan/apeditor/releases/tag/v0.3.4) | Import → Markdown, OCR works under CSP, security hardening, topbar icons. |
+| [v0.3.3](https://github.com/roxelfivan/apeditor/releases/tag/v0.3.3) | **Apply All** for proposed edits, B/I/U toolbar, Debug Mode, global UI font size. |
+| [v0.3.2](https://github.com/roxelfivan/apeditor/releases/tag/v0.3.2) | Debug mode, mobile-friendly editor, manual Predict. |
+| [v0.3.1](https://github.com/roxelfivan/apeditor/releases/tag/v0.3.1) | Inline sentence completion, roomier toolbar. |
+| [v0.3.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.3.0) | ApEditor design system, transparent wordmark, redesigned toolbar. |
+| [v0.2.x](https://github.com/roxelfivan/apeditor/releases?q=v0.2) | Earlier UI overhauls, bug fixes. |
 
 ---
 

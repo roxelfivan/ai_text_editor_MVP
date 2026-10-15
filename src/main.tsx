@@ -5,12 +5,19 @@ import './index.css';
 void App;
 import type { Theme } from './types';
 import { applyThemeClass } from './utils/theme';
+import {
+  STORE_STORAGE_KEY,
+  migrateLegacyStorage,
+} from './utils/storage';
+
+// Copy legacy `ai-text-editor-mvp` keys → `apeditor` before any read.
+migrateLegacyStorage();
 
 // Apply persisted theme before first paint. ApEditor's default theme is
 // light (warm cream paper); if a user has explicitly chosen dark, honour
 // that.
 try {
-  const raw = localStorage.getItem('ai-text-editor-mvp');
+  const raw = localStorage.getItem(STORE_STORAGE_KEY);
   let theme: Theme = 'light';
   if (raw) {
     const parsed = JSON.parse(raw);

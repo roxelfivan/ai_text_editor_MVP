@@ -34,8 +34,9 @@ import {
   MAX_EDITOR_SPLIT_PCT,
   DEFAULT_EDITOR_SPLIT_PCT,
 } from '@/hooks/useDragResize';
+import { STORE_STORAGE_KEY } from '@/utils/storage';
 
-const STORAGE_KEY = 'ai-text-editor-mvp';
+const STORAGE_KEY = STORE_STORAGE_KEY;
 
 // Re-export so existing `import { DEFAULT_SYSTEM_MESSAGE } from
 // '@/store/useStore'` call sites keep working.
