@@ -32,15 +32,15 @@ export function RevisionHistory({ open, onClose }: Props) {
     : null;
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="w-full max-w-5xl h-[85vh] bg-paper-panel dark:bg-ape-panel rounded-lg shadow-ape-paper-lift dark:shadow-2xl border border-paper-hairline dark:border-cyber-border flex flex-col">
-        <div className="px-4 py-3 border-b border-paper-hairline dark:border-cyber-border flex items-center gap-2 bg-paper-elevated/50 dark:bg-ape-elevated/50">
-          <h2 className="font-semibold text-cyber-clay dark:text-cyber-cyan uppercase tracking-wider text-sm">
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="w-full max-w-5xl h-[min(85vh,85dvh)] max-h-[calc(100dvh-1rem)] bg-paper-panel dark:bg-ape-panel rounded-lg shadow-ape-paper-lift dark:shadow-2xl border border-paper-hairline dark:border-cyber-border flex flex-col">
+        <div className="px-3 sm:px-4 py-3 border-b border-paper-hairline dark:border-cyber-border flex items-center gap-2 bg-paper-elevated/50 dark:bg-ape-elevated/50">
+          <h2 className="font-semibold text-cyber-clay dark:text-cyber-cyan uppercase tracking-wider text-sm truncate min-w-0">
             Revisions — <span className="text-paper-ink dark:text-cyber-primary normal-case tracking-normal">{doc.title}</span>
           </h2>
           <div className="flex-1" />
           <button
-            className="btn-fire-sm"
+            className="btn-fire-sm shrink-0"
             onClick={() => {
               setLabelDraft('');
               saveRevision(doc.id, labelDraft || undefined);
@@ -49,7 +49,7 @@ export function RevisionHistory({ open, onClose }: Props) {
             Snapshot now
           </button>
           <button
-            className="text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors text-lg leading-none"
+            className="text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors text-lg leading-none shrink-0"
             onClick={onClose}
             title="Close"
           >
@@ -57,8 +57,8 @@ export function RevisionHistory({ open, onClose }: Props) {
           </button>
         </div>
 
-        <div className="flex-1 flex min-h-0">
-          <div className="w-64 border-r border-paper-hairline dark:border-cyber-border overflow-y-auto bg-paper-base dark:bg-ape-base">
+        <div className="flex-1 flex flex-col md:flex-row min-h-0">
+          <div className="md:w-64 shrink-0 border-b md:border-b-0 md:border-r border-paper-hairline dark:border-cyber-border overflow-y-auto bg-paper-base dark:bg-ape-base max-h-48 md:max-h-none">
             {revisions.length === 0 && (
               <p className="p-4 text-sm text-paper-inkSoft dark:text-cyber-muted">
                 No revisions yet. Click <em className="text-cyber-clay dark:text-cyber-cyan not-italic font-semibold">Snapshot now</em> or use{' '}

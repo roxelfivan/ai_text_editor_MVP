@@ -679,9 +679,8 @@ function MarkdownSplitPreview({
   const proposedPct = 100 - splitPct;
   return (
     <div className="flex flex-col text-xs min-h-0 h-full">
-      {/* Header row — flex widths mirror the content row below so
-          "Original" and "Proposed" stay centred over their columns. */}
-      <div className="flex shrink-0 min-w-0 border-b border-paper-hairline dark:border-cyber-border">
+      {/* Desktop header: widths mirror the content columns. */}
+      <div className="hidden md:flex shrink-0 min-w-0 border-b border-paper-hairline dark:border-cyber-border">
         <div
           className="px-2 py-1 text-[10px] uppercase tracking-wide text-[#a83232] dark:text-cyber-danger/80 border-r border-paper-hairline dark:border-cyber-border bg-[rgba(190,50,50,0.06)] dark:bg-cyber-danger/5 text-center"
           style={{ width: `${splitPct}%` }}
@@ -695,18 +694,18 @@ function MarkdownSplitPreview({
           Proposed
         </div>
       </div>
-      {/* Content row with a draggable divider between the two
-          columns. min-h-0 lets the columns shrink below their
-          content's natural height so the parent's flex-1 works
-          inside the card's pe-diff scroll area. */}
+      {/* Content: side-by-side on md+, stacked on narrow phones. */}
       <div
         ref={splitRowRef}
-        className="flex flex-1 min-h-0 min-w-0"
+        className="flex flex-1 min-h-0 min-w-0 max-md:flex-col"
       >
         <div
-          className="min-h-0 min-w-0 overflow-auto border-r border-paper-hairline dark:border-cyber-border bg-[rgba(190,50,50,0.06)] dark:bg-cyber-danger/10 px-2 py-1.5 prose-md pe-md-split pe-md-split--original"
+          className="min-h-0 min-w-0 overflow-auto border-r max-md:border-r-0 max-md:border-b border-paper-hairline dark:border-cyber-border bg-[rgba(190,50,50,0.06)] dark:bg-cyber-danger/10 px-2 py-1.5 prose-md pe-md-split pe-md-split--original max-md:!w-full max-md:max-h-[40vh]"
           style={{ width: `${splitPct}%` }}
         >
+          <div className="md:hidden px-0 pb-1 text-[10px] uppercase tracking-wide text-[#a83232] dark:text-cyber-danger/80">
+            Original
+          </div>
           <ReactMarkdown
             remarkPlugins={remarkPlugins}
             rehypePlugins={rehypePlugins}
@@ -714,11 +713,6 @@ function MarkdownSplitPreview({
             {original || '*Empty*'}
           </ReactMarkdown>
         </div>
-        {/* Draggable column divider. 6px wide, ew-resize cursor,
-            full height of the content row. Visually transparent
-            on its own — the column borders on either side are the
-            affordance — but its background brightens on hover so
-            the user sees the grabbable strip. */}
         <div
           role="separator"
           aria-orientation="vertical"
@@ -728,13 +722,16 @@ function MarkdownSplitPreview({
           aria-valuemax={80}
           onPointerDown={onSplitPointerDown}
           data-pe-split-handle
-          className="shrink-0 cursor-col-resize bg-paper-hairline/40 dark:bg-cyber-border/40 hover:bg-cyber-clay/60 dark:hover:bg-cyber-cyan/60 transition-colors"
+          className="shrink-0 cursor-col-resize bg-paper-hairline/40 dark:bg-cyber-border/40 hover:bg-cyber-clay/60 dark:hover:bg-cyber-cyan/60 transition-colors max-md:hidden"
           style={{ width: 6, touchAction: 'none', userSelect: 'none' }}
         />
         <div
-          className="min-h-0 min-w-0 overflow-auto bg-[rgba(0,130,70,0.08)] dark:bg-cyber-cyan/10 px-2 py-1.5 prose-md pe-md-split pe-md-split--proposed"
+          className="min-h-0 min-w-0 overflow-auto bg-[rgba(0,130,70,0.08)] dark:bg-cyber-cyan/10 px-2 py-1.5 prose-md pe-md-split pe-md-split--proposed max-md:!w-full max-md:max-h-[40vh]"
           style={{ width: `${proposedPct}%` }}
         >
+          <div className="md:hidden px-0 pb-1 text-[10px] uppercase tracking-wide text-[#1f6f3e] dark:text-cyber-cyan/80">
+            Proposed
+          </div>
           <ReactMarkdown
             remarkPlugins={remarkPlugins}
             rehypePlugins={rehypePlugins}
