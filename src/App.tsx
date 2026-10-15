@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore, useCurrentDocument } from '@/store/useStore';
 import { Sidebar } from '@/components/Sidebar';
 import { Editor } from '@/components/Editor';
@@ -12,6 +12,10 @@ import { applyThemeClass } from '@/utils/theme';
 import { requiresApiKey } from '@/config/providers';
 import { isHelpPageId, type HelpPageId } from '@/docs/catalog';
 import { ONBOARDED_KEY } from '@/utils/storage';
+import { NARROW_QUERY, useIsNarrow } from '@/hooks/useMediaQuery';
+
+const isNarrowViewport = () =>
+  typeof window !== 'undefined' && window.matchMedia(NARROW_QUERY).matches;
 
 // Inputs that are safe to treat as "the user is typing" for the purpose
 // of deferring global shortcuts. Lifted to module scope so the regex
@@ -41,28 +45,30 @@ function Topbar({
   const api = useStore((s) => s.api);
 
   return (
-    <header className="h-20 px-4 flex items-center gap-3 border-b border-paper-hairline dark:border-cyber-border bg-paper-base/90 dark:bg-ape-base/90 backdrop-blur-sm">
+    <header className="h-14 sm:h-20 px-3 sm:px-4 flex items-center gap-2 sm:gap-3 border-b border-paper-hairline dark:border-cyber-border bg-paper-base/90 dark:bg-ape-base/90 backdrop-blur-sm pt-[env(safe-area-inset-top)]">
       <img
         src="/apeditor-logo-transparent.png"
         alt="ApEditor"
-        className="brand-mark"
+        className="brand-mark brand-mark--topbar"
       />
-      <div className="flex flex-col leading-tight">
-        <span className="display text-xl text-paper-ink dark:text-cyber-primary">
+      <div className="flex flex-col leading-tight min-w-0 shrink-0">
+        <span className="display text-lg sm:text-xl text-paper-ink dark:text-cyber-primary">
           ApEditor
         </span>
-        <span className="text-[10px] text-paper-inkSoft dark:text-cyber-muted font-mono">v{APP_VERSION}</span>
+        <span className="hidden sm:inline text-[10px] text-paper-inkSoft dark:text-cyber-muted font-mono">
+          v{APP_VERSION}
+        </span>
       </div>
       {doc && (
-        <span className="ml-3 text-sm text-paper-ink dark:text-cyber-primary truncate flex items-center gap-1">
-          <span className="text-paper-inkSoft dark:text-cyber-muted">/</span>
+        <span className="ml-1 sm:ml-3 text-sm text-paper-ink dark:text-cyber-primary truncate flex items-center gap-1 min-w-0 max-w-[30vw] sm:max-w-none">
+          <span className="text-paper-inkSoft dark:text-cyber-muted shrink-0">/</span>
           <span className="truncate">{doc.title}</span>
         </span>
       )}
-      <div className="flex-1" />
+      <div className="flex-1 min-w-2" />
       <button
         type="button"
-        className="btn-icon-square"
+        className="btn-icon-square shrink-0"
         onClick={onOpenHelp}
         title="Help — user guide"
         aria-label="Help — user guide"
@@ -73,7 +79,7 @@ function Topbar({
       </button>
       <button
         type="button"
-        className="btn-icon-square"
+        className="btn-icon-square shrink-0"
         onClick={onOpenRevisions}
         title="Revision history"
         aria-label="Revision history"
@@ -95,7 +101,7 @@ function Topbar({
       </button>
       <button
         type="button"
-        className="btn-icon-square"
+        className="btn-icon-square shrink-0"
         onClick={onOpenPrompts}
         title="Prompt library"
         aria-label="Prompt library"
@@ -115,15 +121,19 @@ function Topbar({
         </svg>
       </button>
       <button
-        className="btn-cyan-sm !text-[15px] !py-1.5"
+        type="button"
+        className="btn-icon-square shrink-0"
         onClick={toggleTheme}
-        title="Toggle theme"
+        title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
       >
-        {theme === 'dark' ? '☀ Light' : '☾ Dark'}
+        <span className="text-base leading-none" aria-hidden>
+          {theme === 'dark' ? '☀' : '☾'}
+        </span>
       </button>
       <button
         type="button"
-        className="btn-icon-square-fire relative"
+        className="btn-icon-square-fire relative shrink-0"
         onClick={onOpenSettings}
         title="Settings"
         aria-label={api.apiKey ? 'Settings' : 'Settings (API key missing)'}
@@ -170,6 +180,22 @@ export default function App() {
   const setChatOpen = useStore((s) => s.setChatOpen);
   const topbarCollapsed = useStore((s) => s.topbarCollapsed);
   const setTopbarCollapsed = useStore((s) => s.setTopbarCollapsed);
+  const isNarrow = useIsNarrow();
+
+  // Narrow viewports cannot host three peer columns. Collapse side
+  // panels when we first land on — or transition into — a narrow
+  // viewport so the editor owns the first paint; EdgeAnchors reopen
+  // them as overlays. Skip re-collapsing while already narrow so a
+  // user who opened a panel is not immediately closed again.
+  const wasNarrowRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const wasNarrow = wasNarrowRef.current;
+    wasNarrowRef.current = isNarrow;
+    if (!isNarrow) return;
+    if (wasNarrow === true) return;
+    setSidebarCollapsed(true);
+    setChatCollapsed(true);
+  }, [isNarrow, setSidebarCollapsed, setChatCollapsed]);
 
   // Sync the `<html>` class whenever the theme changes.
   useEffect(() => {
@@ -234,14 +260,22 @@ export default function App() {
         setHelpOpen(true);
       } else if (e.key.toLowerCase() === 'b') {
         e.preventDefault();
-        setSidebarCollapsed(!useStore.getState().sidebarCollapsed);
+        const next = !useStore.getState().sidebarCollapsed;
+        // On narrow screens only one overlay at a time.
+        if (!next && isNarrowViewport()) {
+          setChatCollapsed(true);
+        }
+        setSidebarCollapsed(next);
       } else if (e.shiftKey && e.key.toLowerCase() === 'c') {
         e.preventDefault();
         const next = !useStore.getState().chatCollapsed;
         setChatCollapsed(next);
         // When the user explicitly un-collapses via shortcut, also make
         // sure the legacy open flag is set so the panel renders.
-        if (!next) setChatOpen(true);
+        if (!next) {
+          setChatOpen(true);
+          if (isNarrowViewport()) setSidebarCollapsed(true);
+        }
       }
     };
     window.addEventListener('keydown', handler);
@@ -285,7 +319,11 @@ export default function App() {
           side="left"
           collapsed={sidebarCollapsed}
           label={sidebarCollapsed ? 'Show sidebar (⌘/Ctrl + B)' : 'Hide sidebar (⌘/Ctrl + B)'}
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onClick={() => {
+            const next = !sidebarCollapsed;
+            if (!next && isNarrow) setChatCollapsed(true);
+            setSidebarCollapsed(next);
+          }}
         />
         <EdgeAnchor
           side="right"
@@ -295,8 +333,12 @@ export default function App() {
             const next = !chatCollapsed;
             setChatCollapsed(next);
             // When un-collapsing, also make sure the legacy open flag
-            // is set so the panel renders.
-            if (!next) setChatOpen(true);
+            // is set so the panel renders. On narrow screens only one
+            // overlay is open at a time.
+            if (!next) {
+              setChatOpen(true);
+              if (isNarrow) setSidebarCollapsed(true);
+            }
           }}
         />
       </div>

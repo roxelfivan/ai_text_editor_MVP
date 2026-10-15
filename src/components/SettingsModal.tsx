@@ -208,16 +208,12 @@ export function SettingsModal({ open, onClose }: Props) {
         dx,
         dy
       );
-      const w = clamp(
-        next.w,
-        MIN_SETTINGS_WIDTH,
-        Math.min(MAX_SETTINGS_WIDTH, window.innerWidth - 32)
-      );
-      const h = clamp(
-        next.h,
-        MIN_SETTINGS_HEIGHT,
-        Math.min(MAX_SETTINGS_HEIGHT, window.innerHeight - 32)
-      );
+      const maxW = Math.min(MAX_SETTINGS_WIDTH, window.innerWidth - 32);
+      const maxH = Math.min(MAX_SETTINGS_HEIGHT, window.innerHeight - 32);
+      // On small phones the historical mins can exceed the viewport;
+      // never clamp above the available space.
+      const w = clamp(next.w, Math.min(MIN_SETTINGS_WIDTH, maxW), maxW);
+      const h = clamp(next.h, Math.min(MIN_SETTINGS_HEIGHT, maxH), maxH);
       if (modalSize && modalSize.w === w && modalSize.h === h) return;
       setModalSize({ w, h });
     },
@@ -435,16 +431,16 @@ export function SettingsModal({ open, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div
-        className="w-full max-w-lg max-h-[90vh] bg-paper-panel dark:bg-ape-panel rounded-lg shadow-ape-paper-lift dark:shadow-2xl border border-paper-hairline dark:border-cyber-border flex flex-col relative"
+        className="w-full max-w-lg max-h-[min(90vh,90dvh)] bg-paper-panel dark:bg-ape-panel rounded-lg shadow-ape-paper-lift dark:shadow-2xl border border-paper-hairline dark:border-cyber-border flex flex-col relative"
         style={
           modalSize
             ? {
                 width: `${modalSize.w}px`,
                 height: `${modalSize.h}px`,
-                maxWidth: `calc(100vw - 32px)`,
-                maxHeight: `calc(100vh - 32px)`,
+                maxWidth: `min(calc(100vw - 32px), calc(100dvw - 32px))`,
+                maxHeight: `min(calc(100vh - 32px), calc(100dvh - 32px))`,
               }
             : undefined
         }

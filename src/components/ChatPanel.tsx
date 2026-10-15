@@ -15,6 +15,7 @@ import { requiresApiKey } from '@/config/providers';
 import { MentionInput } from '@/components/mentions/MentionInput';
 import { parseMentions } from '@/components/mentions/parseMentions';
 import { CHAT_MESSAGES_HEIGHT_KEY } from '@/utils/storage';
+import { useIsNarrow } from '@/hooks/useMediaQuery';
 
 // Maximum fraction of the viewport width the chat panel is allowed to
 // occupy. The static MAX_CHAT_WIDTH is still used as a floor so the panel
@@ -34,6 +35,8 @@ export function ChatPanel() {
   const chatOpen = useStore((s) => s.chatOpen);
   const setChatOpen = useStore((s) => s.setChatOpen);
   const chatCollapsed = useStore((s) => s.chatCollapsed);
+  const setChatCollapsed = useStore((s) => s.setChatCollapsed);
+  const isNarrow = useIsNarrow();
   const currentDocumentId = useStore((s) => s.currentDocumentId);
   const chats = useStore((s) => s.chats);
   const appendMessage = useStore((s) => s.appendMessage);
@@ -827,14 +830,17 @@ export function ChatPanel() {
     }
   };
 
-  return (
-    <div ref={containerRef} className="relative shrink-0" style={{ width: chatWidth }}>
-      <ResizeHandle handle="left" onPointerDown={(e) => start('left', e)} />
+  const closeChat = () => {
+    setChatCollapsed(true);
+    setChatOpen(false);
+  };
+
+  const aside = (
       <aside
         className="h-full border-l border-paper-hairline dark:border-cyber-border flex flex-col bg-paper-panel dark:bg-ape-panel"
         style={{ width: '100%' }}
       >
-      <div className="px-3 py-2 border-b border-paper-hairline dark:border-cyber-border flex items-center gap-2 bg-paper-elevated/50 dark:bg-ape-elevated/40">
+      <div className="px-3 py-2 border-b border-paper-hairline dark:border-cyber-border flex items-center gap-2 bg-paper-elevated/50 dark:bg-ape-elevated/40 pt-[max(0.5rem,env(safe-area-inset-top))]">
         <span className="text-[15px] font-medium text-paper-ink dark:text-cyber-primary">
           Chat
         </span>
@@ -851,7 +857,7 @@ export function ChatPanel() {
         </button>
         <button
           className="text-paper-inkSoft dark:text-cyber-muted hover:text-cyber-clay dark:hover:text-cyber-cyan transition-colors"
-          onClick={() => setChatOpen(false)}
+          onClick={closeChat}
           title="Close chat"
         >
           ×
@@ -1073,6 +1079,35 @@ export function ChatPanel() {
         )}
       </div>
       </aside>
+  );
+
+  // Narrow: full-screen overlay over the editor (not a peer column).
+  if (isNarrow) {
+    return (
+      <div className="fixed inset-0 z-40 flex justify-end">
+        <button
+          type="button"
+          className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+          aria-label="Close chat"
+          onClick={closeChat}
+        />
+        <div
+          ref={containerRef}
+          className="relative z-10 h-full w-full max-w-lg shadow-ape-paper-lift dark:shadow-2xl pb-[env(safe-area-inset-bottom)]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Chat"
+        >
+          {aside}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="relative shrink-0" style={{ width: chatWidth }}>
+      <ResizeHandle handle="left" onPointerDown={(e) => start('left', e)} />
+      {aside}
     </div>
   );
 }

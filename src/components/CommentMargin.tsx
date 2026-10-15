@@ -75,6 +75,8 @@ export function CommentMargin({
             ]
               .filter(Boolean)
               .join(' ')}
+            // Desktop: absolute y from line position. On `< sm` the
+            // chip-lane CSS sets `position: static`, so `top` is ignored.
             style={{ top: `${y}px` }}
             onClick={() => onSelect(comment.id)}
             // PointerUp is used in addition to onClick so tap-driven
