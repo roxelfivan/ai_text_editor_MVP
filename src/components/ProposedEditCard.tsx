@@ -18,6 +18,7 @@ import {
   MAX_CARD_HEIGHT,
   type ResizeHandle as HandleName,
 } from '@/hooks/useDragResize';
+import { peSplitKey } from '@/utils/storage';
 
 interface Props {
   edit: ProposedEdit;
@@ -208,9 +209,7 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
   const splitStorageKey = `${messageId}:${edit.id}:split`;
   const [splitPct, setSplitPct] = useState<number>(() => {
     try {
-      const raw = localStorage.getItem(
-        `ai-text-editor-mvp:pe-split:${splitStorageKey}`
-      );
+      const raw = localStorage.getItem(peSplitKey(splitStorageKey));
       if (!raw) return 50;
       const n = parseInt(raw, 10);
       if (!Number.isFinite(n)) return 50;
@@ -222,7 +221,7 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
   useEffect(() => {
     try {
       localStorage.setItem(
-        `ai-text-editor-mvp:pe-split:${splitStorageKey}`,
+        peSplitKey(splitStorageKey),
         String(splitPct)
       );
     } catch {

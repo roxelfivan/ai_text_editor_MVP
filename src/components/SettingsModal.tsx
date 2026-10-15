@@ -25,6 +25,7 @@ import {
   MAX_SETTINGS_TEXTAREA_HEIGHT,
   type ResizeHandle as HandleName,
 } from '@/hooks/useDragResize';
+import { SETTINGS_SIZE_KEYS } from '@/utils/storage';
 
 // Project default for the global UI font size. Mirrored in
 // `useStore.ts`'s initial state and the `onRehydrateStorage` migration;
@@ -44,11 +45,7 @@ const DEFAULT_RATIONALE_RULES_SIZE = { w: 480, h: 240 };
 // localStorage keys for the user-chosen sizes. Scoped to the
 // Settings modal namespace so they don't collide with the
 // CommentPopover / ProposedEditCard size keys.
-const SIZE_KEYS = {
-  modal: 'ai-text-editor-mvp:settings-modal-size',
-  systemMsg: 'ai-text-editor-mvp:settings-system-msg-size',
-  rationaleRules: 'ai-text-editor-mvp:settings-rationale-rules-size',
-} as const;
+const SIZE_KEYS = SETTINGS_SIZE_KEYS;
 
 function loadSize(
   key: string,

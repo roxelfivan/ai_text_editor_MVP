@@ -1,6 +1,6 @@
 ## v0.4.9 — Unified Format dropdown + draggable Chat / ProposedEditCard splits
 
-UI-focused release on top of [v0.4.8](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.8). The editor toolbar consolidates the two small pill groups (B/I/U and font size +/−) into a single **Format** dropdown, the Chat panel gains a draggable boundary between its messages and input areas, and every **ProposedEditCard** in Split view now has a draggable divider between the **Original** and **Proposed** columns. No prompt, store, or LLM-facing changes.
+UI-focused release on top of [v0.4.8](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.8). The editor toolbar consolidates the two small pill groups (B/I/U and font size +/−) into a single **Format** dropdown, the Chat panel gains a draggable boundary between its messages and input areas, and every **ProposedEditCard** in Split view now has a draggable divider between the **Original** and **Proposed** columns. No prompt, store, or LLM-facing changes.
 
 ### Added
 
@@ -11,7 +11,7 @@ UI-focused release on top of [v0.4.8](https://github.com/roxelfivan/ai_text_edit
   - **Size +** — `bumpEditorFontSize(+1)`. Disabled when the editor is at the 24 px ceiling.
   - **Size −** — `bumpEditorFontSize(-1)`. Disabled at the 10 px floor.
   The menu closes after any action and when the user clicks outside it. The existing `Ctrl/Cmd+B / I / U` keyboard shortcuts are unchanged; the `wrapSelection` and `bumpEditorFontSize` functions are reused as-is.
-- **Draggable Chat panel split.** A drag handle now lives between the messages area and the input area in the right-hand Chat panel. Drag up to give the messages more room, down to give the input more room. The split is persisted in `localStorage` under `ai-text-editor-mvp:chat-messages-height` and is clamped 120–1,200 px (and never eats the input area). When no value is stored, the panel falls back to the previous flex layout.
+- **Draggable Chat panel split.** A drag handle now lives between the messages area and the input area in the right-hand Chat panel. Drag up to give the messages more room, down to give the input more room. The split is persisted in `localStorage` under `apeditor:chat-messages-height` and is clamped 120–1,200 px (and never eats the input area). When no value is stored, the panel falls back to the previous flex layout.
 - **Draggable Original / Proposed split on every ProposedEditCard.** In Split view, the vertical line between the two markdown columns is a drag handle. Drag it to resize the columns; the split is persisted per card (keyed by `${messageId}:${edit.id}:split`) in `localStorage` and clamped 20–80 % so neither column can collapse. The header row ("Original" / "Proposed") re-flows with the columns so the labels stay centred over their content. The unified (Inline) diff view and the 8 outer card resize handles are unchanged.
 
 ### Changed
@@ -42,7 +42,7 @@ UI-focused release on top of [v0.4.8](https://github.com/roxelfivan/ai_text_edit
 
 ## v0.4.8 — Heading-grouped @-mention sections + inline § captions
 
-Feature release on top of [v0.4.7](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.7). The `@` section picker groups a referenced document by its Markdown headings (instead of every paragraph line), and the selected scope appears as a readable `§…` caption both on the chip bar and inside the textarea. Selecting a parent heading cascades to its descendant sections; Cancel aborts without attaching a mention. Prompt scoping is unchanged: section picks still send only the picked paragraphs (capped), not the whole document.
+Feature release on top of [v0.4.7](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.7). The `@` section picker groups a referenced document by its Markdown headings (instead of every paragraph line), and the selected scope appears as a readable `§…` caption both on the chip bar and inside the textarea. Selecting a parent heading cascades to its descendant sections; Cancel aborts without attaching a mention. Prompt scoping is unchanged: section picks still send only the picked paragraphs (capped), not the whole document.
 
 ### Added
 
@@ -93,7 +93,7 @@ Feature release on top of [v0.4.7](https://github.com/roxelfivan/ai_text_editor_
 
 ## v0.4.7 — @-document references in chat, comments, and rejection feedback
 
-Feature release on top of [v0.4.6](https://github.com/roxelfivan/ai_text_editor_MVP/releases/tag/v0.4.6). The chat input, comment composer, comment popover (edit mode), and Proposed Edit card's **Comment (optional)** all support an `@`-trigger that lets the user attach another document (or a specific paragraph of one) to the outgoing turn. The referenced document(s) are folded into the system prompt alongside the current document, so the model sees exactly what the user pointed at.
+Feature release on top of [v0.4.6](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.6). The chat input, comment composer, comment popover (edit mode), and Proposed Edit card's **Comment (optional)** all support an `@`-trigger that lets the user attach another document (or a specific paragraph of one) to the outgoing turn. The referenced document(s) are folded into the system prompt alongside the current document, so the model sees exactly what the user pointed at.
 
 ### Added
 

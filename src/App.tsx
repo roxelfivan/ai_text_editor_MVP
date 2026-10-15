@@ -11,6 +11,7 @@ import { EdgeAnchor } from '@/components/EdgeAnchor';
 import { applyThemeClass } from '@/utils/theme';
 import { requiresApiKey } from '@/config/providers';
 import { isHelpPageId, type HelpPageId } from '@/docs/catalog';
+import { ONBOARDED_KEY } from '@/utils/storage';
 
 // Inputs that are safe to treat as "the user is typing" for the purpose
 // of deferring global shortcuts. Lifted to module scope so the regex
@@ -191,10 +192,10 @@ export default function App() {
   // users who already chose the no-key path are not interrupted with a
   // settings modal asking for a key.
   useEffect(() => {
-    const flagged = localStorage.getItem('ai-text-editor-mvp:onboarded');
+    const flagged = localStorage.getItem(ONBOARDED_KEY);
     if (!flagged && requiresApiKey(api.provider) && !api.apiKey) {
       setSettingsOpen(true);
-      localStorage.setItem('ai-text-editor-mvp:onboarded', '1');
+      localStorage.setItem(ONBOARDED_KEY, '1');
     }
   }, [api.apiKey, api.provider]);
 

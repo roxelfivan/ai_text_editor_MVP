@@ -14,6 +14,7 @@ import { buildGoogleAiModeUrl } from '@/utils/googleAiMode';
 import { requiresApiKey } from '@/config/providers';
 import { MentionInput } from '@/components/mentions/MentionInput';
 import { parseMentions } from '@/components/mentions/parseMentions';
+import { CHAT_MESSAGES_HEIGHT_KEY } from '@/utils/storage';
 
 // Maximum fraction of the viewport width the chat panel is allowed to
 // occupy. The static MAX_CHAT_WIDTH is still used as a floor so the panel
@@ -316,9 +317,7 @@ export function ChatPanel() {
   // this height; the input area below fills the remaining space.
   const [messagesHeight, setMessagesHeight] = useState<number>(() => {
     try {
-      const raw = localStorage.getItem(
-        'ai-text-editor-mvp:chat-messages-height'
-      );
+      const raw = localStorage.getItem(CHAT_MESSAGES_HEIGHT_KEY);
       if (!raw) return 0; // 0 ⇒ "use default (60% of panel)"
       const n = parseInt(raw, 10);
       if (!Number.isFinite(n)) return 0;
@@ -335,7 +334,7 @@ export function ChatPanel() {
   useEffect(() => {
     try {
       localStorage.setItem(
-        'ai-text-editor-mvp:chat-messages-height',
+        CHAT_MESSAGES_HEIGHT_KEY,
         String(messagesHeight)
       );
     } catch {

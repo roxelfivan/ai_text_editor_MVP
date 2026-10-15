@@ -25,6 +25,7 @@ import { CommentComposer } from '@/components/CommentComposer';
 import { CommentPopover } from '@/components/CommentPopover';
 import { CommentTray } from '@/components/CommentTray';
 import { ResizeHandle } from '@/components/ResizeHandle';
+import { SUGGESTION_HEIGHT_KEY } from '@/utils/storage';
 
 /**
  * After any code path that updates the controlled textarea's value
@@ -181,7 +182,7 @@ export function Editor() {
   // handle at the top edge of the panel lets the user adjust this.
   const [suggestionHeight, setSuggestionHeight] = useState<number>(() => {
     try {
-      const raw = localStorage.getItem('ai-text-editor-mvp:suggestion-height');
+      const raw = localStorage.getItem(SUGGESTION_HEIGHT_KEY);
       if (!raw) return 160;
       const n = parseInt(raw, 10);
       if (!Number.isFinite(n)) return 160;
@@ -193,7 +194,7 @@ export function Editor() {
   useEffect(() => {
     try {
       localStorage.setItem(
-        'ai-text-editor-mvp:suggestion-height',
+        SUGGESTION_HEIGHT_KEY,
         String(suggestionHeight)
       );
     } catch {
