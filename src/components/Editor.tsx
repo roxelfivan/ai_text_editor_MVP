@@ -25,6 +25,7 @@ import { CommentComposer } from '@/components/CommentComposer';
 import { CommentPopover } from '@/components/CommentPopover';
 import { CommentTray } from '@/components/CommentTray';
 import { ResizeHandle } from '@/components/ResizeHandle';
+import { useIsCommentSheet, useIsNarrow } from '@/hooks/useMediaQuery';
 
 /**
  * After any code path that updates the controlled textarea's value
@@ -78,6 +79,8 @@ function restoreCaret(
  */
 export function Editor() {
   const doc = useCurrentDocument();
+  const isNarrow = useIsNarrow();
+  const isCommentSheet = useIsCommentSheet();
   const viewMode = useStore((s) => s.viewMode);
   const setViewMode = useStore((s) => s.setViewMode);
   const editorFontSize = useStore((s) => s.editorFontSize);
@@ -1446,17 +1449,22 @@ export function Editor() {
           {savedLabel}
         </span>
       </div>
-      <div ref={splitRowRef} className="flex-1 flex min-h-0">
+      <div
+        ref={splitRowRef}
+        className={`flex-1 flex min-h-0 ${isNarrow && isSplit ? 'flex-col' : ''}`}
+      >
         {showWrite && (
           <div
             ref={writePaneRef}
             className={`relative min-w-0 flex flex-col ${
               isSplit
-                ? 'border-r border-paper-hairline dark:border-cyber-border'
+                ? isNarrow
+                  ? 'flex-1 border-b border-paper-hairline dark:border-cyber-border'
+                  : 'border-r border-paper-hairline dark:border-cyber-border'
                 : 'flex-1'
             }`}
             style={
-              isSplit
+              isSplit && !isNarrow
                 ? {
                     flex: `0 0 ${editorSplitPct}%`,
                     maxWidth: `${MAX_EDITOR_SPLIT_PCT}%`,
@@ -1465,7 +1473,7 @@ export function Editor() {
                 : undefined
             }
           >
-            <div className="flex-1 flex min-h-0 relative">
+            <div className="flex-1 flex min-h-0 relative max-sm:flex-col">
               {/* Textarea + mirror overlay. The mirror sits *behind*
                   the textarea so the highlights paint under the user's
                   text. The mirror and the textarea share identical
@@ -1541,11 +1549,14 @@ export function Editor() {
               placeholder="Start writing in Markdown…"
               spellCheck={false}
                 />
-                {/* Floating composer — anchored to the selection. */}
+                {/* Floating composer — anchored to the selection.
+                    On `< sm` viewports `bottomSheet` activates the
+                    fixed bottom-sheet CSS variant. */}
                 {composerOpen && pendingSelection && composerPosition && (
                   <CommentComposer
                     position={composerPosition}
                     containerBounds={paneBounds}
+                    bottomSheet={isCommentSheet}
                     onSave={handleSaveComment}
                     onCancel={() => {
                       setComposerOpen(false);
@@ -1567,6 +1578,7 @@ export function Editor() {
                     }
                     position={popoverPosition}
                     containerBounds={paneBounds}
+                    bottomSheet={isCommentSheet}
                     onSaveBody={(id, body, mentions) =>
                       updateCommentBody(id, body, mentions)
                     }
@@ -1581,7 +1593,7 @@ export function Editor() {
               {/* Right-margin column. Renders one numbered badge per
                   comment, positioned by `badgePositions`. On `< sm`
                   viewports the CSS switches this to a horizontal
-                  chip lane. */}
+                  chip lane (parent is `max-sm:flex-col`). */}
               <CommentMargin
                 comments={sortedComments}
                 badgePositions={badgePositions}
@@ -1774,7 +1786,7 @@ export function Editor() {
                 </div>
               </div>
             )}
-            {isSplit && (
+            {isSplit && !isNarrow && (
               <ResizeHandle
                 handle="right"
                 onPointerDown={(e) => beginSplitResize('right', e)}

@@ -97,7 +97,7 @@ export function HelpDocs({ open, onClose, initialPage = 'home' }: Props) {
       aria-modal="true"
       aria-label="ApEditor help"
     >
-      <header className="h-16 px-4 flex items-center gap-3 border-b border-paper-hairline dark:border-cyber-border bg-paper-surface/95 dark:bg-ape-panel/95 backdrop-blur-sm shrink-0">
+      <header className="h-14 sm:h-16 px-4 flex items-center gap-3 border-b border-paper-hairline dark:border-cyber-border bg-paper-surface/95 dark:bg-ape-panel/95 backdrop-blur-sm shrink-0 pt-[env(safe-area-inset-top)]">
         <img
           src="/apeditor-logo-transparent.png"
           alt=""
@@ -129,22 +129,22 @@ export function HelpDocs({ open, onClose, initialPage = 'home' }: Props) {
         </button>
       </header>
 
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
         <nav
-          className="w-60 shrink-0 border-r border-paper-hairline dark:border-cyber-border overflow-y-auto bg-paper-elevated/40 dark:bg-ape-elevated/40"
+          className="md:w-60 shrink-0 border-b md:border-b-0 md:border-r border-paper-hairline dark:border-cyber-border overflow-x-auto md:overflow-y-auto bg-paper-elevated/40 dark:bg-ape-elevated/40 max-h-40 md:max-h-none"
           aria-label="Help topics"
         >
-          <ul className="py-2">
+          <ul className="py-2 flex md:block gap-1 px-2 md:px-0">
             {HELP_PAGES.map((page) => {
               const active = page.id === pageId;
               return (
-                <li key={page.id}>
+                <li key={page.id} className="shrink-0 md:shrink">
                   <button
                     type="button"
-                    className={`w-full text-left px-4 py-2 text-sm border-l-2 transition-colors ${
+                    className={`w-full text-left px-3 md:px-4 py-2 text-sm whitespace-nowrap md:whitespace-normal border-b-2 md:border-b-0 md:border-l-2 transition-colors ${
                       active
-                        ? 'border-l-cyber-clay dark:border-l-cyber-cyan bg-paper-surface dark:bg-ape-panel text-cyber-clay dark:text-cyber-cyan font-semibold'
-                        : 'border-l-transparent text-paper-ink dark:text-cyber-primary hover:bg-paper-elevated/80 dark:hover:bg-ape-elevated/80'
+                        ? 'border-cyber-clay dark:border-cyber-cyan bg-paper-surface dark:bg-ape-panel text-cyber-clay dark:text-cyber-cyan font-semibold'
+                        : 'border-transparent text-paper-ink dark:text-cyber-primary hover:bg-paper-elevated/80 dark:hover:bg-ape-elevated/80'
                     }`}
                     aria-current={active ? 'page' : undefined}
                     onClick={() => setPageId(page.id)}
@@ -157,8 +157,8 @@ export function HelpDocs({ open, onClose, initialPage = 'home' }: Props) {
           </ul>
         </nav>
 
-        <main className="flex-1 overflow-y-auto">
-          <article className="max-w-3xl mx-auto px-6 py-8 prose-md help-docs-article">
+        <main className="flex-1 overflow-y-auto min-h-0">
+          <article className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 prose-md help-docs-article">
             <p className="text-[11px] uppercase tracking-wider font-semibold text-cyber-clay dark:text-cyber-cyan mb-3 !mt-0">
               {meta.title}
             </p>
