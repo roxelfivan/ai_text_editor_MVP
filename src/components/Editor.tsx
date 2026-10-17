@@ -1361,12 +1361,13 @@ export function Editor() {
           }}
           onMouseDown={(e) => e.preventDefault()}
           disabled={!apiConfigured}
+          aria-disabled={!apiConfigured}
           aria-pressed={inlineOn}
           aria-label={`Predict ${inlineOn ? 'on' : 'off'}. Click to ${inlineOn ? 'turn off' : 'turn on'}.`}
           title={
             !apiConfigured
               ? !requiresApiKey(api.provider)
-                ? 'Inline prediction needs an API key. Use Google AI Mode for full chat replies.'
+                ? 'Predict is not available with Google AI Mode — type your prompt in the Chat panel instead.'
                 : 'Configure an API key in Settings to enable prediction'
               : inlineOn
                 ? 'Click to stop inline predictions'
