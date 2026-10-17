@@ -55,6 +55,63 @@ export interface OcrProgress {
 export type OcrProgressCallback = (progress: OcrProgress) => void;
 
 // ---------------------------------------------------------------------------
+// Input limits. These exist to keep a single tab from being killed by
+// importing a 1 GB PDF or a 2,000-page scan. PaddleOCR keeps every
+// recognised page rasterised on a canvas during the slow path, so a
+// 500-page PDF already pushes the GPU into swap territory; above that
+// we bail before doing any work. The per-file size cap is conservative
+// because `file.arrayBuffer()` materialises the entire PDF in memory.
+//
+// Limits are hard-coded for now. A future slice may surface them in
+// Settings as a single numeric field; the validation function reads
+// them through the module-level constants below so that swap is a
+// one-line change.
+// ---------------------------------------------------------------------------
+
+/** Per-file size limit in bytes (50 MB). */
+export const OCR_MAX_FILE_BYTES = 50 * 1024 * 1024;
+/** Per-PDF page-count limit. PDFs with more pages are rejected before rasterising. */
+export const OCR_MAX_PDF_PAGES = 500;
+/** Total batch size limit in bytes (200 MB). Prevents N small-but-large files from passing per-file checks. */
+export const OCR_MAX_BATCH_BYTES = 200 * 1024 * 1024;
+
+/**
+ * Human-readable byte count using MB when ≥ 1 MB, otherwise KB. One
+ * decimal for MB, no decimal for KB — matches the copy in the friendly
+ * error message so the user sees the same number twice.
+ */
+export function formatOcrSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
+/**
+ * Validate a batch of input files against the size / batch limits
+ * before any heavy work begins. Returns the first violation as a
+ * human-readable error string, or `null` if the batch is within limits.
+ *
+ * Page-count validation runs separately inside `extractFromPdfFile`
+ * because it requires reading the PDF header first; doing it here
+ * would force a second full read of every PDF.
+ */
+export function validateOcrBatch(files: File[]): string | null {
+  if (files.length === 0) return null;
+  let total = 0;
+  for (const f of files) {
+    if (f.size > OCR_MAX_FILE_BYTES) {
+      return `${f.name} is ${formatOcrSize(f.size)} — limit is ${formatOcrSize(OCR_MAX_FILE_BYTES)}. Compress it or split it before re-importing.`;
+    }
+    total += f.size;
+  }
+  if (total > OCR_MAX_BATCH_BYTES) {
+    return `Batch is ${formatOcrSize(total)} — limit is ${formatOcrSize(OCR_MAX_BATCH_BYTES)}. Import fewer files at once.`;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Internal: lazy-init PaddleOCR engine singleton.
 // ---------------------------------------------------------------------------
 
@@ -212,6 +269,15 @@ async function extractFromPdfFile(
   try {
     const pageTexts: string[] = [];
     const numPages = pdf.numPages;
+    // Page-count cap: a 500-page scan would rasterise 500 canvases at
+    // 2× scale and almost certainly evict the tab. Bail before the
+    // first `getPage` call so the existing `pdf.destroy()` in the
+    // outer finally still runs.
+    if (numPages > OCR_MAX_PDF_PAGES) {
+      throw new Error(
+        `${file.name} has ${numPages} pages — limit is ${OCR_MAX_PDF_PAGES}. Try splitting it or selecting a section.`
+      );
+    }
     for (let p = 1; p <= numPages; p++) {
       const page = await pdf.getPage(p);
       try {
@@ -277,6 +343,12 @@ export async function extractTextFromFiles(
   if (langs.length === 0) {
     throw new Error('At least one OCR language must be selected.');
   }
+  // Pre-flight: bail with a friendly error before allocating any
+  // canvas / pdfjs worker if a file (or the whole batch) is over the
+  // documented limits. Doing this here keeps the per-file error
+  // copy out of the inner loops.
+  const batchError = validateOcrBatch(files);
+  if (batchError) throw new Error(batchError);
 
   const emit = (label: string) => {
     if (onProgress) onProgress({ done: 0, total: files.length, label });

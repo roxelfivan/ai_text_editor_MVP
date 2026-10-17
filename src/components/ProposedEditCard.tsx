@@ -5,7 +5,7 @@ import { useStore } from '@/store/useStore';
 import type { MentionToken, ProposedEdit } from '@/types';
 import { lineDiff } from '@/utils/diff';
 import { remarkPlugins, rehypePlugins } from '@/utils/markdown';
-import { applyEdit, applyEditAtCaret, findEditAnchor } from '@/utils/proposedEdit';
+import { applyEdit, applyEditAtCaret, findEditAnchor, findBestEffortAnchor, type BestEffortAnchor } from '@/utils/proposedEdit';
 import { ResizeHandle } from '@/components/ResizeHandle';
 import { MentionInput } from '@/components/mentions/MentionInput';
 import {
@@ -147,6 +147,39 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
     };
   }, [content, edit.original]);
 
+  // When the strict six-strategy `findEditAnchor` fails, fall back to a
+  // best-effort token-overlap match. The result is gated behind an
+  // inline confirmation prompt — we never silently rewrite text. The
+  // memo runs only when the strict anchor is missing, so the O(N·W)
+  // scan is not paid on the happy path.
+  const bestEffortAnchor: BestEffortAnchor | null = useMemo(() => {
+    if (anchorInfo.found) return null;
+    if (!content || !edit.original) return null;
+    return findBestEffortAnchor(content, edit.original);
+  }, [anchorInfo.found, content, edit.original]);
+
+  // When the user clicks Apply and the strict anchor is missing, we
+  // promote them into a best-effort confirmation instead of doing
+  // nothing. `pendingBestEffort` holds the anchor we propose to replace
+  // so the inline prompt can show the exact matched span.
+  const [pendingBestEffort, setPendingBestEffort] =
+    useState<BestEffortAnchor | null>(null);
+
+  // Drop any pending confirmation if the document content moves out
+  // from under us (the user keeps typing, another card gets applied,
+  // etc.). The span is now stale and the diff no longer matches the
+  // surrounding text.
+  useEffect(() => {
+    if (!pendingBestEffort) return;
+    const span = content.slice(
+      pendingBestEffort.idx,
+      pendingBestEffort.idx + pendingBestEffort.length
+    );
+    if (!span) {
+      setPendingBestEffort(null);
+    }
+  }, [content, pendingBestEffort]);
+
   // Unified (Inline) view still uses a line-level +/- diff. Split view
   // renders full Original / Proposed columns as Preview-style markdown
   // instead of line-synced monospace rows.
@@ -263,11 +296,22 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
 
   if (status.kind === 'rejected' || status.kind === 'committed') return null;
 
-  const handleApply = () => {
+  /**
+   * Perform the actual text replace + store recording, parameterised
+   * by the anchor we want to splice. Used by both the strict-anchor
+   * Apply path and the user-confirmed best-effort path so the two
+   * share one code path for the mutation, recording, and selection-
+   * jump. A future slice may extend `recordAppliedEdit` with an
+   * `appliedVia: 'strict' | 'best-effort'` field for audit; for now
+   * the two paths produce identical recorded edits.
+   */
+  const performReplace = (anchor: { idx: number; length: number }) => {
     if (!doc) return;
-    const r = applyEdit(doc.content, edit.original, edit.replacement);
-    if (!r.ok) return;
-    useStore.getState().updateDocumentContent(doc.id, r.next);
+    const next =
+      doc.content.slice(0, anchor.idx) +
+      edit.replacement +
+      doc.content.slice(anchor.idx + anchor.length);
+    useStore.getState().updateDocumentContent(doc.id, next);
     // Record the adopted edit against the comment that produced it.
     // The store's `recordAppliedEdit` resolves the right comment by
     // walking the document's comment batch that was sent to AI, so
@@ -276,8 +320,8 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
     // post-apply document) so the comment re-anchors to the
     // ADOPTED text — not the original — preventing the highlight
     // from drifting to a wider span on the next re-anchor pass.
-    const newStart = r.anchor.idx;
-    const newEnd = r.anchor.idx + edit.replacement.length;
+    const newStart = anchor.idx;
+    const newEnd = anchor.idx + edit.replacement.length;
     useStore.getState().recordAppliedEdit({
       documentId: doc.id,
       messageId,
@@ -297,6 +341,46 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
       })
     );
     setStatus({ kind: 'applied' });
+    // Drop any pending best-effort confirmation now that we've
+    // committed — the diff card is about to disappear.
+    setPendingBestEffort(null);
+  };
+
+  const handleApply = () => {
+    if (!doc) return;
+    const r = applyEdit(doc.content, edit.original, edit.replacement);
+    if (r.ok) {
+      performReplace(r.anchor);
+      return;
+    }
+    // Strict match failed. If we have a best-effort candidate,
+    // promote to the inline confirmation prompt instead of bailing
+    // silently — the user already clicked Apply, so showing them a
+    // proposed approximate match is the next-best outcome. If
+    // there's no best-effort either, fall back to the existing
+    // Force-apply / skip behaviour.
+    if (bestEffortAnchor) {
+      setPendingBestEffort(bestEffortAnchor);
+    }
+  };
+
+  /**
+   * User confirmed the best-effort approximation. Splice using the
+   * pending anchor (NOT a fresh `findBestEffortAnchor` call — the
+   * content may have moved between the prompt and the click).
+   */
+  const handleConfirmBestEffort = () => {
+    if (!pendingBestEffort) return;
+    performReplace(pendingBestEffort);
+  };
+
+  /**
+   * User rejected the approximation. Drop the pending state so the
+   * card returns to its normal "not anchored" view; they can still use
+   * Force-apply or the comment flow from there.
+   */
+  const handleCancelBestEffort = () => {
+    setPendingBestEffort(null);
   };
 
   // Force-apply: drop the AI's `replacement` at the user's caret, or
@@ -382,7 +466,14 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
     }
   };
 
-  const disabled = !anchorInfo.found || status.kind === 'applied';
+  // Apply is enabled as long as EITHER the strict anchor matches OR a
+  // best-effort candidate is available. The click handler routes
+  // between the two paths; the user is never silently rewriting text
+  // because every best-effort Apply requires an inline confirmation.
+  const canApplyStrict = anchorInfo.found;
+  const canApplyBestEffort = !anchorInfo.found && bestEffortAnchor !== null;
+  const disabled =
+    status.kind === 'applied' || (!canApplyStrict && !canApplyBestEffort);
 
   // Force-apply is the only path that can succeed when the AI quote is
   // not anchored in the document. It is gated on:
@@ -475,8 +566,56 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
               The AI&rsquo;s original quote doesn&rsquo;t appear in the
               current document &mdash; it may have been edited since this
               reply was generated, or the AI quoted a different wording.
-              Normal Apply is unavailable; click in the editor, then use
-              <span className="font-semibold text-cyber-warn"> Force-apply</span>.
+              {bestEffortAnchor
+                ? <> Press <span className="font-semibold text-cyber-warn">Apply</span> to review an approximate match, or click in the editor and use <span className="font-semibold text-cyber-warn">Force-apply</span> to drop the new wording at your caret.</>
+                : <> Normal Apply is unavailable; click in the editor, then use <span className="font-semibold text-cyber-warn">Force-apply</span>.</>}
+            </div>
+          </div>
+        )}
+        {/* Best-effort confirmation prompt. Shown only when the user has
+            clicked Apply on a missing-anchor card AND a best-effort
+            candidate resolved. Renders the matched span inline so the
+            user can decide whether to splice it. */}
+        {pendingBestEffort && content && (
+          <div
+            className="mb-2 py-1.5 px-2 rounded border border-cyber-warn/60 bg-cyber-warn/10 text-[11px] leading-snug"
+            role="alertdialog"
+            aria-label="Approximate match confirmation"
+          >
+            <div className="font-semibold mb-1 text-cyber-warn">
+              Approximate match found
+            </div>
+            <div className="text-paper-inkSoft dark:text-cyber-muted mb-1">
+              No exact match for the AI&rsquo;s quote. We can apply this
+              change to the closest matching passage (confidence&nbsp;
+              <span className="font-mono text-cyber-warn">
+                {Math.round(pendingBestEffort.confidence * 100)}%
+              </span>
+              ). Review the matched text before confirming.
+            </div>
+            <div className="mt-1 p-1.5 rounded bg-white/70 dark:bg-ape-base/70 border border-paper-hairline dark:border-cyber-border font-mono text-[11px] whitespace-pre-wrap break-words max-h-32 overflow-auto">
+              {content.slice(
+                pendingBestEffort.idx,
+                pendingBestEffort.idx + pendingBestEffort.length
+              )}
+            </div>
+            <div className="mt-1.5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="btn-ghost-sm"
+                onClick={handleCancelBestEffort}
+                title="Keep the document unchanged"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-fire-sm"
+                onClick={handleConfirmBestEffort}
+                title="Replace the matched passage with the proposed text"
+              >
+                Replace this passage
+              </button>
             </div>
           </div>
         )}
@@ -540,7 +679,9 @@ export function ProposedEditCard({ edit, docId, messageId, staged, committed, on
               ? anchorInfo.multiple
                 ? 'Multiple matches; the first will be replaced'
                 : 'Apply this change to the document'
-              : 'Original text not found in current document'
+              : canApplyBestEffort
+                ? 'No exact match — apply will show an approximate match to confirm'
+                : 'Original text not found in current document'
           }
         >
           Apply

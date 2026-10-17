@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useStore } from '@/store/useStore';
+import { useStore, useCurrentDocument } from '@/store/useStore';
 // Type-only: keep pdfjs / PaddleOCR / OpenCV out of the initial app chunk.
 // The OCR module is loaded via dynamic import() when the user picks files.
 import type { OcrLang, OcrProgress } from '@/utils/ocr';
 import { formatOcrAsMarkdown } from '@/utils/ocrMarkdown';
+import { downloadTextFile, sanitizeFilename } from '@/utils/storage';
 
 const VIEWPORT_PAD = 8;
 const POPOVER_WIDTH = 288; // Tailwind w-72
@@ -74,6 +75,7 @@ interface ImportMediaButtonProps {
  */
 export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) {
   const api = useStore((s) => s.api);
+  const currentDoc = useCurrentDocument();
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -147,6 +149,25 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
       return;
     }
     inputRef.current?.click();
+  };
+
+  /**
+   * Export the current document as Markdown. Surfaces a friendly error
+   * if no document is open (e.g. user reached the popover while the
+   * sidebar selection was empty) — we deliberately do NOT close the
+   * popover on click so the error stays visible.
+   *
+   * Filename is the document title, sanitised. Content is the live
+   * document text — revisions / comments are intentionally out of
+   * scope for this slice (see docs/UX_SLICE_1.md Item 2).
+   */
+  const onExportClick = () => {
+    if (!currentDoc) {
+      setError('Open a document first, then export.');
+      return;
+    }
+    const base = sanitizeFilename(currentDoc.title, 'untitled');
+    downloadTextFile(`${base}.md`, currentDoc.content, 'text/markdown;charset=utf-8');
   };
 
   const onFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -258,6 +279,29 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
           ref={popoverRef}
           className="fixed z-40 w-72 max-w-[calc(100vw-1rem)] bg-paper-panel dark:bg-ape-panel border border-paper-hairline dark:border-cyber-border rounded shadow-ape-paper-lift dark:shadow-lg p-3 text-xs space-y-2 box-border"
         >
+          <div className="font-semibold text-sm text-cyber-clay dark:text-cyber-cyan uppercase tracking-wide">
+            Export
+          </div>
+          <p className="text-paper-inkSoft dark:text-cyber-muted leading-snug">
+            Download this document as Markdown so you have a copy outside the browser.
+            Local-only storage can be cleared by the browser without warning.
+          </p>
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              className="btn-ghost-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={onExportClick}
+              disabled={!currentDoc}
+              title={
+                currentDoc
+                  ? 'Download this document as Markdown'
+                  : 'Open a document first to export it'
+              }
+            >
+              Export .md
+            </button>
+          </div>
+          <div className="border-t border-paper-hairline dark:border-cyber-border" />
           <div className="font-semibold text-sm text-cyber-clay dark:text-cyber-cyan uppercase tracking-wide">
             OCR languages
           </div>

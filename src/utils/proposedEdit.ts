@@ -342,6 +342,186 @@ export function findEditAnchor(
 }
 
 /**
+ * Best-effort anchor for a proposed edit whose `original` quote cannot
+ * be matched by `findEditAnchor` (six existing strategies failed). The
+ * intent is to recover from "near misses" — the user re-flowed a
+ * paragraph, swapped a few words, or the model paraphrased instead of
+ * quoting — without ever silently rewriting text. The function returns
+ * a confidence score alongside the anchor so the UI can decide whether
+ * to surface an inline confirmation prompt or to fall back to the
+ * existing Force-apply / skip path.
+ *
+ * Strategy:
+ *   1. Tokenise `original` on whitespace + markdown-significant
+ *      boundaries. Reject if fewer than 3 tokens or total length
+ *      under 30 chars — too little signal to safely approximate.
+ *   2. Tokenise `content` the same way.
+ *   3. Slide a window of N tokens across the content tokens, scoring
+ *      each window by how many of its tokens appear in the original
+ *      in order (allowing one-character substitutions and one-char
+ *      Levenshtein distance per token).
+ *   4. Require ≥ 60% token overlap AND the window length within
+ *      ±50% of the original token count.
+ *   5. Refuse if `content` is over `MAX_BEST_EFFORT_DOC_BYTES` —
+ *      the O(N·W) scan would block the tab.
+ *
+ * Returns `null` for ambiguous or low-confidence matches. The caller
+ * decides whether to show a confirm prompt; we don't make that UX call
+ * here.
+ */
+export interface BestEffortAnchor {
+  idx: number;
+  length: number;
+  /** 0..1, fraction of the original tokens found in the matched window in order. */
+  confidence: number;
+}
+
+const MAX_BEST_EFFORT_DOC_BYTES = 100 * 1024;
+
+/**
+ * Cheap word-tokeniser that splits on whitespace + common markdown
+ * boundaries so a heading marker or list bullet doesn't fuse into
+ * the adjacent word. Punctuation stays attached to the token — the
+ * match pass treats `word` and `word.` as different tokens on
+ * purpose, since the AI usually preserves trailing punctuation.
+ */
+function tokenizeForBestEffort(s: string): string[] {
+  if (!s) return [];
+  // Split on runs of whitespace, line breaks, or markdown block
+  // boundaries. Inline emphasis markers (`` ` ``, `*`, `_`) stay
+  // attached to their containing word; we don't try to strip them.
+  return s.split(/\s+/).filter((t) => t.length > 0);
+}
+
+/**
+ * 1-edit-distance check between two short tokens (≤ 8 chars). We
+ * approximate Levenshtein with a length-difference check plus a
+ * set-equality fallback: if both tokens are ≤ 8 chars and differ by
+ * 0–1 character via substitution, treat them as a near-match. The
+ * cap on length is the safety belt — a longer token with 1 substitution
+ * is usually a real word change, not a typo.
+ */
+function isNearToken(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  const len = Math.max(a.length, b.length);
+  if (len > 8) return false;
+  let diffs = 0;
+  for (let i = 0; i < len; i++) {
+    if (a[i] !== b[i]) {
+      diffs++;
+      if (diffs > 1) return false;
+    }
+  }
+  return diffs <= 1;
+}
+
+export function findBestEffortAnchor(
+  content: string,
+  original: string
+): BestEffortAnchor | null {
+  if (!content || !original) return null;
+  if (content.length > MAX_BEST_EFFORT_DOC_BYTES) return null;
+  if (original.length < 30) return null;
+
+  const origTokens = tokenizeForBestEffort(original);
+  if (origTokens.length < 3) return null;
+
+  // Build content tokens AND keep their (start, end) byte offsets so
+  // we can convert a window of tokens back into a {idx, length}.
+  const contentTokens: { token: string; start: number; end: number }[] = [];
+  {
+    const re = /\S+/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+      contentTokens.push({ token: m[0], start: m.index, end: m.index + m[0].length });
+    }
+  }
+  if (contentTokens.length < origTokens.length) return null;
+
+  const n = origTokens.length;
+  // Skip budget: how many content tokens may be absorbed without
+  // matching any original token. With `n` original tokens, allow
+  // up to half that many extra content tokens. Confidence is the
+  // real bound on how loose the match can be — this only caps the
+  // WIDTH of the matched span in tokens.
+  const maxSkip = Math.max(2, Math.floor(n * 0.5));
+  // Lookahead window for matching a content token against original
+  // tokens. A lookahead of 5 lets us recover from "the first N
+  // original tokens were reworded out of the document" — the first
+  // surviving original token gets matched even if it sits up to 5
+  // positions deep in `origTokens`. Larger values catch more paraphrase
+  // cases but increase the chance of accidental matches between common
+  // words; the confidence threshold + skip budget cap the downside.
+  const LOOKAHEAD = Math.max(5, Math.floor(n * 0.5));
+  // Cap on the matched content span in tokens. Prevents one early
+  // match from absorbing a whole document.
+  const maxMatchedTokens = Math.ceil(n * 1.5);
+
+  let best: BestEffortAnchor | null = null;
+
+  // For each possible starting position in contentTokens, scan forward
+  // trying to match all `n` original tokens in order. At each content
+  // token we try to match it against original[oi..oi+LOOKAHEAD] and
+  // advance `oi` to the matched index + 1 (so the match is always in-
+  // order, but gaps in the original are absorbed silently rather than
+  // forcing consecutive alignment). Confidence = matchedCount / n;
+  // a candidate is rejected if its matched content length exceeds
+  // `maxMatchedTokens`.
+  for (let start = 0; start < contentTokens.length; start++) {
+    let oi = 0;
+    let skips = 0;
+    let firstMatch = -1;
+    let lastMatch = -1;
+    let matchedCount = 0;
+    for (let ci = start; ci < contentTokens.length; ci++) {
+      const ct = contentTokens[ci];
+      if (oi >= n) break;
+      // Try the current original token first, then look ahead a few
+      // positions to absorb leading rewordings in the document.
+      let matchedAt = -1;
+      const limit = Math.min(n, oi + LOOKAHEAD + 1);
+      for (let k = oi; k < limit; k++) {
+        if (isNearToken(ct.token, origTokens[k])) {
+          matchedAt = k;
+          break;
+        }
+      }
+      if (matchedAt !== -1) {
+        if (firstMatch === -1) firstMatch = ci;
+        lastMatch = ci;
+        oi = matchedAt + 1;
+        matchedCount++;
+      } else {
+        skips++;
+        if (skips > maxSkip) break;
+      }
+      // Bail early if the match is already much wider than the
+      // original token count.
+      if (lastMatch !== -1 && ci - start + 1 > maxMatchedTokens) break;
+    }
+    if (matchedCount === 0) continue;
+    const matchedTokenCount = lastMatch - firstMatch + 1;
+    if (matchedTokenCount > maxMatchedTokens) continue;
+    const confidence = matchedCount / n;
+    if (confidence < 0.6) continue;
+    if (best === null || confidence > best.confidence) {
+      best = {
+        idx: contentTokens[firstMatch].start,
+        length:
+          contentTokens[lastMatch].end - contentTokens[firstMatch].start,
+        confidence,
+      };
+      // Early exit: 100% match is as good as it gets; any other
+      // starting position would be a worse match by definition.
+      if (confidence >= 1.0) return best;
+    }
+  }
+
+  return best;
+}
+
+/**
  * Replace the first verbatim occurrence of `original` in `content` with
  * `replacement`. Mirrors the disabled-state check so Apply and the
  * re-evaluation logic in the card share one code path.
