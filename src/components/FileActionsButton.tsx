@@ -5,6 +5,7 @@ import { useStore, useCurrentDocument } from '@/store/useStore';
 import type { OcrLang, OcrProgress } from '@/utils/ocr';
 import { formatOcrAsMarkdown } from '@/utils/ocrMarkdown';
 import { downloadTextFile, sanitizeFilename } from '@/utils/storage';
+import { buildDocumentBackup, serialiseDocumentBackup } from '@/utils/backup';
 
 const VIEWPORT_PAD = 8;
 const POPOVER_WIDTH = 288; // Tailwind w-72
@@ -85,6 +86,13 @@ interface ImportMediaButtonProps {
 export function FileActionsButton({ disabled = false }: ImportMediaButtonProps) {
   const api = useStore((s) => s.api);
   const currentDoc = useCurrentDocument();
+  // Pulled from the store for the JSON backup export. Independent
+  // selectors so a typing keystroke in the editor does not re-render
+  // this button, but each call is a shallow read — cheap.
+  const documents = useStore((s) => s.documents);
+  const commentsByDoc = useStore((s) => s.comments);
+  const chatsByDoc = useStore((s) => s.chats);
+  const revisionsByDoc = useStore((s) => s.revisions);
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -177,6 +185,43 @@ export function FileActionsButton({ disabled = false }: ImportMediaButtonProps) 
     }
     const base = sanitizeFilename(currentDoc.title, 'untitled');
     downloadTextFile(`${base}.md`, currentDoc.content, 'text/markdown;charset=utf-8');
+  };
+
+  /**
+   * Export the current document as a JSON backup. The payload
+   * includes the document + its comments + chat history +
+   * revisions in one file so a user can move a working session
+   * between profiles / devices without losing context. Filename
+   * matches the existing `${title}.md` pattern with a `.json`
+   * extension.
+   *
+   * Same UX shape as `onExportClick`: surfaces an inline error
+   * when no document is open and does NOT close the popover so the
+   * error stays visible. The schema is versioned
+   * (`schema: 'apeditor-document-backup'`, `version: 1`) so a
+   * future re-importer can detect / upgrade older backups —
+   * v0.5.2 is write-only.
+   */
+  const onBackupClick = () => {
+    if (!currentDoc) {
+      setError('Open a document first, then export.');
+      return;
+    }
+    const backup = buildDocumentBackup({
+      documentId: currentDoc.id,
+      documents,
+      comments: commentsByDoc,
+      chats: chatsByDoc,
+      revisions: revisionsByDoc,
+      appVersion: import.meta.env.VITE_APP_VERSION ?? 'unknown',
+    });
+    if (!backup) return;
+    const base = sanitizeFilename(currentDoc.title, 'untitled');
+    downloadTextFile(
+      `${base}.json`,
+      serialiseDocumentBackup(backup),
+      'application/json;charset=utf-8'
+    );
   };
 
   const onFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -333,12 +378,29 @@ export function FileActionsButton({ disabled = false }: ImportMediaButtonProps) 
           <div className="text-[11px] text-paper-inkSoft dark:text-cyber-muted font-mono">
             Strategy: {strategyLabel}.
           </div>
-          {(!api.apiKey || !api.apiEndpoint) && (
-            <p className="text-[11px] text-paper-inkSoft dark:text-cyber-muted leading-snug">
-              Needs API key — open Settings to enable Markdown rewrite.
-              Bare OCR still works without a key.
-            </p>
-          )}
+          {/* Gated-state hint (Slice C). Surfaces WHY import will or
+              won't work without an API key — OCR runs locally, but
+              Markdown rewrite goes through the chat endpoint, which
+              needs one. Replaces the previous static "Needs API key"
+              paragraph with a flip that acknowledges both branches so
+              the user always knows which path they're on. */}
+          <p className="text-[11px] text-paper-inkSoft dark:text-cyber-muted leading-snug">
+            {api.apiKey && api.apiEndpoint ? (
+              <>
+                <span className="font-semibold text-cyber-clay dark:text-cyber-cyan">
+                  Key configured.
+                </span>{' '}
+                Files are OCR'd locally and rewritten as Markdown via your model before insertion.
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-cyber-warn">
+                  OCR works without an API key.
+                </span>{' '}
+                Adding one in Settings lets the recognised text be rewritten as Markdown before insertion. Without a key, raw text is inserted as-is.
+              </>
+            )}
+          </p>
           <div className="flex items-center justify-end pt-1">
             <button
               type="button"
@@ -375,6 +437,35 @@ export function FileActionsButton({ disabled = false }: ImportMediaButtonProps) 
               }
             >
               Export .md
+            </button>
+          </div>
+          <div className="border-t border-paper-hairline dark:border-cyber-border" />
+          {/* Section 3: Full JSON backup (added in v0.5.2). Same
+              structural template as the two sections above so the
+              popover keeps a consistent rhythm: header → two-sentence
+              description → primary CTA aligned right. */}
+          <div className="font-semibold text-sm text-cyber-clay dark:text-cyber-cyan uppercase tracking-wide">
+            Export full backup (JSON)
+          </div>
+          <p className="text-paper-inkSoft dark:text-cyber-muted leading-snug">
+            Download the document plus its comments, chat history,
+            and revisions as a single JSON file — useful before
+            clearing browser storage or switching devices.
+          </p>
+          <div className="flex items-center justify-end pt-1">
+            <button
+              type="button"
+              data-backup-toggle
+              className="btn-fire-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={onBackupClick}
+              disabled={!currentDoc}
+              title={
+                currentDoc
+                  ? 'Download a full JSON backup (document + comments + chat + revisions)'
+                  : 'Open a document first to export a backup'
+              }
+            >
+              Export .json
             </button>
           </div>
           <div className="flex items-center justify-end pt-2">
