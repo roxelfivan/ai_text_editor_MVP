@@ -346,7 +346,7 @@ comm -23 /tmp/defined.txt /tmp/used.txt
 
 These two files (~566 + ~521 LoC) are pure functions, zero React, zero DOM imports beyond the mirror-rect measurer in `comments.ts`. They are the gold standard for the rest of the codebase. Don't touch them.
 
-`utils/ocr.ts` (323 LoC) and `utils/pdf.ts` (91 LoC) are dynamically imported (via `ImportMediaButton.tsx`), so they don't bloat the main chunk. Don't touch them either.
+`utils/ocr.ts` (323 LoC) and `utils/pdf.ts` (91 LoC) are dynamically imported (via `FileActionsButton.tsx`, formerly `ImportMediaButton.tsx`), so they don't bloat the main chunk. Don't touch them either.
 
 `utils/diff.ts` (77 LoC), `utils/markdown.ts` (23 LoC), `utils/theme.ts` (12 LoC) are tiny and focused. Don't touch them.
 

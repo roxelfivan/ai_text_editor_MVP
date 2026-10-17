@@ -24,7 +24,7 @@ Feature release on top of [v0.4.9](https://github.com/roxelfivan/apeditor/releas
 - `src/utils/storage.ts` — added `downloadTextFile` + `sanitizeFilename`.
 - `src/utils/ocr.ts` — added `validateOcrBatch`, `formatOcrSize`, and three limit constants; pre-flight checks in `extractTextFromFiles` and `extractFromPdfFile`.
 - `src/utils/proposedEdit.ts` — added `findBestEffortAnchor` + `BestEffortAnchor` type.
-- `src/components/ImportMediaButton.tsx` — added `useCurrentDocument()`, `onExportClick`, and an Export section at the top of the popover.
+- `src/components/FileActionsButton.tsx` (formerly `ImportMediaButton.tsx`) — added `useCurrentDocument()`, `onExportClick`, and an Export section in the popover. The component was renamed because the toolbar button now exposes both Import and Export actions, not just Import; the popover icon (a page with up + down arrows) reflects that, and the `aria-label` / `title` / `data-file-actions-toggle` selector were updated in lockstep.
 - `src/components/ProposedEditCard.tsx` — added `bestEffortAnchor` memo, `pendingBestEffort` state + stale-span effect, `performReplace` helper, confirmation handlers, and the inline prompt JSX. `handleApply` routes between strict and best-effort paths.
 - `docs/UX_SLICE_1.md` — new document capturing the full slice design.
 

@@ -22,7 +22,8 @@
 import type { OcrResult, OcrRuntimeParamsInput } from '@paddleocr/paddleocr-js';
 // pdfjs-dist is large (~630KB minified). Load it only on the PDF path
 // so image-only imports (and the rest of the app) never pay that cost
-// up front. ImportMediaButton already dynamic-imports this whole module.
+// up front. FileActionsButton (formerly ImportMediaButton) already
+// dynamic-imports this whole module.
 
 /**
  * Subset of the PaddleOCR API we actually use. Whether PaddleOCR.create

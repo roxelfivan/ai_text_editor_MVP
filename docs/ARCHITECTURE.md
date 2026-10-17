@@ -110,7 +110,7 @@ Key files:
 | [`RevisionHistory.tsx`](components/RevisionHistory.tsx) | 232 | List + diff + restore + delete saved revisions. |
 | [`CommentComposer.tsx`](components/CommentComposer.tsx) | 246 | Floating composer for a new comment. Wraps `MentionInput`. |
 | [`CommentLayer.tsx`](components/CommentLayer.tsx) | 155 | Mirror overlay that paints `<mark>` highlights behind the textarea. Forwards ref to `getSelectionRect`. |
-| [`ImportMediaButton.tsx`](components/ImportMediaButton.tsx) | 348 | Pick image/PDF → OCR (PaddleOCR) or text extract (pdfjs) → re-format via LLM. Dynamic-imports heavy deps. |
+| [`FileActionsButton.tsx`](components/FileActionsButton.tsx) (formerly `ImportMediaButton.tsx`) | — | Pick image/PDF → OCR (PaddleOCR) or text extract (pdfjs) → re-format via LLM, OR download the current document as Markdown. Dynamic-imports heavy deps. |
 | [`PromptLibrary.tsx`](components/PromptLibrary.tsx) | 174 | Saved prompt CRUD + `{{selection}}` placeholder. |
 | [`HelpDocs.tsx`](components/HelpDocs.tsx) | 185 | In-app viewer for the 14 pages under `docs/`. Theme follows the app. |
 | [`Sidebar.tsx`](components/Sidebar.tsx) | 156 | Document list, rename inline, delete with confirm. |
@@ -242,7 +242,7 @@ After `Apply`, `recordAppliedEdit` re-anchors the comment to the **adopted repla
 
 ## 6. Cross-component communication — the `mvp:*` event bus
 
-`App.tsx`, `Editor.tsx`, `ChatPanel.tsx`, `PromptLibrary.tsx`, `HelpDocs.tsx`, and `ImportMediaButton.tsx` use `window.dispatchEvent(new CustomEvent('mvp:…'))` to coordinate without importing each other. Single source of truth: the comments in each dispatcher / listener. To find every event:
+`App.tsx`, `Editor.tsx`, `ChatPanel.tsx`, `PromptLibrary.tsx`, `HelpDocs.tsx`, and `FileActionsButton.tsx` (formerly `ImportMediaButton.tsx`) use `window.dispatchEvent(new CustomEvent('mvp:…'))` to coordinate without importing each other. Single source of truth: the comments in each dispatcher / listener. To find every event:
 
 ```bash
 rg "mvp:" src/ --type ts --type tsx -n
@@ -253,7 +253,7 @@ rg "mvp:" src/ --type ts --type tsx -n
 | `mvp:editor-selection` | `Editor.tsx` (via `mvp:get-selection` round-trip) | `ChatPanel.tsx` |
 | `mvp:get-selection` | `PromptLibrary.tsx` | `Editor.tsx` |
 | `mvp:fill-chat` | `PromptLibrary.tsx` | `ChatPanel.tsx` |
-| `mvp:insert-text` | `ImportMediaButton.tsx` | `Editor.tsx` |
+| `mvp:insert-text` | `FileActionsButton.tsx` (formerly `ImportMediaButton.tsx`) | `Editor.tsx` |
 | `mvp:accept-completion` | `useInlineCompletion.ts` (`accept`) | `Editor.tsx` |
 | `mvp:select-range` | `ChatPanel.tsx` (after `Apply All`) | `Editor.tsx` |
 | `mvp:send-comments` | `Editor.tsx` (CommentTray "Send") | `ChatPanel.tsx` |

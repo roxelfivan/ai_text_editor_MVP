@@ -59,21 +59,30 @@ interface ImportMediaButtonProps {
 }
 
 /**
- * Import button + language picker for photos and PDFs. Click the button
- * to open a small popover with three language checkboxes (English,
- * Simplified Chinese, Traditional Chinese). At least one must stay
- * checked. The "Choose Import File(s)" button inside the popover opens
- * a multi-file picker; selected files are run through
- * `extractTextFromFiles`. On success the extracted text is sent to the
- * configured chat model and rewritten as reader-friendly Markdown, then
- * dispatched as a `mvp:insert-text` window event for the Editor. Raw
- * OCR is never pasted.
+ * Toolbar button that opens a popover with two file actions for the
+ * current document:
+ *   1. **Import** photos or PDFs — pick one or more files, the OCR
+ *      pipeline runs locally, the extracted text is rewritten as
+ *      reader-friendly Markdown by your configured chat model, then
+ *      inserted into the editor via a `mvp:insert-text` event. The
+ *      language picker is the three checkboxes (English, Simplified
+ *      Chinese, Traditional Chinese); at least one must stay checked.
+ *   2. **Export** the current document as Markdown — the only durable
+ *      off-tab backup of your writing today. Filename is the document
+ *      title, sanitised; defaults to `untitled.md`.
  *
- * Cleanup: after every batch the file input is reset to '' so the same
- * files can be re-picked without a refresh. The OCR util itself handles
- * revoking ObjectURLs, releasing canvases, and terminating the worker.
+ * The toolbar icon (a page with up + down arrows) intentionally reads
+ * as both directions rather than picking one; the toggle's
+ * `aria-label` and `title` mention Import first because that's the
+ * primary identity of the button, but Export is always visible inside
+ * the popover too.
+ *
+ * Cleanup: after every OCR batch the file input is reset to '' so the
+ * same files can be re-picked without a refresh. The OCR util itself
+ * handles revoking ObjectURLs, releasing canvases, and terminating the
+ * worker.
  */
-export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) {
+export function FileActionsButton({ disabled = false }: ImportMediaButtonProps) {
   const api = useStore((s) => s.api);
   const currentDoc = useCurrentDocument();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -95,7 +104,7 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
       if (popoverRef.current?.contains(target)) return;
       // Also ignore clicks on the toggle button itself (which controls `open`).
       const btn = (e.target as HTMLElement | null)?.closest(
-        '[data-import-media-toggle]'
+        '[data-file-actions-toggle]'
       );
       if (btn) return;
       setOpen(false);
@@ -237,15 +246,15 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
     <div ref={anchorRef} className="relative inline-flex items-center">
       <button
         type="button"
-        data-import-media-toggle
-        aria-label="Import text from photos or PDFs"
+        data-file-actions-toggle
+        aria-label="Document file actions — Import photos / PDFs or Export this document as Markdown"
         className="btn-icon-square disabled:opacity-50"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled || busy}
         title={
           busy
             ? 'Reading file…'
-            : 'Import text from photos or PDFs (OCR, then Markdown via your model)'
+            : 'Document file actions: Import photos / PDFs (OCR) or Export this document as Markdown'
         }
       >
         {busy ? (
@@ -257,7 +266,12 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-current opacity-50 animate-pulse" style={{ animationDelay: '300ms' }} />
           </span>
         ) : (
-          // Download-into-tray icon: arrow down into a tray.
+          // Document-with-arrows icon: a page (rectangle with a folded
+          // corner) flanked by an upward arrow (Export out) and a
+          // downward arrow (Import in). Reads as "this button handles
+          // both directions for a document" without picking one, so
+          // neither label is misleading. Stroke geometry matches the
+          // rest of the editor toolbar (16×16 viewBox, 1.5 stroke).
           <svg
             aria-hidden="true"
             viewBox="0 0 16 16"
@@ -268,9 +282,15 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path d="M8 2 L8 10" />
-            <path d="M4.5 6.5 L8 10 L11.5 6.5" />
-            <path d="M3 13 L13 13" />
+            {/* Up arrow (Export) — sits left of the page. */}
+            <path d="M2.5 7 L2.5 2.5" />
+            <path d="M1 4 L2.5 2.5 L4 4" />
+            {/* Page outline with a folded top-right corner. */}
+            <path d="M6 2 L11 2 L13.5 4.5 L13.5 14 L6 14 Z" />
+            <path d="M11 2 L11 4.5 L13.5 4.5" />
+            {/* Down arrow (Import) — sits right of the page. */}
+            <path d="M13.5 9 L13.5 13.5" />
+            <path d="M12 12 L13.5 13.5 L15 12" />
           </svg>
         )}
       </button>
@@ -279,37 +299,15 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
           ref={popoverRef}
           className="fixed z-40 w-72 max-w-[calc(100vw-1rem)] bg-paper-panel dark:bg-ape-panel border border-paper-hairline dark:border-cyber-border rounded shadow-ape-paper-lift dark:shadow-lg p-3 text-xs space-y-2 box-border"
         >
+          {/* Section 1: Import (primary identity of the toolbar button). */}
           <div className="font-semibold text-sm text-cyber-clay dark:text-cyber-cyan uppercase tracking-wide">
-            Export
+            Import photos / PDFs
           </div>
           <p className="text-paper-inkSoft dark:text-cyber-muted leading-snug">
-            Download this document as Markdown so you have a copy outside the browser.
-            Local-only storage can be cleared by the browser without warning.
-          </p>
-          <div className="flex items-center justify-end">
-            <button
-              type="button"
-              className="btn-ghost-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={onExportClick}
-              disabled={!currentDoc}
-              title={
-                currentDoc
-                  ? 'Download this document as Markdown'
-                  : 'Open a document first to export it'
-              }
-            >
-              Export .md
-            </button>
-          </div>
-          <div className="border-t border-paper-hairline dark:border-cyber-border" />
-          <div className="font-semibold text-sm text-cyber-clay dark:text-cyber-cyan uppercase tracking-wide">
-            OCR languages
-          </div>
-          <p className="text-paper-inkSoft dark:text-cyber-muted leading-snug">
-            Pick one or more images or PDF files. Recognition stays in
-            the browser. After a successful import the extracted text
-            is rewritten as readable Markdown using only the API key,
-            endpoint, and model from Settings — then inserted.
+            Pick one or more images or PDF files; recognition runs in
+            the browser, then the extracted text is rewritten as
+            readable Markdown via your configured model and inserted
+            into the editor.
           </p>
           <div className="space-y-1">
             {LANG_OPTIONS.map((opt) => {
@@ -335,20 +333,51 @@ export function ImportMediaButton({ disabled = false }: ImportMediaButtonProps) 
           <div className="text-[11px] text-paper-inkSoft dark:text-cyber-muted font-mono">
             Strategy: {strategyLabel}.
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+          <div className="flex items-center justify-end pt-1">
+            <button
+              type="button"
+              className="btn-fire-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={onPickClick}
+              disabled={busy}
+              title="Open the file picker — selected files are OCR'd, rewritten as Markdown, and inserted"
+            >
+              Choose Import File(s)
+            </button>
+          </div>
+          <div className="border-t border-paper-hairline dark:border-cyber-border" />
+          {/* Section 2: Export (the second action exposed by the same
+              toolbar button). Same primary CTA style as the Import
+              button above so the two sections feel symmetric. */}
+          <div className="font-semibold text-sm text-cyber-clay dark:text-cyber-cyan uppercase tracking-wide">
+            Export this document
+          </div>
+          <p className="text-paper-inkSoft dark:text-cyber-muted leading-snug">
+            Download the current document as Markdown so you have a
+            copy outside the browser; local storage can be cleared
+            without warning.
+          </p>
+          <div className="flex items-center justify-end pt-1">
+            <button
+              type="button"
+              className="btn-fire-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={onExportClick}
+              disabled={!currentDoc}
+              title={
+                currentDoc
+                  ? 'Download this document as Markdown'
+                  : 'Open a document first to export it'
+              }
+            >
+              Export .md
+            </button>
+          </div>
+          <div className="flex items-center justify-end pt-2">
             <button
               type="button"
               className="btn-cyan-sm"
               onClick={() => setOpen(false)}
             >
               Close
-            </button>
-            <button
-              type="button"
-              className="btn-fire-sm"
-              onClick={onPickClick}
-            >
-              Choose Import File(s)
             </button>
           </div>
           {error && (
