@@ -28,6 +28,9 @@ import { ResizeHandle } from '@/components/ResizeHandle';
 import { SUGGESTION_HEIGHT_KEY } from '@/utils/storage';
 import { useIsCommentSheet, useIsNarrow } from '@/hooks/useMediaQuery';
 
+/** sessionStorage flag: one-shot ⌘Z hint that undo is comment-ops only. */
+const CM_Z_HINT_KEY = 'apeditor:cm-z-hint';
+
 /**
  * After any code path that updates the controlled textarea's value
  * (`updateContent`, OCR insert, accept-completion, wrapSelection…),
@@ -703,7 +706,23 @@ export function Editor() {
       const ta = textareaRef.current;
       if (document.activeElement !== ta) return;
       const op = undoLastCommentOp();
-      if (!op) return; // empty; let the textarea's native undo run
+      if (!op) {
+        // Native textarea undo still runs. Teach once per tab that
+        // ApEditor's ⌘Z handler is comment-ops only.
+        try {
+          if (sessionStorage.getItem(CM_Z_HINT_KEY) !== '1') {
+            sessionStorage.setItem(CM_Z_HINT_KEY, '1');
+            setUndoToast({
+              message:
+                'Nothing to undo — ⌘Z only undoes comment ops in ApEditor',
+              at: Date.now(),
+            });
+          }
+        } catch {
+          /* private mode / quota */
+        }
+        return;
+      }
       e.preventDefault();
       setUndoToast({
         message:
