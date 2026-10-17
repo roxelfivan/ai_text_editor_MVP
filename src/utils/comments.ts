@@ -81,6 +81,34 @@ function withLatestRoundAnchor(
   return next;
 }
 
+/**
+ * Manually re-attach an outdated comment to a new editor range.
+ * Clears `outdated` on the comment and its latest round.
+ */
+export function reattachCommentToRange(
+  content: string,
+  comment: Comment,
+  start: number,
+  end: number
+): Comment | null {
+  if (
+    start < 0 ||
+    end <= start ||
+    end > content.length ||
+    start > content.length
+  ) {
+    return null;
+  }
+  const snippet = content.slice(start, end);
+  if (!snippet) return null;
+  return withLatestRoundAnchor(comment, {
+    start,
+    end,
+    snippet,
+    outdated: false,
+  });
+}
+
 export function reanchorComment(doc: string, comment: Comment): Comment {
   if (comment.outdated) {
     // Once outdated, skip auto-recovery — keep the flag until the

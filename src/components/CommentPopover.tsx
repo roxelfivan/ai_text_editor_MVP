@@ -66,6 +66,13 @@ interface Props {
   onSaveBody: (id: string, body: string, mentions: MentionToken[]) => void;
   /** Delete the comment. */
   onDelete: (id: string) => void;
+  /**
+   * Re-attach an outdated comment to the current editor selection.
+   * Disabled in the popover when there is no selection.
+   */
+  onReattach?: (id: string) => boolean;
+  /** Whether the editor currently has a non-empty selection to re-attach to. */
+  canReattach?: boolean;
   /** Close the popover. */
   onClose: () => void;
   /** Use the bottom-sheet layout on small viewports. */
@@ -89,6 +96,8 @@ export function CommentPopover({
   position,
   onSaveBody,
   onDelete,
+  onReattach,
+  canReattach,
   onClose,
   bottomSheet,
   containerBounds,
@@ -364,8 +373,8 @@ export function CommentPopover({
 
       {comment.outdated && (
         <div className="cm-popover__banner" role="alert">
-          The text you commented on moved or was deleted. Edit or
-          delete this comment.
+          The text you commented on moved or was deleted. Select the
+          new passage in the editor and Re-attach, or dismiss it.
         </div>
       )}
 
@@ -459,6 +468,24 @@ export function CommentPopover({
             >
               Delete
             </button>
+            {comment.outdated && onReattach && (
+              <button
+                type="button"
+                className="cm-popover__btn cm-popover__btn--ghost"
+                disabled={!canReattach}
+                title={
+                  canReattach
+                    ? 'Anchor this comment to the current editor selection'
+                    : 'Select the new passage in the editor first'
+                }
+                onClick={() => {
+                  if (onReattach(comment.id)) onClose();
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                Re-attach
+              </button>
+            )}
             <button
               type="button"
               className="cm-popover__btn cm-popover__btn--primary"

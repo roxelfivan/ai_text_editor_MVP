@@ -32,7 +32,11 @@ This undo is only for comment operations, not for typing in the document (the br
 
 ## Outdated comments
 
-If you heavily edit or delete the anchored text and ApEditor cannot find it again, the badge becomes **Outdated**. The popover explains that the text moved or was deleted. Edit the comment to re-attach it, or delete it.
+If you heavily edit or delete the anchored text and ApEditor cannot find it again, the badge becomes **Outdated**. The popover explains that the text moved or was deleted.
+
+- **Re-attach** — select the new passage in the editor, then click **Re-attach** on the popover.
+- **Delete** — remove one outdated comment.
+- **Dismiss outdated** on the tray — delete every outdated comment on this document (`⌘Z` undoes one at a time).
 
 Outdated comments are **not** included when you **Send to AI**.
 

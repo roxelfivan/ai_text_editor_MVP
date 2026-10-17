@@ -47,7 +47,7 @@ Type in the center pane. Your work auto-saves in the browser. Next to the title 
 ## Ask the AI to help
 
 1. Highlight a sentence in **Write** (or the Write side of **Split**).
-2. In Chat, leave **include selection** checked (it is on by default).
+2. In Chat, leave **include selection** checked (it is on by default). Check **selection only** if you do not want the rest of the document sent.
 3. Type a request, for example `Make this more concise.`
 4. Optionally type `@` to attach **another** document or its headings — see [Reference other documents](reference-other-documents.md).
 5. Click **Send**, or press `Ctrl+Enter` / `⌘Enter`.

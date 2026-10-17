@@ -8,6 +8,8 @@ export interface ChatMessage {
   content: string;
   // Optional context included at send time (e.g. selected text from the editor).
   selection?: string;
+  /** True when this turn omitted the document outline and sent only `selection`. */
+  selectionOnly?: boolean;
   /**
    * Optional provider-specific metadata attached at request-assembly
    * time. Currently used to thread Anthropic / OpenAI prompt-

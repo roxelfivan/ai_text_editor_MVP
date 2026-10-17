@@ -15,6 +15,8 @@ interface Props {
   sending?: boolean;
   /** Send handler. */
   onSend: () => void;
+  /** Delete every outdated comment on this document. */
+  onDismissOutdated?: () => void;
 }
 
 export function CommentTray({
@@ -22,6 +24,7 @@ export function CommentTray({
   outdatedCount,
   sending,
   onSend,
+  onDismissOutdated,
 }: Props) {
   if (count === 0) return null;
 
@@ -35,6 +38,17 @@ export function CommentTray({
     <div className="cm-tray" role="region" aria-label="Comment actions">
       <div className="cm-tray__row">
         <div className="cm-tray__label">{sendableLabel}</div>
+        {outdatedCount > 0 && onDismissOutdated && (
+          <button
+            type="button"
+            className="cm-tray__btn"
+            onClick={() => onDismissOutdated()}
+            disabled={sending}
+            title="Delete all outdated comments on this document. ⌘Z undoes one at a time."
+          >
+            Dismiss outdated
+          </button>
+        )}
         <button
           type="button"
           className={[
