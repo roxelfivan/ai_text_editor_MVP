@@ -55,9 +55,9 @@ Use the top-bar button. The choice is saved on this device.
 ## Two font sizes
 
 - **UI font size** — Settings slider (12–20 px). Scales menus, Chat, and chrome. Default is 14.
-- **Editor font size** — **−** / **+** on the editor toolbar (10–24 px). Only the document text. Default is 14.
+- **Editor font size** — **Size +** / **Size −** in the **Format** menu (10–24 px). Only the document text. Default is 14.
 
-Reset UI font size in Settings; editor size is only on the toolbar.
+Reset UI font size in Settings; editor size is only in the Format menu.
 
 ## What is remembered
 
