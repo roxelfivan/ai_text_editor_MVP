@@ -12,10 +12,57 @@
 > See [Credits](#credits) for details.
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/darrylschaefer/ai-text-editor/blob/main/LICENSE)
-[![v0.5.1](https://img.shields.io/badge/version-0.5.1-blueviolet.svg)](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.1)
+[![v0.5.2](https://img.shields.io/badge/version-0.5.2-blueviolet.svg)](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.2)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **Using the app?** Start with the [user guide](./docs/README.md), or click **?** in the top bar (in-app Help renders the same pages and follows Light / Dark mode).
+
+---
+
+## What's new in v0.5.2
+
+> Internal-only release: a sanity-pass over the codebase and a
+> long-term-sustainability refactor. **No user-visible behaviour
+> changes.** Production ships less debug noise; the store and the
+> `@`-mention parser live in single-responsibility files now.
+
+1. **Debug POSTs removed.** Four hardcoded `fetch('http://127.0.0.1:7578/ingest/...')`
+   blocks in the chat pipeline (useEffect mount, `mvp:send-comments`
+   entry + pre-docSnap/TDZ try-catch, `handleSend` entry) have been
+   deleted. They were remnants of a local substrate debug session
+   that had been forgotten in the source and would have shipped in
+   the production bundle. Nothing in the build pipeline was stripping
+   them. No external HTTP call now happens from any chat code path.
+2. **`useStore` split into 5 files.** The 1,485-line zustand store
+   (`src/store/useStore.ts`) is now:
+   - `src/store/types.ts` — the `StoreState` interface + types
+   - `src/store/defaults.ts` — provider presets, seed prompts, the
+     `Welcome` and `Ideas` starter documents
+   - `src/store/actions.ts` — the comment-round / undo / reanchor
+     implementations + their shared helpers (named exports, so
+     each one is unit-testable without instantiating the store)
+   - `src/store/store.ts` — the `create<StoreState>()(persist(...))`
+     wiring, light settings/document actions, and rehydration
+     migrations
+   - `src/store/useStore.ts` — a thin barrel that re-exports
+     `useStore`, `useCurrentDocument`, and `DEFAULT_SYSTEM_MESSAGE`
+     so the existing 11 import sites keep working unchanged
+3. **`@`-mention parser moved to `utils/`.** `parseMentions.ts`
+   lived at `src/components/mentions/parseMentions.ts` even though
+   it has zero React / DOM imports. `src/utils/proposedEdit.ts`
+   imported it from there — a `utils → components` layering
+   violation and a tree-shake time-bomb. The file now lives at
+   `src/utils/mentions/parseMentions.ts`; every caller
+   (`MentionInput`, `MentionChip`, `CommentPopover`, `ChatPanel`,
+   `proposedEdit`) imports from the new path. `npm run typecheck`
+   and `npm run build` are clean. Bundle size is unchanged
+   (≈790 kB for the main entry chunk).
+4. **Stray `void App;` removed** from `src/main.tsx` (leftover from
+   an earlier "suppress unused" experiment).
+
+No UI changed, no store schema changed, no migration is needed.
+Existing `localStorage` payloads continue to load exactly as in
+v0.5.1.
 
 ---
 
@@ -62,8 +109,8 @@
 Export Markdown, import size/page caps, and best-effort Apply
 shipped in v0.5.0 and stay as they were.
 
-See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.5.1
-and v0.5.0 changelogs.
+See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.5.2,
+v0.5.1, and v0.5.0 changelogs.
 
 ---
 
@@ -665,6 +712,7 @@ per-release notes also ship on the GitHub release pages.
 
 | Version | Highlights |
 | --- | --- |
+| [v0.5.2](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.2) | **Internal / sustainability.** Removed four hardcoded debug POSTs from the chat pipeline (production-leak fix). Split the 1,485-line `useStore` into 5 single-responsibility files. Moved the `@`-mention parser to `utils/`. No UI or store-schema changes; no migration. |
 | [v0.5.1](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.1) | **Phase 1 + 2 UX.** Format-menu font-size docs, gated-state tooltips, ⌘Z comment-ops toast; Chat **selection only**, outbound secret redaction, outdated **Dismiss** / **Re-attach**, session-only API key. |
 | [v0.5.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0) | **Export Markdown** from the file-actions popover, import size and page caps with friendly errors, inline confirmation prompt for best-effort Apply when the AI quote is gone. **Popover alignment pass** + component rename `ImportMediaButton` → `FileActionsButton`. |
 | [v0.4.9](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9) | Unified **Format** dropdown (B/I/U + font size), draggable Chat panel messages/input split, draggable Original / Proposed columns in every **ProposedEditCard**. |

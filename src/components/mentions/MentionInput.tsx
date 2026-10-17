@@ -33,7 +33,7 @@ import {
   serializeRawWithMentions,
   plainTextDiff,
   type MentionPosition,
-} from './parseMentions';
+} from '@/utils/mentions/parseMentions';
 import { MentionChip } from './MentionChip';
 import { DocPicker } from './DocPicker';
 import { SectionPicker } from './SectionPicker';

@@ -1,5 +1,5 @@
 import type { MentionToken, ProposedEdit } from '@/types';
-import { parseMentions as parseMentionsFromSentinels } from '@/components/mentions/parseMentions';
+import { parseMentions as parseMentionsFromSentinels } from '@/utils/mentions/parseMentions';
 
 export type ProposedEditSegment =
   | { kind: 'text'; payload: string }

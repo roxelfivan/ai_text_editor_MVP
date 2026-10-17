@@ -14,7 +14,7 @@ import { remarkPlugins, rehypePlugins } from '@/utils/markdown';
 import { buildGoogleAiModeUrl } from '@/utils/googleAiMode';
 import { requiresApiKey } from '@/config/providers';
 import { MentionInput } from '@/components/mentions/MentionInput';
-import { parseMentions } from '@/components/mentions/parseMentions';
+import { parseMentions } from '@/utils/mentions/parseMentions';
 import { CHAT_MESSAGES_HEIGHT_KEY } from '@/utils/storage';
 import { useIsNarrow } from '@/hooks/useMediaQuery';
 
@@ -110,9 +110,6 @@ export function ChatPanel() {
   // Listen for selection events from the editor, fill-chat from PromptLibrary,
   // and window resize to re-clamp the chat width against the 2/3 viewport cap.
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f49967'},body:JSON.stringify({sessionId:'f49967',location:'ChatPanel.tsx:useEffect-mount',message:'ChatPanel useEffect mounting; listener re-registered',data:{deps:{currentDocumentId,streaming,mentionsLen:mentions.length}},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const onSel = (e: Event) => {
       const detail = (e as CustomEvent<{ text: string }>).detail;
       setSelection(detail?.text ?? '');
@@ -136,9 +133,6 @@ export function ChatPanel() {
     // comments, append it, then stream the assistant reply through
     // the same pipeline as a normal chat send.
     const onSendComments = async (e: Event) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f49967'},body:JSON.stringify({sessionId:'f49967',location:'ChatPanel.tsx:onSendComments-entry',message:'mvp:send-comments handler entered',data:{hasDetail:!!e,type:typeof e},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const detail = (
         e as CustomEvent<{
           commentIds: string[];
@@ -147,16 +141,6 @@ export function ChatPanel() {
       ).detail;
       if (!detail || !Array.isArray(detail.commentIds)) return;
       if (!currentDocumentId || streaming) return;
-      // #region agent log
-      try {
-        // Try to read `documentLookup` here - if it's in TDZ, we'll see a synchronous throw.
-        const _lookup = documentLookup;
-        fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f49967'},body:JSON.stringify({sessionId:'f49967',location:'ChatPanel.tsx:onSendComments-preDocSnap',message:'onSendComments: pre-docSnap; documentLookup is a function',data:{currentDocumentId,docLookupType:typeof _lookup,mentionsLen:mentions.length},timestamp:Date.now()})}).catch(()=>{});
-      } catch (err) {
-        fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f49967'},body:JSON.stringify({sessionId:'f49967',location:'ChatPanel.tsx:onSendComments-docLookupTDZ',message:'TDZ accessing documentLookup in onSendComments',data:{err:String(err),errName:(err as Error)?.name,errMsg:(err as Error)?.message},timestamp:Date.now()})}).catch(()=>{});
-        throw err;
-      }
-      // #endregion
       const docSnap = useStore
         .getState()
         .documents.find((d) => d.id === currentDocumentId);
@@ -407,9 +391,6 @@ export function ChatPanel() {
     useStore.getState().documents.find((d) => d.id === id) ?? null;
 
   const handleSend = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7578/ingest/bd956ca3-785d-4fc6-a9b7-20b3719fbe69',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f49967'},body:JSON.stringify({sessionId:'f49967',location:'ChatPanel.tsx:handleSend-entry',message:'handleSend entered',data:{hasInput:!!input,inputLen:input.length,mentionsLen:mentions.length,isKeyless:!requiresApiKey(api.provider)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!currentDocumentId) return;
     // Strip mention sentinels from the displayed text so the user
     // message that gets persisted / sent to the model does not carry

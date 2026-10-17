@@ -13,6 +13,12 @@
 // spaces are defensive — they make the sentinel survive most editors'
 // whitespace handling and keep the chip's bounding box from collapsing
 // when nothing else lives on the line.
+//
+// Moved from `src/components/mentions/parseMentions.ts` so the
+// `utils/` layer can depend on the mention parser without having to
+// import across into `components/` (which would invert the
+// `utils → components` layering rule and create a circular-import
+// time-bomb the day tree-shaking is tightened up).
 
 import type { MentionToken } from '@/types';
 

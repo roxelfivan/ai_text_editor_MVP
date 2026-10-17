@@ -1,3 +1,83 @@
+## v0.5.2 — Codebase sanity pass + long-term sustainability refactor
+
+Internal-only release on top of [v0.5.1](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.1). No user-visible behaviour changes; one shipped bug-fix (a debug-instrumentation leak in the production bundle) plus a layered refactor of the two files that had grown to the point of blocking sustainable development. UI, store schema, and `localStorage` payloads are unchanged; no migration is required to upgrade.
+
+### Fixed
+
+- **Debug POSTs stripped from production.** Four hardcoded `fetch('http://127.0.0.1:7578/ingest/...')` blocks had been left behind in `src/components/ChatPanel.tsx` by an earlier substrate debug session. None of them were gated behind a `process.env.NODE_ENV !== 'production'` check, so they would have shipped in the production bundle and made every chat key on every send try to hit a localhost ingest endpoint. They have been removed. No external HTTP call now happens from any chat code path — the only outbound network traffic is the user-initiated `/chat/completions` request. Also: removed a stray `void App;` in `src/main.tsx` that was a leftover suppress-unused-import experiment.
+
+### Changed
+
+- **`src/store/useStore.ts` split into 5 single-responsibility files.** The 1,485-line zustand store is now:
+  - `src/store/types.ts` — the `StoreState` + `EditorFocusState` interfaces and the `DEFAULT_SYSTEM_MESSAGE` re-export. Importable on its own so future modules / tests can take a typed state dependency without paying for the implementation.
+  - `src/store/defaults.ts` — the build-time `initialProvider`, `defaultApiConfig`, the seed prompt library, and the `Welcome` / `Ideas` starter documents. Onboarding tweaks no longer have to touch the store wiring.
+  - `src/store/actions.ts` — the comment-round / undo / reanchor action implementations, plus their shared helpers (`pushUndoOp`, `findCommentEntry`, `replaceComment`, `ensureRoundsShape`, `markLatestRoundSent`, `findCommentForEdit`, `snippetOverlapScore`). Every action is a named export now, so each one can be unit-tested independently of the store.
+  - `src/store/store.ts` — the `create<StoreState>()(persist(...))` wiring, the lightweight settings/document actions, the `partialize` shape, and the rehydration migrations. Also hosts `useCurrentDocument`.
+  - `src/store/useStore.ts` — a thin barrel that re-exports `useStore`, `useCurrentDocument`, and `DEFAULT_SYSTEM_MESSAGE` so the existing 11 import sites (`App.tsx`, `Sidebar.tsx`, `SettingsModal.tsx`, `Editor.tsx`, `ChatPanel.tsx`, etc.) keep working unchanged.
+- **`@`-mention parser moved to `utils/`.** `src/components/mentions/parseMentions.ts` has zero React / DOM imports, but `src/utils/proposedEdit.ts` was importing it from `components/` — a `utils → components` layering violation and a tree-shake time-bomb the day someone tightens bundling. The module now lives at `src/utils/mentions/parseMentions.ts`. Every caller (`MentionInput`, `MentionChip`, `CommentPopover`, `ChatPanel`, `proposedEdit`) imports from the new path. The old file is deleted.
+
+### Behaviour that did NOT change
+
+- **No UI changes.** All keyboard shortcuts, gating, panels, modals, and theme behaviour are exactly as they were in v0.5.1.
+- **No store-schema changes.** The `persist` `partialize` shape is byte-identical, so existing `localStorage` payloads continue to load with no migration.
+- **No provider / API changes.** OpenAI-compatible stream-parsing, Anthropic / OpenAI prompt caching, outbound secret redaction, selection-only mode, and everything in `src/api/chat.ts` is untouched.
+- **No OCR / import / export changes.** The `import('@/utils/ocr')` dynamic import boundary, the 50 MB / 500-page / 200 MB caps, and the Export Markdown downloader are all as in v0.5.0 / v0.5.1.
+- **All comment-round / undo / reanchor logic is byte-identical.** The action implementations were cut and pasted verbatim into `actions.ts`; only their location changed.
+
+### Internal
+
+- New / refactored files: `src/store/types.ts`, `src/store/defaults.ts`, `src/store/actions.ts`, `src/store/store.ts`, `src/utils/mentions/parseMentions.ts`.
+- Deleted files: `src/components/mentions/parseMentions.ts` (relocated).
+- Deleted code: the four debug POSTs in `src/components/ChatPanel.tsx` (useEffect mount, `mvp:send-comments` entry, `mvp:send-comments` pre-docSnap + TDZ try/catch, `handleSend` entry) and the `void App;` line in `src/main.tsx`.
+- README updated: new `## What's new in v0.5.2` block at the top, version badge bumped to `v0.5.2`.
+
+### Verification
+
+- `npm run typecheck` — clean.
+- `npm run build` — clean. Main entry chunk is 790.43 kB (was 791.91 kB in v0.5.1 — a 1.5 kB reduction from the deleted debug code; OCR / pdfjs / worker-entry chunks are unchanged).
+
+---
+
+## v0.5.3 — Per-comment re-link picker for stale comments
+
+Adoption slice **C** from the UX-roadmap adoption plan ([tmp/ux-enhancement-adoption.md](https://github.com/roxelfivan/apeditor/blob/main/tmp/ux-enhancement-adoption.md)). Completes the comment lifecycle: v0.5.1 added "no longer anchored" badge copy + a bulk *Dismiss outdated*; this slice adds per-comment **Re-link** + **Dismiss** controls on the tray, plus an inline picker for choosing a new anchor. Same prompt / store / LLM-facing contracts as v0.5.1.
+
+### Added
+
+- **Per-row stale list in the comment tray.** When the document has any outdated comments, the tray now grows a collapsed-by-default *"N stale comments — Re-link or Dismiss"* expandable list. Each row shows the original snippet, a **Re-link** button, and a **Dismiss** button. A small *Dismiss all* (the previous bulk action) lives in the row header so the swept-everything path is still one click.
+- **`ReanchorPicker` modal.** A new picker component (renders in the editor pane, mirrors `SectionPicker`'s visual style) lists the current document's heading structure (or its paragraphs when there are no headings). Selecting a row emits the byte `(start, end)` of that slice and calls the existing `reattachComment(id, { start, end })` store action. Keyboard: `↑` / `↓` to move, `Enter` to confirm, `Esc` to cancel.
+- **`isCommentStale(comment, content)` helper.** New pure export from `src/utils/comments.ts` that mirrors the strategies used by `reanchorComment` so a UI surface can flag stale rows without mutating anything. Same predicate the tray uses.
+
+### Changed
+
+- **Comment tray UX.** The bulk *Dismiss outdated* button is demoted to a secondary *Dismiss all* action on the stale list header — the new per-row *Dismiss* is now the fastest single-comment path.
+
+### Behaviour that did NOT change
+
+- Comment body editing, rounds, rationales, applied-edit recording.
+- Bulk *Send to AI* batch (Send button still works the same way).
+- The `popover` *Re-attach* affordance on outdated comments (uses the editor's current selection) — the tray picker is a complementary path that does not need a pre-existing selection.
+- All prompt, store, and LLM-facing contracts.
+
+### Internal
+
+- `src/utils/comments.ts` — new `isCommentStale(comment, content): boolean` export. Mirrors strategies 1 + 3 of `reanchorComment` and short-circuits on already-flagged comments.
+- `src/components/ReanchorPicker.tsx` — new component. Heading sections (or paragraph fallback) rendered as rows; emits `{ start, end, label }`. Reuses the `.mention-popover` CSS classes so the picker is visually consistent with the @-section picker.
+- `src/components/CommentTray.tsx` — extended with `outdatedComments`, `onDismissOne`, `onReanchor` props. When both per-row callbacks are provided, the old bulk `Dismiss outdated` button is replaced with the new expandable stale list. Callers that only pass `onDismissOutdated` keep the v0.5.1 UX unchanged.
+- `src/components/Editor.tsx` — wires the picker: new `reanchorFor` state (`{ commentId, anchor }`) opened from the tray's `onReanchor`, closed by confirm / cancel. Reuses the existing `reattachComment` action so the undo stack gets an `update-body` op and ⌘Z reverts cleanly.
+- `src/index.css` — new `.cm-tray__btn--ghost`, `.cm-tray__stale*`, `.cm-stale-list*`, and `.relink-picker` rules. Light + dark theme parity, matched to the existing tray palette.
+
+### Verification
+
+- `npx tsc --noEmit -p tsconfig.app.json` — clean.
+- `npm run build` — clean.
+- Manual:
+  - Edit a document so a comment's anchor moves; reload ApEditor → comment flips to **Outdated**. Open the comment tray → the stale list appears collapsed. Click the caret → list expands with one row showing the snippet, **Re-link** + **Dismiss** buttons. Click *Dismiss* → row disappears, the bulk *Send to AI* count drops by one. ⌘Z → row reappears.
+  - Same starting state. Click *Re-link* → the picker modal opens in the editor pane with the document's headings listed (or paragraphs when there are no headings). `↓` to a heading, `Enter` → the picker closes, the comment's anchor updates to the chosen slice, the badge moves to the new location. The undo toast *"Comment re-anchored — ⌘Z to revert"* briefly appears. ⌘Z → comment flips back to outdated and the old anchor is restored.
+  - Same starting state with all comments outdated. Click *Dismiss all* in the row header → every outdated comment is removed in one gesture; each can still be restored one-by-one via ⌘Z.
+
+---
+
 ## v0.5.1 — Phase 1 polish + Phase 2 daily friction
 
 Patch on [v0.5.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0). Completes UX **Phase 1** (docs, gated-state tooltips, ⌘Z teaching toast) and **Phase 2** (selection-only send, outbound secret redaction, outdated-comment dismiss/re-attach, session-only API key). Export Markdown, import caps, and best-effort Apply stay as in v0.5.0.

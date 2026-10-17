@@ -17,7 +17,7 @@ import {
   buildEditableMentionBody,
   parseMentions,
   parseMentionsWithRanges,
-} from '@/components/mentions/parseMentions';
+} from '@/utils/mentions/parseMentions';
 import { MentionInput } from '@/components/mentions/MentionInput';
 import {
   COMMENT_HARD_CAP,

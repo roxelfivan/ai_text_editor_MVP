@@ -9,7 +9,7 @@
 // the × button.
 
 import type { MentionToken } from '@/types';
-import { summarizeMention } from './parseMentions';
+import { summarizeMention } from '@/utils/mentions/parseMentions';
 
 interface Props {
   token: MentionToken;
