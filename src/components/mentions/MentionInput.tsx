@@ -623,13 +623,6 @@ export function MentionInput({
     return () => window.removeEventListener('mousedown', onDown);
   }, [popover]);
 
-  // Force re-layout when the chip list size changes so the textarea
-  // height adjusts (the chips live in a row above the textarea; the
-  // textarea reserves its own height and the chips wrap).
-  useLayoutEffect(() => {
-    // No-op for now — kept as a hook anchor for future layout work.
-  }, [mentions.length]);
-
   // Recompute the chip overlay rects whenever the plain text, the
   // mention positions, or the textarea dimensions change. We use
   // `measureRange` (a hidden mirrored div) to get the pixel rect of
