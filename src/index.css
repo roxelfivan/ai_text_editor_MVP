@@ -1490,6 +1490,148 @@ html.dark .cm-tray__btn--primary:disabled {
   border-color: #2a2825;
 }
 
+/* Slice C: ghost variant of the tray button — quieter than the
+   primary CTA but matches the size + shape so the per-row Re-link /
+   Dismiss buttons line up with Dismiss outdated. */
+.cm-tray__btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: #514a3e;
+}
+.cm-tray__btn--ghost:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+html.dark .cm-tray__btn--ghost {
+  background: transparent;
+  color: #c8c2b3;
+}
+html.dark .cm-tray__btn--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+/* Compact variant for the per-row action pair so two buttons line up
+   next to the snippet without growing the row vertically. */
+.cm-tray__btn--ghost.cm-tray__btn--ghost {
+  padding: 4px 8px;
+  min-height: 28px;
+  font-size: 12px;
+}
+
+/* Slice C: per-row stale-comment list under the tray. */
+.cm-tray__stale {
+  margin-top: 8px;
+  border-top: 1px dashed #e5dfd3;
+  padding-top: 6px;
+}
+html.dark .cm-tray__stale {
+  border-top-color: #2a2825;
+}
+.cm-tray__stale-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  color: #514a3e;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 4px 0;
+  cursor: pointer;
+}
+html.dark .cm-tray__stale-toggle {
+  color: #c8c2b3;
+}
+.cm-tray__stale-caret {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  width: 12px;
+  text-align: center;
+}
+.cm-tray__stale-bulk {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 1px dashed #b8ad9a;
+  border-radius: 3px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a8070;
+  cursor: pointer;
+}
+.cm-tray__stale-bulk:hover {
+  color: #a83232;
+  border-color: #a83232;
+}
+html.dark .cm-tray__stale-bulk {
+  border-color: #4a4540;
+  color: #8a8070;
+}
+.cm-stale-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cm-stale-list__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid #e5dfd3;
+  border-radius: 4px;
+  background: #fffdf8;
+  font-size: 12px;
+}
+html.dark .cm-stale-list__row {
+  border-color: #2a2825;
+  background: #1c1a17;
+}
+.cm-stale-list__num {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #8a8070;
+  min-width: 14px;
+  text-align: right;
+}
+.cm-stale-list__snippet {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #514a3e;
+}
+html.dark .cm-stale-list__snippet {
+  color: #c8c2b3;
+}
+.cm-stale-list__actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* ReanchorPicker — section-picker UX for re-anchoring a stale
+   comment. Reuses `.mention-popover*` styles so the affordance
+   reads as the same family as the @-section picker; only the
+   per-row preview (used when a heading has body text under it) is
+   new. */
+.relink-picker {
+  min-width: 360px;
+}
+.mention-popover__row-preview {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #8a8070;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html.dark .mention-popover__row-preview {
+  color: #6a6358;
+}
+
 /* Undo toast. Surfaces after a comment op is undone (delete / body
    edit). Auto-clears after 4 s; click-to-dismiss. */
 .cm-undo-toast {

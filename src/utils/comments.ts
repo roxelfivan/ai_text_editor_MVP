@@ -549,6 +549,42 @@ export function clampCommentBody(body: string): string {
 }
 
 /**
+ * Predicate: is this comment's latest-round anchor no longer findable
+ * in `content`? Mirrors the strategies used by `reanchorComment` so
+ * a UI surface (e.g. `CommentTray`) can flag stale rows without
+ * mutating anything.
+ *
+ * Returns `false` for comments that are already `outdated: true`
+ * (the same answer they would get from running the re-anchor pass),
+ * so callers can rely on the predicate without first checking the
+ * flag.
+ *
+ * Pure. No React / DOM imports.
+ */
+export function isCommentStale(comment: Comment, content: string): boolean {
+  // Already-flagged comments stay stale; the re-anchor pass skips
+  // them entirely so the predicate has to short-circuit too.
+  if (comment.outdated) return true;
+
+  const snippet = comment.snippet;
+  if (!snippet) return true;
+
+  // Strategy 1: byte-exact match at the current offsets.
+  if (
+    comment.start >= 0 &&
+    comment.end <= content.length &&
+    comment.end > comment.start &&
+    content.slice(comment.start, comment.end) === snippet
+  ) {
+    return false;
+  }
+  // Strategy 2: full-document fuzzy match via the same helper the
+  // re-anchor pass uses (`findEditAnchor` handles whitespace /
+  // Setext / ATX / escape drift).
+  return findEditAnchor(content, snippet) === null;
+}
+
+/**
  * Clamp a box's top-left corner so the entire box stays inside a
  * container rectangle, with a configurable `padding` margin. Used by
  * the composer and popover so the floating dialog never escapes the

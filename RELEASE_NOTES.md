@@ -1,3 +1,43 @@
+## v0.5.3 — Per-comment re-link picker for stale comments
+
+Adoption slice **C** from the UX-roadmap adoption plan ([tmp/ux-enhancement-adoption.md](https://github.com/roxelfivan/apeditor/blob/main/tmp/ux-enhancement-adoption.md)). Completes the comment lifecycle: v0.5.1 added "no longer anchored" badge copy + a bulk *Dismiss outdated*; this slice adds per-comment **Re-link** + **Dismiss** controls on the tray, plus an inline picker for choosing a new anchor. Same prompt / store / LLM-facing contracts as v0.5.1.
+
+### Added
+
+- **Per-row stale list in the comment tray.** When the document has any outdated comments, the tray now grows a collapsed-by-default *"N stale comments — Re-link or Dismiss"* expandable list. Each row shows the original snippet, a **Re-link** button, and a **Dismiss** button. A small *Dismiss all* (the previous bulk action) lives in the row header so the swept-everything path is still one click.
+- **`ReanchorPicker` modal.** A new picker component (renders in the editor pane, mirrors `SectionPicker`'s visual style) lists the current document's heading structure (or its paragraphs when there are no headings). Selecting a row emits the byte `(start, end)` of that slice and calls the existing `reattachComment(id, { start, end })` store action. Keyboard: `↑` / `↓` to move, `Enter` to confirm, `Esc` to cancel.
+- **`isCommentStale(comment, content)` helper.** New pure export from `src/utils/comments.ts` that mirrors the strategies used by `reanchorComment` so a UI surface can flag stale rows without mutating anything. Same predicate the tray uses.
+
+### Changed
+
+- **Comment tray UX.** The bulk *Dismiss outdated* button is demoted to a secondary *Dismiss all* action on the stale list header — the new per-row *Dismiss* is now the fastest single-comment path.
+
+### Behaviour that did NOT change
+
+- Comment body editing, rounds, rationales, applied-edit recording.
+- Bulk *Send to AI* batch (Send button still works the same way).
+- The `popover` *Re-attach* affordance on outdated comments (uses the editor's current selection) — the tray picker is a complementary path that does not need a pre-existing selection.
+- All prompt, store, and LLM-facing contracts.
+
+### Internal
+
+- `src/utils/comments.ts` — new `isCommentStale(comment, content): boolean` export. Mirrors strategies 1 + 3 of `reanchorComment` and short-circuits on already-flagged comments.
+- `src/components/ReanchorPicker.tsx` — new component. Heading sections (or paragraph fallback) rendered as rows; emits `{ start, end, label }`. Reuses the `.mention-popover` CSS classes so the picker is visually consistent with the @-section picker.
+- `src/components/CommentTray.tsx` — extended with `outdatedComments`, `onDismissOne`, `onReanchor` props. When both per-row callbacks are provided, the old bulk `Dismiss outdated` button is replaced with the new expandable stale list. Callers that only pass `onDismissOutdated` keep the v0.5.1 UX unchanged.
+- `src/components/Editor.tsx` — wires the picker: new `reanchorFor` state (`{ commentId, anchor }`) opened from the tray's `onReanchor`, closed by confirm / cancel. Reuses the existing `reattachComment` action so the undo stack gets an `update-body` op and ⌘Z reverts cleanly.
+- `src/index.css` — new `.cm-tray__btn--ghost`, `.cm-tray__stale*`, `.cm-stale-list*`, and `.relink-picker` rules. Light + dark theme parity, matched to the existing tray palette.
+
+### Verification
+
+- `npx tsc --noEmit -p tsconfig.app.json` — clean.
+- `npm run build` — clean.
+- Manual:
+  - Edit a document so a comment's anchor moves; reload ApEditor → comment flips to **Outdated**. Open the comment tray → the stale list appears collapsed. Click the caret → list expands with one row showing the snippet, **Re-link** + **Dismiss** buttons. Click *Dismiss* → row disappears, the bulk *Send to AI* count drops by one. ⌘Z → row reappears.
+  - Same starting state. Click *Re-link* → the picker modal opens in the editor pane with the document's headings listed (or paragraphs when there are no headings). `↓` to a heading, `Enter` → the picker closes, the comment's anchor updates to the chosen slice, the badge moves to the new location. The undo toast *"Comment re-anchored — ⌘Z to revert"* briefly appears. ⌘Z → comment flips back to outdated and the old anchor is restored.
+  - Same starting state with all comments outdated. Click *Dismiss all* in the row header → every outdated comment is removed in one gesture; each can still be restored one-by-one via ⌘Z.
+
+---
+
 ## v0.5.1 — Phase 1 polish + Phase 2 daily friction
 
 Patch on [v0.5.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0). Completes UX **Phase 1** (docs, gated-state tooltips, ⌘Z teaching toast) and **Phase 2** (selection-only send, outbound secret redaction, outdated-comment dismiss/re-attach, session-only API key). Export Markdown, import caps, and best-effort Apply stay as in v0.5.0.

@@ -4,6 +4,7 @@ import { v4 as uuid } from 'uuid';
 import { useStore, useCurrentDocument } from '@/store/useStore';
 import { FileActionsButton } from '@/components/FileActionsButton';
 import { useInlineCompletion } from '@/hooks/useInlineCompletion';
+import { useDocumentMentions } from '@/hooks/useDocumentMentions';
 import {
   useDragResize,
   clamp,
@@ -24,6 +25,10 @@ import { CommentMargin } from '@/components/CommentMargin';
 import { CommentComposer } from '@/components/CommentComposer';
 import { CommentPopover } from '@/components/CommentPopover';
 import { CommentTray } from '@/components/CommentTray';
+import {
+  ReanchorPicker,
+  type ReanchorPick,
+} from '@/components/ReanchorPicker';
 import { ResizeHandle } from '@/components/ResizeHandle';
 import { SUGGESTION_HEIGHT_KEY } from '@/utils/storage';
 import { useIsCommentSheet, useIsNarrow } from '@/hooks/useMediaQuery';
@@ -121,6 +126,15 @@ export function Editor() {
   const undoLastCommentOp = useStore((s) => s.undoLastCommentOp);
   // `commentUndoStack` is read for the Undo affordance in the tray.
   const commentUndoDepth = useStore((s) => s.commentUndoStack.length);
+
+  // Slice C: same paragraph / heading helpers MentionInput uses so the
+  // ReanchorPicker renders the current document's outline. Memoized
+  // by doc id — re-derives only on document switch.
+  const { getSections } = useDocumentMentions();
+  const headingSections = useMemo(
+    () => (doc ? getSections(doc.id) : []),
+    [doc, getSections]
+  );
   // Subscribe to the current document's focus state so the toolbar
   // "Comment" button can enable/disable itself when the user
   // changes the selection. The store keeps `selectionStart` and
@@ -156,6 +170,13 @@ export function Editor() {
   const [popoverPosition, setPopoverPosition] = useState<{
     left: number;
     top: number;
+  } | null>(null);
+  // Slice C: which comment is currently being re-anchored, and where
+  // the picker should land. Cleared on confirm / cancel so the
+  // picker mounts and unmounts in one user interaction.
+  const [reanchorFor, setReanchorFor] = useState<{
+    commentId: string;
+    anchor: { left: number; top: number };
   } | null>(null);
   // Mirrors the chat panel's `streaming` state via a window event so
   // the "Send to AI" button in `CommentTray` can dim itself while a
@@ -1642,6 +1663,9 @@ export function Editor() {
                 outdatedCount={
                   currentComments.filter((c) => c.outdated).length
                 }
+                // Slice C: pass the actual outdated comments so the
+                // tray can render the per-row Re-link / Dismiss list.
+                outdatedComments={currentComments.filter((c) => c.outdated)}
                 sending={chatStreaming}
                 onSend={handleSendToAi}
                 onDismissOutdated={() => {
@@ -1650,6 +1674,65 @@ export function Editor() {
                   setActiveCommentId(null);
                   setPopoverPosition(null);
                 }}
+                onDismissOne={(commentId) => {
+                  if (!doc) return;
+                  // Per-row Dismiss. deleteComment pushes a `kind:
+                  // 'delete'` undo op so ⌘Z restores the comment
+                  // unchanged. Closes any open popover/picker so the
+                  // user isn't left with stale state.
+                  deleteComment(commentId);
+                  setActiveCommentId(null);
+                  setPopoverPosition(null);
+                  setReanchorFor(null);
+                }}
+                onReanchor={(commentId) => {
+                  if (!doc) return;
+                  // Open the picker in the middle of the editor pane
+                  // (clamped to viewport via CSS). Re-using
+                  // `ReanchorPicker`'s `mention-popover` styles keeps
+                  // it visually consistent with the @-section picker
+                  // so users learn one affordance.
+                  const pane = writePaneRef.current?.getBoundingClientRect();
+                  const baseLeft = pane
+                    ? pane.left + pane.width / 2 - 160
+                    : window.innerWidth / 2 - 160;
+                  const baseTop = pane
+                    ? pane.top + 96
+                    : window.innerHeight / 2 - 180;
+                  setReanchorFor({
+                    commentId,
+                    anchor: {
+                      left: Math.max(8, baseLeft),
+                      top: Math.max(8, baseTop),
+                    },
+                  });
+                }}
+              />
+            )}
+            {/* Slice C: re-anchor picker. Renders only when the tray
+                asked for one — mounts/unmounts in one user gesture
+                so focus / keyboard state don't linger. */}
+            {reanchorFor && doc && (
+              <ReanchorPicker
+                docContent={doc.content}
+                sections={headingSections}
+                anchor={reanchorFor.anchor}
+                onConfirm={(pick: ReanchorPick) => {
+                  const ok = reattachComment(reanchorFor.commentId, {
+                    start: pick.start,
+                    end: pick.end,
+                  });
+                  if (ok) {
+                    setActiveCommentId(null);
+                    setPopoverPosition(null);
+                    setUndoToast({
+                      message: 'Comment re-anchored — ⌘Z to revert',
+                      at: Date.now(),
+                    });
+                  }
+                  setReanchorFor(null);
+                }}
+                onClose={() => setReanchorFor(null)}
               />
             )}
             {/* Undo toast. Auto-clears after 4s; click to manually
