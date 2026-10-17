@@ -12,10 +12,30 @@
 > See [Credits](#credits) for details.
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/darrylschaefer/ai-text-editor/blob/main/LICENSE)
-[![v0.5.1](https://img.shields.io/badge/version-0.5.1-blueviolet.svg)](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.1)
+[![v0.5.2](https://img.shields.io/badge/version-0.5.2-blueviolet.svg)](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.2)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **Using the app?** Start with the [user guide](./docs/README.md), or click **?** in the top bar (in-app Help renders the same pages and follows Light / Dark mode).
+
+---
+
+## What's new in v0.5.2
+
+> Adoption slice **B** from the [UX-roadmap adoption plan](tmp/ux-enhancement-adoption.md), on top of [v0.5.1](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.1). Adds a full JSON backup of the current document (comments, chat, revisions) and broadens the empty / gated-state copy on the Import popover, the `@` doc picker, and the Google AI Mode paste flow. No prompt or store-contract changes.
+
+**Backup**
+
+1. **Export full backup (JSON).** A new **Export .json** button at the bottom of the file-actions popover downloads the current document plus its comments, chat history, and revisions as a single file. Filename matches the existing `${title}.md` pattern with a `.json` extension; the payload is versioned (`schema: 'apeditor-document-backup'`, `version: 1`) so a future re-importer can detect / upgrade older backups. Write-only in v0.5.2 — round-trip support is a follow-up.
+
+**Clearer empty / gated states**
+
+2. **OCR-vs-key gate copy.** The Import popover now shows a contextual paragraph under the language checker explaining what runs locally versus what needs an API key. With no key: *"OCR works without an API key. Adding one in Settings lets the recognised text be rewritten as Markdown before insertion. Without a key, raw text is inserted as-is."* With a key configured the paragraph switches to a cyan *"Key configured. Files are OCR'd locally and rewritten as Markdown via your model before insertion."* so the user always knows which path they're on.
+3. **Empty-state copy in the `@` doc picker.** Three states — `no-workspace` (zero docs), `only-current` (only the current doc is open, which the picker excludes by design), and `no-match` (typed a query with no matches) — are now distinguished with context-appropriate copy and a `data-empty-reason` attribute for analytics / testing.
+4. **Two-step Google AI Mode paste hint.** A numbered list now sits above the paste-answer textarea spelling out: (1) Google AI Mode opened in a new tab with your prompt, (2) copy the answer out of that tab, (3) paste it below — ⌘/Ctrl+Enter to commit. First-time users no longer paste their original question here by mistake.
+
+Earlier slices (Export Markdown, import size caps, best-effort Apply, gated-state tooltips, comment-ops undo toast, selection-only send, secret redaction, outdated Dismiss / Re-attach, session-only API key) all stay as they were in v0.5.0 / v0.5.1.
+
+See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the v0.5.2 entry and prior changelogs.
 
 ---
 
@@ -528,7 +548,7 @@ the result at your caret.
 - `src/utils/ocrMarkdown.ts` — streams the extracted text
   through the configured model and unwraps an accidental outer
   markdown fence.
-- `src/components/FileActionsButton.tsx` (formerly `ImportMediaButton.tsx`) — image+PDF picker, language checkboxes, progress UI, plus a one-click Markdown export; after OCR, dispatches an
+- `src/components/FileActionsButton.tsx` (formerly `ImportMediaButton.tsx`) — image+PDF picker, language checkboxes, progress UI, plus one-click Markdown and JSON-backup exports; after OCR, dispatches an
   `mvp:insert-text` `CustomEvent` that `Editor.tsx` consumes to
   splice the Markdown in.
 
@@ -583,12 +603,14 @@ src/
 │   │                        # popover / prompt textareas.
 │   └── useInlineCompletion.ts
 ├── utils/
+│   ├── backup.ts            # Document + comments + chat + revisions JSON bundle.
 │   ├── comments.ts          # Re-anchor, batch format, selection rect.
 │   ├── diff.ts              # Line-diff helper for revisions / rationales.
 │   ├── googleAiMode.ts      # Google AI Mode deep-link builder.
 │   ├── ocr.ts               # PaddleOCR pipeline for image import.
 │   ├── pdf.ts               # pdfjs-dist wrapper.
 │   ├── proposedEdit.ts      # Parse / apply proposed-edit fences.
+│   ├── secrets.ts           # Redact API-key / token shapes before send.
 │   └── ocrMarkdown.ts       # Chat-model Markdown reformatting of OCR output.
 └── components/
     ├── Sidebar.tsx
@@ -665,6 +687,7 @@ per-release notes also ship on the GitHub release pages.
 
 | Version | Highlights |
 | --- | --- |
+| [v0.5.2](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.2) | **Slice B.** Full JSON backup export (document + comments + chat + revisions) from the file-actions popover; broader gated-state copy on Import, the `@` picker, and the Google AI Mode paste flow. |
 | [v0.5.1](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.1) | **Phase 1 + 2 UX.** Format-menu font-size docs, gated-state tooltips, ⌘Z comment-ops toast; Chat **selection only**, outbound secret redaction, outdated **Dismiss** / **Re-attach**, session-only API key. |
 | [v0.5.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0) | **Export Markdown** from the file-actions popover, import size and page caps with friendly errors, inline confirmation prompt for best-effort Apply when the AI quote is gone. **Popover alignment pass** + component rename `ImportMediaButton` → `FileActionsButton`. |
 | [v0.4.9](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9) | Unified **Format** dropdown (B/I/U + font size), draggable Chat panel messages/input split, draggable Original / Proposed columns in every **ProposedEditCard**. |
