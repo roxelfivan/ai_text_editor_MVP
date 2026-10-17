@@ -1,6 +1,6 @@
-## v0.5.0 — Export Markdown, import size caps, best-effort Apply
+## v0.5.0 — Export Markdown, import size caps, best-effort Apply, file-actions alignment
 
-Feature release on top of [v0.4.9](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9). Three user-visible wins from the UX roadmap ([ux-enhancement-plan-fba2](https://github.com/roxelfivan/apeditor/blob/cursor/ux-enhancement-plan-fba2/tmp/ux-enhancement-phases.md)) — Export Markdown, import size / page caps with friendly errors, and a one-click best-effort Apply for mismatched AI quotes — plus one new doc (`docs/UX_SLICE_1.md`) that captures the design rationale.
+Feature release on top of [v0.4.9](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9). Three user-visible wins from the UX roadmap ([ux-enhancement-plan-fba2](https://github.com/roxelfivan/apeditor/blob/cursor/ux-enhancement-plan-fba2/tmp/ux-enhancement-phases.md)) — Export Markdown, import size / page caps with friendly errors, and a one-click best-effort Apply for mismatched AI quotes — plus a follow-up alignment pass on the new Import / Export popover and a rename of the toolbar component from `ImportMediaButton` to `FileActionsButton`. One new doc (`docs/UX_SLICE_1.md`) captures the slice design rationale.
 
 ### Added
 
@@ -10,6 +10,12 @@ Feature release on top of [v0.4.9](https://github.com/roxelfivan/apeditor/releas
 ### Changed
 
 - **Import size and page caps.** Imports now refuse with a friendly inline error before doing any heavy work if any file is over 50 MB, the batch is over 200 MB total, or a PDF has more than 500 pages. Previously the OCR pipeline read the entire PDF into memory and rasterised every page, which could freeze or evict the tab on a multi-hundred-page scan.
+- **File-actions popover alignment.** The Export and Import sections inside the popover now share the same structural template (section header → two-sentence description → primary-CTA action button row aligned right). The Export button was upgraded from `btn-ghost-sm` (tertiary, muted) to `btn-fire-sm` (primary CTA) so both sections have visually identical primary actions. Popover reorder: Import first (the toolbar button's primary semantic identity), Export second.
+- **Toolbar icon reframed.** The down-arrow-into-tray glyph (which read as "Import only") is replaced by a page-with-arrows glyph: a small page outline flanked by an up arrow (Export) on the left and a down arrow (Import) on the right. Direction-neutral — reads as "this button handles files in and out for a document." The toggle's `aria-label` and `title` were updated in lockstep.
+
+### Renamed
+
+- **`ImportMediaButton` → `FileActionsButton`** (component + file). The old name stopped being accurate when the popover gained a second action; the rename is purely a name correction, no behaviour change. `git mv` preserves blame history (78 % similarity). All doc references in `README.md`, `RELEASE_NOTES.md`, `docs/ARCHITECTURE.md`, `docs/REFACTORING.md`, `docs/UX_SLICE_1.md` are updated to the new name with `(formerly ImportMediaButton)` breadcrumbs so the old name stays grep-fable.
 
 ### Behaviour that did NOT change
 
@@ -18,13 +24,14 @@ Feature release on top of [v0.4.9](https://github.com/roxelfivan/apeditor/releas
 - Apply All in `ChatPanel` — still reports `"Applied x of y changes (z skipped — not anchored)"` for batches. Per-skipped "Apply individually" link is queued for the next slice.
 - The **Potential mismatch detected** warning UI on `ProposedEditCard` — kept; only the inline message copy is now conditional on whether a best-effort is available.
 - All prompt, store, and LLM-facing contracts.
+- All other toolbar buttons.
 
 ### Internal
 
 - `src/utils/storage.ts` — added `downloadTextFile` + `sanitizeFilename`.
 - `src/utils/ocr.ts` — added `validateOcrBatch`, `formatOcrSize`, and three limit constants; pre-flight checks in `extractTextFromFiles` and `extractFromPdfFile`.
 - `src/utils/proposedEdit.ts` — added `findBestEffortAnchor` + `BestEffortAnchor` type.
-- `src/components/FileActionsButton.tsx` (formerly `ImportMediaButton.tsx`) — added `useCurrentDocument()`, `onExportClick`, and an Export section in the popover. The component was renamed because the toolbar button now exposes both Import and Export actions, not just Import; the popover icon (a page with up + down arrows) reflects that, and the `aria-label` / `title` / `data-file-actions-toggle` selector were updated in lockstep.
+- `src/components/FileActionsButton.tsx` (formerly `src/components/ImportMediaButton.tsx`) — added `useCurrentDocument()`, `onExportClick`, an Export section in the popover, and the alignment pass (both sections now use `btn-fire-sm` for their primary CTA; both descriptions follow the same two-sentence template; the toolbar SVG was redrawn as a page-with-arrows glyph). The component was renamed because the toolbar button now exposes both Import and Export actions, not just Import; `aria-label`, `title`, and the `data-file-actions-toggle` selector were updated in lockstep.
 - `src/components/ProposedEditCard.tsx` — added `bestEffortAnchor` memo, `pendingBestEffort` state + stale-span effect, `performReplace` helper, confirmation handlers, and the inline prompt JSX. `handleApply` routes between strict and best-effort paths.
 - `docs/UX_SLICE_1.md` — new document capturing the full slice design.
 

@@ -27,12 +27,15 @@
 > PDF or a 50+ MB file refuses with a friendly error instead of
 > freezing the tab, and clicking **Apply** on a proposed edit
 > whose original quote is gone now offers an inline approximate-
-> match prompt instead of silently failing.
+> match prompt instead of silently failing. The toolbar button
+> that handles both Import and Export was renamed from
+> `ImportMediaButton` to `FileActionsButton` and its icon was
+> redrawn so it reads as both directions instead of just one.
 
 Highlights:
 
-1. **Export Markdown.** A new **Export .md** button at the top
-   of the Import popover downloads the current document as a
+1. **Export Markdown.** A new **Export .md** button in the
+   file-actions popover downloads the current document as a
    Markdown file. Filename is the document title (sanitised);
    defaults to `untitled.md`. `localStorage` can be wiped by the
    browser at any time without warning, so this is the only
@@ -53,6 +56,21 @@ Highlights:
    instead of silently doing nothing. You confirm or cancel
    before any text changes. The Force-apply escape hatch is
    preserved for when there's truly no anchor at all.
+4. **File-actions popover alignment.** The Export and Import
+   sections inside the popover now share the same visual
+   rhythm: section header → two-sentence description → primary
+   CTA button (both `btn-fire-sm`) aligned right. Popover is
+   reordered so Import sits on top (the button's primary
+   identity) and Export sits below the divider. The toolbar
+   icon is redrawn as a page with up + down arrows instead of
+   the old down-arrow-into-tray glyph, so it doesn't suggest
+   one direction over the other.
+5. **Renamed `ImportMediaButton` → `FileActionsButton`.** The
+   component and file were renamed because the toolbar button
+   now exposes both directions, not just Import. Pure name
+   correction — no behaviour change. All docs are updated;
+   the old name stays grep-fable via
+   `(formerly ImportMediaButton)` breadcrumbs.
 
 See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.5.0
 changelog and the v0.4.9 entry below for prior Format-dropdown
@@ -643,7 +661,7 @@ per-release notes also ship on the GitHub release pages.
 
 | Version | Highlights |
 | --- | --- |
-| [v0.5.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0) | **Export Markdown** from the Import popover (durable off-tab backup), import size and page caps with friendly errors, inline confirmation prompt for best-effort Apply when the AI quote is gone. |
+| [v0.5.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0) | **Export Markdown** from the file-actions popover, import size and page caps with friendly errors, inline confirmation prompt for best-effort Apply when the AI quote is gone. **Popover alignment pass** + component rename `ImportMediaButton` → `FileActionsButton`. |
 | [v0.4.9](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9) | Unified **Format** dropdown (B/I/U + font size), draggable Chat panel messages/input split, draggable Original / Proposed columns in every **ProposedEditCard**. |
 | [v0.4.8](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.8) | Heading-grouped `@` section picker, parent→child cascade, Cancel, inline `§…` captions in the textarea. Section sends stay scoped to picked paragraphs only. |
 | [v0.4.7](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.7) | `@`-document references in chat, comments (new + re-edit), and rejection feedback. Whole-doc or section-scoped. Persisted on comment rounds. Dark-mode contrast for the rejection textarea. |
