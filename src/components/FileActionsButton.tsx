@@ -333,6 +333,12 @@ export function FileActionsButton({ disabled = false }: ImportMediaButtonProps) 
           <div className="text-[11px] text-paper-inkSoft dark:text-cyber-muted font-mono">
             Strategy: {strategyLabel}.
           </div>
+          {(!api.apiKey || !api.apiEndpoint) && (
+            <p className="text-[11px] text-paper-inkSoft dark:text-cyber-muted leading-snug">
+              Needs API key — open Settings to enable Markdown rewrite.
+              Bare OCR still works without a key.
+            </p>
+          )}
           <div className="flex items-center justify-end pt-1">
             <button
               type="button"
