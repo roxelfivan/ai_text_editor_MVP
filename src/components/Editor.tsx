@@ -113,6 +113,8 @@ export function Editor() {
   const addComment = useStore((s) => s.addComment);
   const updateCommentBody = useStore((s) => s.updateCommentBody);
   const deleteComment = useStore((s) => s.deleteComment);
+  const dismissOutdatedComments = useStore((s) => s.dismissOutdatedComments);
+  const reattachComment = useStore((s) => s.reattachComment);
   const replaceCommentsForDocument = useStore(
     (s) => s.replaceCommentsForDocument
   );
@@ -1604,6 +1606,16 @@ export function Editor() {
                       updateCommentBody(id, body, mentions)
                     }
                     onDelete={(id) => deleteComment(id)}
+                    canReattach={hasSelection}
+                    onReattach={(id) => {
+                      if (!doc || !hasSelection || !editorFocusState) {
+                        return false;
+                      }
+                      return reattachComment(id, {
+                        start: editorFocusState.selectionStart,
+                        end: editorFocusState.selectionEnd,
+                      });
+                    }}
                     onClose={() => {
                       setActiveCommentId(null);
                       setPopoverPosition(null);
@@ -1632,6 +1644,12 @@ export function Editor() {
                 }
                 sending={chatStreaming}
                 onSend={handleSendToAi}
+                onDismissOutdated={() => {
+                  if (!doc) return;
+                  dismissOutdatedComments(doc.id);
+                  setActiveCommentId(null);
+                  setPopoverPosition(null);
+                }}
               />
             )}
             {/* Undo toast. Auto-clears after 4s; click to manually

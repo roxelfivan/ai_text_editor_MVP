@@ -14,6 +14,8 @@ export const LEGACY_STORAGE_PREFIX = 'ai-text-editor-mvp';
 export const STORE_STORAGE_KEY = STORAGE_PREFIX;
 
 export const ONBOARDED_KEY = `${STORAGE_PREFIX}:onboarded`;
+/** sessionStorage copy of the API key when "forget on close" is on. */
+export const API_KEY_SESSION_KEY = `${STORAGE_PREFIX}:session-api-key`;
 export const CHAT_MESSAGES_HEIGHT_KEY = `${STORAGE_PREFIX}:chat-messages-height`;
 export const SUGGESTION_HEIGHT_KEY = `${STORAGE_PREFIX}:suggestion-height`;
 
@@ -153,4 +155,27 @@ export function migrateLegacyStorage(): void {
   } catch {
     // Quota / private mode / blocked storage — boot without migration.
   }
+}
+
+export function readSessionApiKey(): string {
+  try {
+    if (typeof sessionStorage === 'undefined') return '';
+    return sessionStorage.getItem(API_KEY_SESSION_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function writeSessionApiKey(key: string): void {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    if (key) sessionStorage.setItem(API_KEY_SESSION_KEY, key);
+    else sessionStorage.removeItem(API_KEY_SESSION_KEY);
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+export function clearSessionApiKey(): void {
+  writeSessionApiKey('');
 }

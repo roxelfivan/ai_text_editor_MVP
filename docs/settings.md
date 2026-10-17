@@ -18,7 +18,7 @@ Changing provider updates the default endpoint and model list. You can still typ
 
 Paste the key from your provider. **Show** / **Hide** toggles visibility.
 
-The key is stored only in this browser’s local storage. It is sent as a Bearer token to the HTTPS endpoint you set — not to an ApEditor backend. Do not leave a key on a shared computer; clear site data when you are done.
+The key is stored only in this browser’s local storage by default. Check **Forget API key when this tab closes** to keep it in session storage instead — closing the tab forgets the key; documents and chat stay. It is sent as a Bearer token to the HTTPS endpoint you set — not to an ApEditor backend. Do not leave a key on a shared computer; clear site data when you are done.
 
 For Google AI Mode the field is unused.
 

@@ -11,7 +11,7 @@ This browser keeps:
 - Comments, rounds, and applied rationales
 - Revisions
 - Prompt library
-- Settings (including API keys)
+- Settings (including API keys, unless you chose “forget key when this tab closes”)
 - Layout, theme, and font sizes
 
 Closing the tab or restarting the computer does **not** wipe this. Another browser profile, private window, or device will **not** see it.

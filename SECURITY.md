@@ -21,9 +21,9 @@ Settings; they stay in this browser’s `localStorage`.
 | Severity | Issue | Status / recommendation |
 | -------- | ----- | ----------------------- |
 | High (mitigated) | Stored XSS via `rehype-raw` without sanitization could steal the API key from `localStorage` | **Mitigated:** `rehype-sanitize` after `rehype-raw` (allows `<u>` only beyond the default schema). |
-| High (by design) | API key stored plaintext in `localStorage` | Prefer a local proxy that holds the key, session-only storage, or passphrase-wrapped Web Crypto. Avoid shared browsers. |
+| High (by design) | API key stored plaintext in `localStorage` | **Mitigated (opt-in):** Settings → “Forget API key when this tab closes” keeps the key in `sessionStorage`. Prefer a local proxy or passphrase-wrapped Web Crypto for stronger hygiene. Avoid shared browsers. |
 | Medium (mitigated) | Bearer token sent to any user-typed URL | **Mitigated:** HTTPS required (localhost `http://` allowed). Consider an allowlist of known providers. |
-| Medium | Full document sent to the model each chat turn | Prompt injection / data exfiltration to the provider. Add “send selection only”, delimiters, and secret redaction. |
+| Medium | Full document sent to the model each chat turn | **Mitigated (opt-in):** Chat **selection only** omits the document outline. Highlights use `BEGIN/END EDITOR SELECTION` delimiters. Outbound prompts redact common API-key / Bearer shapes. Comment **Send to AI** still includes a compact outline. |
 | Medium | No host-level CSP beyond the meta tag | Prefer HTTP headers (`Content-Security-Policy`) on production hosting. Vercel already sends COOP/COEP via `vercel.json` so SharedArrayBuffer / threaded ORT WASM works. |
 | Medium | In-browser OCR (OpenCV.js embind) needs `'unsafe-eval'` | Required by PaddleOCR's OpenCV.js `Function` constructor. Vite aliases `onnxruntime-web` to the WASM-only build so the WebGPU/JSEP glue is not loaded. `connect-src` allows `data:` for OpenCV's embedded WASM. |
 | Medium | Large PDF/image import has no size/page caps | Add max file size / page limits to avoid tab DoS. |

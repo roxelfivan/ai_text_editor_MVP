@@ -216,7 +216,13 @@ export function buildRequestMessages(
    * OpenAI-compatible request shape is unchanged and unrecognized
    * proxies don't reject unknown fields.
    */
-  enableCacheControl = false
+  enableCacheControl = false,
+  /**
+   * When true, omit the current-document outline and send only the
+   * highlighted selection as working text. Used by Chat "selection
+   * only" so a small question does not leak the rest of the draft.
+   */
+  sendSelectionOnly = false
 ): ChatMessage[] {
   const effectiveSystem =
     (systemMessage && systemMessage.trim()) || DEFAULT_SYSTEM_MESSAGE;
@@ -262,17 +268,33 @@ export function buildRequestMessages(
   const isCommentBatch =
     !!lastUser && looksLikeCommentBatch(lastUser.content);
 
+  const lastUserSelection = lastUser?.selection?.trim() ?? '';
+  const selectionOnlyTurn =
+    sendSelectionOnly && !!lastUserSelection && !isCommentBatch;
+
   if (currentDocument && currentDocument.content.trim()) {
     const title = currentDocument.title?.trim() || 'Untitled';
-    push({
-      id: 'sys-current-doc',
-      role: 'system',
-      content:
-        `Open document "${title}". Treat the outline below as the ` +
-        `working text when the user refers to "the document" / ` +
-        `"this text".\n\n` +
-        buildDocOutline(title, currentDocument.content, isCommentBatch),
-    });
+    if (selectionOnlyTurn) {
+      push({
+        id: 'sys-current-doc',
+        role: 'system',
+        content:
+          `Open document "${title}". This turn sends only the ` +
+          `highlighted selection as working text — the rest of the ` +
+          `document was not included.\n\n` +
+          formatSelectionBlock(lastUserSelection),
+      });
+    } else {
+      push({
+        id: 'sys-current-doc',
+        role: 'system',
+        content:
+          `Open document "${title}". Treat the outline below as the ` +
+          `working text when the user refers to "the document" / ` +
+          `"this text".\n\n` +
+          buildDocOutline(title, currentDocument.content, isCommentBatch),
+      });
+    }
     push({
       id: 'sys-proposed-edit-rules',
       role: 'system',
@@ -371,13 +393,21 @@ export function buildRequestMessages(
   for (const m of history) {
     if (m.role === 'system') continue;
     out.push(m);
-    if (m.role === 'user' && m.selection && m.selection.trim()) {
+    if (
+      m.role === 'user' &&
+      m.selection &&
+      m.selection.trim() &&
+      // Selection-only turns already inlined the highlight in
+      // sys-current-doc; skip the duplicate block on the latest user
+      // message. Older turns still keep their selection notes.
+      !(selectionOnlyTurn && m.id === lastUser?.id)
+    ) {
       out.push({
         id: `${m.id}-sel`,
         role: 'system',
         content:
-          `Highlighted selection from the document:\n\n"""\n` +
-          `${m.selection}\n"""`,
+          `Highlighted selection from the document:\n\n` +
+          formatSelectionBlock(m.selection),
         createdAt: 0,
       });
     }
@@ -412,6 +442,15 @@ export function buildRequestMessages(
   }
 
   return out;
+}
+
+/** Delimiters around editor highlights in outbound prompts. */
+export function formatSelectionBlock(selection: string): string {
+  return (
+    `----- BEGIN EDITOR SELECTION -----\n` +
+    `${selection.trimEnd()}\n` +
+    `----- END EDITOR SELECTION -----`
+  );
 }
 
 /**
