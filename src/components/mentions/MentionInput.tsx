@@ -232,6 +232,10 @@ export function MentionInput({
   const getSectionTitlesRef = useRef(getSectionTitles);
   getSectionTitlesRef.current = getSectionTitles;
 
+  // Same ≥2-documents rule as the in-app help copy in useStore
+  // ("You need at least two documents in the sidebar.").
+  const canMention = documents.length >= 2;
+
   // The textarea's display value is ALWAYS the plain text — never
   // the raw value with sentinels. Mention metadata + positions are
   // tracked separately and re-encoded as a raw value on `onChange`.
@@ -341,7 +345,7 @@ export function MentionInput({
 
       // @-trigger detection: did the user just type `@`?
       const caret = newEnd;
-      if (caret > 0 && nextPlain[caret - 1] === '@') {
+      if (canMention && caret > 0 && nextPlain[caret - 1] === '@') {
         const ta = taRef.current;
         if (ta) {
           const coords = measureCaret(ta, caret);
@@ -381,7 +385,7 @@ export function MentionInput({
       );
       onChange({ text: newRaw, mentions });
     },
-    [mentions, onChange, plainText, popover, positions]
+    [canMention, mentions, onChange, plainText, popover, positions]
   );
 
   const replaceRangeRef = useRef<{ start: number; end: number } | null>(null);
@@ -623,13 +627,6 @@ export function MentionInput({
     return () => window.removeEventListener('mousedown', onDown);
   }, [popover]);
 
-  // Force re-layout when the chip list size changes so the textarea
-  // height adjusts (the chips live in a row above the textarea; the
-  // textarea reserves its own height and the chips wrap).
-  useLayoutEffect(() => {
-    // No-op for now — kept as a hook anchor for future layout work.
-  }, [mentions.length]);
-
   // Recompute the chip overlay rects whenever the plain text, the
   // mention positions, or the textarea dimensions change. We use
   // `measureRange` (a hidden mirrored div) to get the pixel rect of
@@ -715,6 +712,12 @@ export function MentionInput({
         aria-label={ariaLabel}
         placeholder={placeholder}
         disabled={disabled}
+        aria-disabled={disabled}
+        title={
+          !canMention
+            ? 'Open a second document in the sidebar to use @-references.'
+            : undefined
+        }
         autoFocus={autoFocus}
         className={`mention-input__textarea ${className ?? ''}`}
         onChange={(e) => handleInput(e.target.value)}
@@ -740,7 +743,7 @@ export function MentionInput({
             onSubmit(e);
             return;
           }
-          if (e.key === '@' && !popover) {
+          if (canMention && e.key === '@' && !popover) {
             queueMicrotask(() => {
               const ta = taRef.current;
               if (!ta) return;
