@@ -12,44 +12,50 @@
 > See [Credits](#credits) for details.
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/darrylschaefer/ai-text-editor/blob/main/LICENSE)
-[![v0.4.9](https://img.shields.io/badge/version-0.4.9-blueviolet.svg)](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9)
+[![v0.5.0](https://img.shields.io/badge/version-0.5.0-blueviolet.svg)](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **Using the app?** Start with the [user guide](./docs/README.md), or click **?** in the top bar (in-app Help renders the same pages and follows Light / Dark mode).
 
 ---
 
-## What's new in v0.4.9
+## What's new in v0.5.0
 
-> A small UI-focused release: the editor's inline-formatting and
-> font-size toolbar controls collapse into a single **Format**
-> dropdown, the chat panel gets a draggable boundary between its
-> messages and input areas, and every proposed-edit card's Split
-> view now has a draggable divider between the **Original** and
-> **Proposed** columns.
+> A UX-focused release on top of v0.4.9: you can now **Export**
+> the current document as Markdown (the only durable off-tab
+> backup of your writing today), importing a multi-hundred-page
+> PDF or a 50+ MB file refuses with a friendly error instead of
+> freezing the tab, and clicking **Apply** on a proposed edit
+> whose original quote is gone now offers an inline approximate-
+> match prompt instead of silently failing.
 
 Highlights:
 
-1. **Unified Format dropdown.** The two toolbar pills that used to
-   hold **B** / **I** / **U** and **+** / **−** are now a single
-   **Format** button. Click it to reveal a menu with **Bold**,
-   **Italic**, **Underline**, **Size +**, and **Size −** in one
-   place. All five actions and the existing Ctrl/Cmd+B/I/U
-   shortcuts behave exactly as before — only the toolbar
-   presentation changed.
-2. **Draggable Chat panel split.** The horizontal line between
-   the messages area and the input area in the Chat panel is now
-   a drag handle. Drag it up to give the messages more room, or
-   down to give the input more room. The split persists across
-   reloads via `localStorage`.
-3. **Draggable Original / Proposed split.** Every
-   **ProposedEditCard** (in Split view) now has a vertical drag
-   handle between the **Original** and **Proposed** markdown
-   columns. The two columns resize live as you drag; the split
-   is clamped 20–80 % and remembered per card across reloads.
+1. **Export Markdown.** A new **Export .md** button at the top
+   of the Import popover downloads the current document as a
+   Markdown file. Filename is the document title (sanitised);
+   defaults to `untitled.md`. `localStorage` can be wiped by the
+   browser at any time without warning, so this is the only
+   reliable way to keep a copy of your writing off-tab. A
+   future slice will add a JSON backup that includes comments,
+   chat, and revisions.
+2. **Import size and page caps.** Imports now refuse with a
+   friendly inline error before doing any work if any file is
+   over 50 MB, the batch is over 200 MB total, or a PDF has more
+   than 500 pages. The existing OCR pipeline read the entire PDF
+   into memory and rasterised every page; the cap protects the
+   tab on large scans.
+3. **Inline confirmation for best-effort Apply.** When the AI's
+   quote can't be matched in the current document (you edited
+   the paragraph, the model paraphrased, a sibling edit shifted
+   the wording, …), Apply now offers an inline confirmation
+   prompt with the matched passage and a confidence percentage
+   instead of silently doing nothing. You confirm or cancel
+   before any text changes. The Force-apply escape hatch is
+   preserved for when there's truly no anchor at all.
 
-See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.4.9
-changelog and the v0.4.8 entry below for prior section-picker
+See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.5.0
+changelog and the v0.4.9 entry below for prior Format-dropdown
 work.
 
 ---
@@ -638,6 +644,7 @@ per-release notes also ship on the GitHub release pages.
 
 | Version | Highlights |
 | --- | --- |
+| [v0.5.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0) | **Export Markdown** from the Import popover (durable off-tab backup), import size and page caps with friendly errors, inline confirmation prompt for best-effort Apply when the AI quote is gone. |
 | [v0.4.9](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9) | Unified **Format** dropdown (B/I/U + font size), draggable Chat panel messages/input split, draggable Original / Proposed columns in every **ProposedEditCard**. |
 | [v0.4.8](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.8) | Heading-grouped `@` section picker, parent→child cascade, Cancel, inline `§…` captions in the textarea. Section sends stay scoped to picked paragraphs only. |
 | [v0.4.7](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.7) | `@`-document references in chat, comments (new + re-edit), and rejection feedback. Whole-doc or section-scoped. Persisted on comment rounds. Dark-mode contrast for the rejection textarea. |

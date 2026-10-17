@@ -1,3 +1,41 @@
+## v0.5.0 — Export Markdown, import size caps, best-effort Apply
+
+Feature release on top of [v0.4.9](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9). Three user-visible wins from the UX roadmap ([ux-enhancement-plan-fba2](https://github.com/roxelfivan/apeditor/blob/cursor/ux-enhancement-plan-fba2/tmp/ux-enhancement-phases.md)) — Export Markdown, import size / page caps with friendly errors, and a one-click best-effort Apply for mismatched AI quotes — plus one new doc (`docs/UX_SLICE_1.md`) that captures the design rationale.
+
+### Added
+
+- **Export Markdown.** A new **Export .md** button at the top of the Import popover (in the editor toolbar) downloads the current document as a Markdown file. Filename is the document title, sanitised; defaults to `untitled.md`. This is the only durable off-tab backup of your writing today — `localStorage` can be wiped by browser data clearing, private-mode expiry, or quota eviction, with no warning. The download helper (`downloadTextFile` + `sanitizeFilename` in `src/utils/storage.ts`) is the foundation for a future JSON backup that includes comments, chat history, and revisions.
+- **Inline confirmation prompt for best-effort Apply.** When the AI's `original` quote can't be matched in the current document by any of the six existing strategies (exact / trimmed / whitespace-collapsed / Setext heading / ATX-prefix / markdown-escape), Apply no longer silently fails. A new `findBestEffortAnchor` utility in `src/utils/proposedEdit.ts` runs a token-overlap match with an adaptive lookahead, a skip budget, and a 100 KB content cap. If it finds a candidate, the card shows an inline alert with the matched passage and a confidence percentage; the user confirms or cancels before any text changes. The Apply button stays enabled whenever EITHER a strict OR a best-effort match is available, with the tooltip reflecting which path will run.
+
+### Changed
+
+- **Import size and page caps.** Imports now refuse with a friendly inline error before doing any heavy work if any file is over 50 MB, the batch is over 200 MB total, or a PDF has more than 500 pages. Previously the OCR pipeline read the entire PDF into memory and rasterised every page, which could freeze or evict the tab on a multi-hundred-page scan.
+
+### Behaviour that did NOT change
+
+- The six existing `findEditAnchor` strategies (preserved verbatim).
+- The Force-apply path — still the right escape hatch when no anchor of any kind is available.
+- Apply All in `ChatPanel` — still reports `"Applied x of y changes (z skipped — not anchored)"` for batches. Per-skipped "Apply individually" link is queued for the next slice.
+- The **Potential mismatch detected** warning UI on `ProposedEditCard` — kept; only the inline message copy is now conditional on whether a best-effort is available.
+- All prompt, store, and LLM-facing contracts.
+
+### Internal
+
+- `src/utils/storage.ts` — added `downloadTextFile` + `sanitizeFilename`.
+- `src/utils/ocr.ts` — added `validateOcrBatch`, `formatOcrSize`, and three limit constants; pre-flight checks in `extractTextFromFiles` and `extractFromPdfFile`.
+- `src/utils/proposedEdit.ts` — added `findBestEffortAnchor` + `BestEffortAnchor` type.
+- `src/components/ImportMediaButton.tsx` — added `useCurrentDocument()`, `onExportClick`, and an Export section at the top of the popover.
+- `src/components/ProposedEditCard.tsx` — added `bestEffortAnchor` memo, `pendingBestEffort` state + stale-span effect, `performReplace` helper, confirmation handlers, and the inline prompt JSX. `handleApply` routes between strict and best-effort paths.
+- `docs/UX_SLICE_1.md` — new document capturing the full slice design.
+
+### Verification
+
+- `npx tsc --noEmit -p tsconfig.app.json` — clean.
+- `npm run build` — clean.
+- `findBestEffortAnchor` smoke tests — 10 / 10 pass.
+
+---
+
 ## v0.4.9 — Unified Format dropdown + draggable Chat / ProposedEditCard splits
 
 UI-focused release on top of [v0.4.8](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.8). The editor toolbar consolidates the two small pill groups (B/I/U and font size +/−) into a single **Format** dropdown, the Chat panel gains a draggable boundary between its messages and input areas, and every **ProposedEditCard** in Split view now has a draggable divider between the **Original** and **Proposed** columns. No prompt, store, or LLM-facing changes.
