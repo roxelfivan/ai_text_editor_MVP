@@ -29,7 +29,7 @@
 
 - `src/utils/ocr.ts` — pre-flight size check in `extractTextFromFiles`
 - `src/utils/pdf.ts` — page-count cap in `loadPdfFromBytes`
-- `src/components/ImportMediaButton.tsx` — surface the new errors via existing `setError` path (already wired at lines 199/314)
+- `src/components/FileActionsButton.tsx` — surface the new errors via existing `setError` path (already wired in the popover)
 
 ### Limits (defaults; future-flag-configurable)
 
@@ -46,7 +46,7 @@
 "<name> has <N> pages — limit is 500. Try splitting it or selecting a section."
 ```
 
-Both already fit the existing inline-error UI (`border-cyber-danger/40` panel at `ImportMediaButton.tsx:332`).
+Both already fit the existing inline-error UI (`border-cyber-danger/40` panel in the popover).
 
 ### Out of scope
 
@@ -60,7 +60,7 @@ Both already fit the existing inline-error UI (`border-cyber-danger/40` panel at
 ### Files
 
 - `src/utils/storage.ts` — add `downloadTextFile(filename, content, mime)` and `sanitizeFilename(name)` helpers
-- `src/components/ImportMediaButton.tsx` — add an "Export" button next to "Choose Import File(s)" inside the popover (lines 294–310)
+- `src/components/FileActionsButton.tsx` — add an "Export" button in the popover (alongside "Choose Import File(s)")
 - `src/store/useStore.ts` — no changes; `useCurrentDocument` already exists (line 1180)
 
 ### Behavior

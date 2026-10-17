@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { v4 as uuid } from 'uuid';
 import { useStore, useCurrentDocument } from '@/store/useStore';
-import { ImportMediaButton } from '@/components/ImportMediaButton';
+import { FileActionsButton } from '@/components/FileActionsButton';
 import { useInlineCompletion } from '@/hooks/useInlineCompletion';
 import {
   useDragResize,
@@ -1412,7 +1412,7 @@ export function Editor() {
             horizontal band when width allows. */}
         <div className="flex-1 min-w-2" aria-hidden />
         <div className="inline-flex items-center gap-2 shrink-0">
-          <ImportMediaButton />
+          <FileActionsButton />
           <button
             type="button"
             aria-label="Save current content as a revision"

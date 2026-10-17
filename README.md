@@ -506,8 +506,7 @@ the result at your caret.
 - `src/utils/ocrMarkdown.ts` — streams the extracted text
   through the configured model and unwraps an accidental outer
   markdown fence.
-- `src/components/ImportMediaButton.tsx` — image+PDF picker,
-  language checkboxes, progress UI; after OCR, dispatches an
+- `src/components/FileActionsButton.tsx` (formerly `ImportMediaButton.tsx`) — image+PDF picker, language checkboxes, progress UI, plus a one-click Markdown export; after OCR, dispatches an
   `mvp:insert-text` `CustomEvent` that `Editor.tsx` consumes to
   splice the Markdown in.
 
@@ -585,7 +584,7 @@ src/
     ├── ProposedEditCard.tsx # Apply / Reject cards for AI diffs.
     ├── RevisionHistory.tsx
     ├── SettingsModal.tsx    # Provider, System Message, Rationale Rules.
-    ├── ImportMediaButton.tsx
+    ├── ImportMediaButton.tsx  → FileActionsButton.tsx (v0.5.0+)
     ├── EdgeAnchor.tsx       # Side / top edge-anchor toggles.
     ├── ResizeHandle.tsx     # Drag-to-resize between sidebar/editor/chat.
     └── Topbar.tsx           # (inlined in App.tsx — see App.tsx)
