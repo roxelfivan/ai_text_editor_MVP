@@ -7,6 +7,10 @@
 // All assets (PDF worker, ONNX Runtime WASM, PaddleOCR model .tar files)
 // are self-hosted under /pdfjs/, /ort/, and /ocr/ so the pipeline makes
 // ZERO third-party network calls — verified in DevTools Network panel.
+// `public/ort` must contain only the WASM-only pair
+// (`ort-wasm-simd-threaded.{wasm,mjs}`). The WebGPU jsep/asyncify/jspi
+// builds are unused and must not be deployed (see
+// scripts/sync-ocr-runtime-assets.mjs).
 //
 // Cleanup contract for every input File:
 //   1. ObjectURLs revoked in finally

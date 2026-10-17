@@ -8,6 +8,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "postinstall": "node scripts/sync-ocr-runtime-assets.mjs",
+    "prebuild": "node scripts/sync-ocr-runtime-assets.mjs",
+    "sync:ocr-assets": "node scripts/sync-ocr-runtime-assets.mjs",
     "typecheck": "tsc -b --noEmit",
     "test:heading-sections": "node scripts/test-heading-sections.mjs"
   },

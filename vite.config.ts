@@ -17,8 +17,8 @@ const APP_VERSION = pkg.version;
 // COOP/COEP headers are required so the browser exposes SharedArrayBuffer
 // to the page. onnxruntime-web (PaddleOCR's runtime) needs SAB for the
 // threaded WASM build. These same headers are needed by both `vite dev`
-// and `vite preview`. For production deploys, set the same headers in
-// the hosting layer (Netlify _headers, Vercel vercel.json, etc.).
+// and `vite preview`. Production Vercel deploys use `vercel.json`
+  // for the same pair — threaded WASM will not load without them.
 const coopCoepHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp',

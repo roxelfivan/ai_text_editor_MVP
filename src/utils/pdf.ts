@@ -4,7 +4,8 @@
 // are released in finally blocks so no PDF bytes survive past the call.
 //
 // The pdf.js worker is served as a same-origin script from /pdfjs/ —
-// see vite.config.ts (COOP/COEP) and public/pdfjs/ for the static asset.
+// see vite.config.ts (COOP/COEP) and public/pdfjs/ (synced from
+// pdfjs-dist by scripts/sync-ocr-runtime-assets.mjs).
 
 import * as pdfjsLib from 'pdfjs-dist';
 
