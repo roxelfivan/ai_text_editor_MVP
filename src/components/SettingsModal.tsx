@@ -92,6 +92,8 @@ interface Props {
 export function SettingsModal({ open, onClose }: Props) {
   const api = useStore((s) => s.api);
   const setApi = useStore((s) => s.setApi);
+  const persistApiKey = useStore((s) => s.persistApiKey);
+  const setPersistApiKey = useStore((s) => s.setPersistApiKey);
   const debugMode = useStore((s) => s.debugMode);
   const setDebugMode = useStore((s) => s.setDebugMode);
   const uiFontSize = useStore((s) => s.uiFontSize);
@@ -120,6 +122,7 @@ export function SettingsModal({ open, onClose }: Props) {
   );
   const [temperature, setTemperature] = useState(api.temperature);
   const [showKey, setShowKey] = useState(false);
+  const [persistApiKeyDraft, setPersistApiKeyDraft] = useState(persistApiKey);
   // Local mirror of the UI font size so the slider reflects drags
   // before the user clicks Save (matches the rest of the modal's
   // local-state-first pattern).
@@ -405,14 +408,16 @@ export function SettingsModal({ open, onClose }: Props) {
       }
       setTemperature(api.temperature);
       setUiFontSizeDraft(uiFontSize);
+      setPersistApiKeyDraft(persistApiKey);
     }
-  }, [open, api, uiFontSize, setApi]);
+  }, [open, api, uiFontSize, persistApiKey, setApi]);
 
   if (!open) return null;
 
   const preset = getProvider(provider);
 
   const save = () => {
+    setPersistApiKey(persistApiKeyDraft);
     setApi({
       provider,
       apiKey,
@@ -510,14 +515,28 @@ export function SettingsModal({ open, onClose }: Props) {
                   </button>
                 </div>
                 <p className="mt-1 text-xs text-paper-inkSoft dark:text-cyber-muted">
-                  Stored only in this browser's localStorage (never uploaded to
-                  this app's servers — there are none). Sent as
+                  {persistApiKeyDraft
+                    ? "Stored only in this browser's localStorage (never uploaded to this app's servers — there are none)."
+                    : 'Kept for this tab only (sessionStorage). Closing the tab forgets the key; documents stay in localStorage.'}{' '}
+                  Sent as
                   <code className="mx-1 px-1 rounded bg-paper-elevated dark:bg-ape-elevated text-cyber-clay dark:text-cyber-cyan font-mono text-[11px]">
                     Authorization: Bearer …
                   </code>
                   to the HTTPS endpoint below. Do not use a shared computer
                   without clearing site data afterward.
                 </p>
+                <label className="mt-2 flex items-start gap-2 cursor-pointer select-none text-xs text-paper-inkSoft dark:text-cyber-muted">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-cyber-clay dark:accent-cyber-cyan"
+                    checked={!persistApiKeyDraft}
+                    onChange={(e) => setPersistApiKeyDraft(!e.target.checked)}
+                  />
+                  <span>
+                    Forget API key when this tab closes. Use on a shared
+                    computer. Documents and chat still persist.
+                  </span>
+                </label>
               </div>
 
               <div>

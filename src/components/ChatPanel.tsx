@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid';
 import ReactMarkdown from 'react-markdown';
 import { useStore } from '@/store/useStore';
 import { buildRequestMessages, streamChatCompletion, ApiError } from '@/api/chat';
+import { redactSecretsInMessages } from '@/utils/secrets';
 import type { ChatMessage, MentionToken, ProposedEdit } from '@/types';
 import { ProposedEditCard } from '@/components/ProposedEditCard';
 import { ResizeHandle } from '@/components/ResizeHandle';
@@ -45,6 +46,8 @@ export function ChatPanel() {
   const api = useStore((s) => s.api);
   const includeSelection = useStore((s) => s.includeSelection);
   const setIncludeSelection = useStore((s) => s.setIncludeSelection);
+  const sendSelectionOnly = useStore((s) => s.sendSelectionOnly);
+  const setSendSelectionOnly = useStore((s) => s.setSendSelectionOnly);
 
   const [input, setInput] = useState('');
   // Document mentions attached to the current chat input. Populated by
@@ -56,6 +59,7 @@ export function ChatPanel() {
   const [selection, setSelection] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   // Per-assistant-message staged rejection comments. Keyed by the
   // assistant message id so multiple in-flight replies can each have their
   // own batch. Value entries are the (editId, comment, mentions) tuples
@@ -224,7 +228,7 @@ export function ChatPanel() {
       abortRef.current = new AbortController();
       let acc = '';
       try {
-        await streamChatCompletion(
+        const packed = redactSecretsInMessages(
           buildRequestMessages(
             history,
             api.systemMessage,
@@ -241,7 +245,17 @@ export function ChatPanel() {
             // as `mergedMentions` above so the two arrays stay in
             // sync — first-emission wins per mention id).
             payload
-          ),
+          )
+        );
+        if (packed.count > 0) {
+          setNotice(
+            `Redacted ${packed.count} secret-looking string${
+              packed.count === 1 ? '' : 's'
+            } from this send.`
+          );
+        }
+        await streamChatCompletion(
+          packed.messages,
           api,
           {
             signal: abortRef.current.signal,
@@ -405,10 +419,17 @@ export function ChatPanel() {
     const { plain } = parseMentions(input);
     const text = plain.trim();
     if (!text || streaming) return;
+    const selectionOnly =
+      sendSelectionOnly && Boolean(selection.trim());
+    if (sendSelectionOnly && !selection.trim()) {
+      setError('Highlight text in the editor to send selection only.');
+      return;
+    }
     // Snapshot current document before the AI turn so the user can
     // restore via Revision history if later applies go wrong.
     useStore.getState().saveRevision(currentDocumentId, 'Before AI send');
     setError(null);
+    setNotice(null);
     setInput('');
     setMentions([]);
 
@@ -420,7 +441,11 @@ export function ChatPanel() {
       id: uuid(),
       role: 'user',
       content: text,
-      selection: includeSelection ? selection || undefined : undefined,
+      selection:
+        includeSelection || selectionOnly
+          ? selection || undefined
+          : undefined,
+      ...(selectionOnly ? { selectionOnly: true } : {}),
       createdAt: Date.now(),
     };
     appendMessage(currentDocumentId, userMsg);
@@ -475,7 +500,7 @@ export function ChatPanel() {
     abortRef.current = new AbortController();
     let acc = '';
     try {
-      await streamChatCompletion(
+      const packed = redactSecretsInMessages(
         buildRequestMessages(
           history,
           api.systemMessage,
@@ -488,8 +513,20 @@ export function ChatPanel() {
           // Chat messages have no per-comment bucket — pass
           // `undefined` so the cross-reference map (comment-batch
           // only) is silently dropped.
-          undefined
-        ),
+          undefined,
+          false,
+          selectionOnly
+        )
+      );
+      if (packed.count > 0) {
+        setNotice(
+          `Redacted ${packed.count} secret-looking string${
+            packed.count === 1 ? '' : 's'
+          } from this send.`
+        );
+      }
+      await streamChatCompletion(
+        packed.messages,
         api,
         {
           signal: abortRef.current.signal,
@@ -791,7 +828,7 @@ export function ChatPanel() {
     abortRef.current = new AbortController();
     let acc = '';
     try {
-      await streamChatCompletion(
+      const packed = redactSecretsInMessages(
         buildRequestMessages(
           history,
           api.systemMessage,
@@ -805,7 +842,17 @@ export function ChatPanel() {
           // by design (one rejection body covers many edits in a
           // single user message). Drop the cross-reference map.
           undefined
-        ),
+        )
+      );
+      if (packed.count > 0) {
+        setNotice(
+          `Redacted ${packed.count} secret-looking string${
+            packed.count === 1 ? '' : 's'
+          } from this send.`
+        );
+      }
+      await streamChatCompletion(
+        packed.messages,
         api,
         {
           signal: abortRef.current.signal,
@@ -942,6 +989,11 @@ export function ChatPanel() {
             </div>
           </div>
         )}
+        {notice && (
+          <div className="text-xs text-paper-inkSoft dark:text-cyber-muted bg-paper-elevated dark:bg-ape-elevated border border-paper-hairline dark:border-cyber-border rounded p-2">
+            {notice}
+          </div>
+        )}
         {error && (
           <div className="text-xs text-cyber-danger bg-cyber-danger/10 border border-cyber-danger/40 rounded p-2 whitespace-pre-wrap">
             {error}
@@ -1017,7 +1069,7 @@ export function ChatPanel() {
           // Regular chat input (keyed providers, or keyless when no
           // paste is in flight).
           <>
-            <div className="flex items-center gap-2 text-xs text-paper-inkSoft dark:text-cyber-muted">
+            <div className="flex items-center gap-2 text-xs text-paper-inkSoft dark:text-cyber-muted flex-wrap">
               <label className="flex items-center gap-1 cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -1026,6 +1078,25 @@ export function ChatPanel() {
                   className="accent-cyber-clay dark:accent-cyber-cyan"
                 />
                 include selection
+              </label>
+              <label
+                className={`flex items-center gap-1 select-none ${
+                  selection ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
+                }`}
+                title={
+                  selection
+                    ? 'Send only the highlighted passage — the rest of the document stays in the browser'
+                    : 'Highlight text in the editor to send selection only'
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={sendSelectionOnly}
+                  disabled={!selection}
+                  onChange={(e) => setSendSelectionOnly(e.target.checked)}
+                  className="accent-cyber-clay dark:accent-cyber-cyan"
+                />
+                selection only
               </label>
               {selection && (
                 <button
@@ -1177,7 +1248,8 @@ function MessageBubble({
       >
         {message.selection && isUser && (
           <div className="mb-1 text-[10px] uppercase tracking-wide text-paper-base/70 dark:text-white/80 font-mono">
-            ▸ selection ({message.selection.length} chars)
+            ▸ {message.selectionOnly ? 'selection only' : 'selection'} (
+            {message.selection.length} chars)
           </div>
         )}
         {isUser ? (
@@ -1252,7 +1324,7 @@ function MessageBubble({
                           applyAllSummary.total
                         } changes (${
                           applyAllSummary.total - applyAllSummary.applied
-                        } skipped — not anchored in the current document).`}
+                        } skipped — not anchored). Use Apply anyway or Force-apply on those cards.`}
                   </div>
                 )}
               </div>

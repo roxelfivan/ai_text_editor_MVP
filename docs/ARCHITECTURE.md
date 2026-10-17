@@ -195,7 +195,7 @@ This is the only state container. Single source of truth for everything except: 
 | `viewMode` | — | yes | `'write' \| 'preview' \| 'split'` |
 | `editorFontSize`, `uiFontSize` | — | yes | 10–24px and 12–20px, both clamped |
 | `chatOpen`, `sidebarCollapsed`, `chatCollapsed`, `topbarCollapsed` | — | yes | Two flags for chat (intentional — see `useStore.ts:140-160` comment) |
-| `includeSelection`, `debugMode` | — | yes | Toggles |
+| `includeSelection`, `sendSelectionOnly`, `persistApiKey`, `debugMode` | — | yes | Toggles |
 | `theme` | — | yes | `'light' \| 'dark'` |
 | `api` | — | yes | `ApiConfig` — provider, key, endpoint, model, system message, rationale override |
 | `layout` | — | yes | `sidebarWidth`, `chatWidth`, `editorSplitPct`, `previewSizes` map |

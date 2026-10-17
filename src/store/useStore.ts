@@ -17,7 +17,10 @@ import type {
 } from '@/types';
 import { getProvider } from '@/config/providers';
 import { applyThemeClass } from '@/utils/theme';
-import { COMMENT_UNDO_STACK_LIMIT } from '@/utils/comments';
+import {
+  COMMENT_UNDO_STACK_LIMIT,
+  reattachCommentToRange,
+} from '@/utils/comments';
 import { findEditAnchor } from '@/utils/proposedEdit';
 import {
   DEFAULT_SYSTEM_MESSAGE,
@@ -34,7 +37,12 @@ import {
   MAX_EDITOR_SPLIT_PCT,
   DEFAULT_EDITOR_SPLIT_PCT,
 } from '@/hooks/useDragResize';
-import { STORE_STORAGE_KEY } from '@/utils/storage';
+import {
+  STORE_STORAGE_KEY,
+  clearSessionApiKey,
+  readSessionApiKey,
+  writeSessionApiKey,
+} from '@/utils/storage';
 
 const STORAGE_KEY = STORE_STORAGE_KEY;
 
@@ -161,6 +169,18 @@ export interface StoreState {
 
   // Whether to include the current selection with each chat message.
   includeSelection: boolean;
+  /**
+   * When true, Chat omits the document outline and sends only the
+   * highlighted selection as working text. Requires a non-empty
+   * selection. Persisted.
+   */
+  sendSelectionOnly: boolean;
+  /**
+   * When false, the API key is kept in memory + sessionStorage and
+   * stripped from the persisted localStorage blob so closing the tab
+   * forgets it. Default true (key lives in localStorage).
+   */
+  persistApiKey: boolean;
 
   // Whether to show developer-style diagnostics in the UI:
   //   - the inline-completion status pill (idle / thinking / ready)
@@ -239,6 +259,8 @@ export interface StoreState {
   setChatCollapsed: (collapsed: boolean) => void;
   setTopbarCollapsed: (collapsed: boolean) => void;
   setIncludeSelection: (v: boolean) => void;
+  setSendSelectionOnly: (v: boolean) => void;
+  setPersistApiKey: (v: boolean) => void;
   setDebugMode: (v: boolean) => void;
   toggleTheme: () => void;
   setApi: (patch: Partial<ApiConfig>) => void;
@@ -315,6 +337,16 @@ export interface StoreState {
   }) => string | null;
   markCommentsSent: (ids: string[]) => void;
   deleteComment: (id: string) => void;
+  /** Delete every outdated comment on a document (one undo step each). */
+  dismissOutdatedComments: (documentId: string) => number;
+  /**
+   * Re-attach an outdated comment to a new editor range. Returns false
+   * when the range is empty or the comment is missing.
+   */
+  reattachComment: (
+    id: string,
+    range: { start: number; end: number }
+  ) => boolean;
   replaceCommentsForDocument: (documentId: string, comments: Comment[]) => void;
   undoLastCommentOp: () => CommentOp | null;
 }
@@ -419,6 +451,8 @@ export const useStore = create<StoreState>()(
       chatCollapsed: false,
       topbarCollapsed: false,
       includeSelection: true,
+      sendSelectionOnly: false,
+      persistApiKey: true,
       debugMode: false,
       theme: 'light',
       api: defaultApiConfig,
@@ -565,6 +599,18 @@ export const useStore = create<StoreState>()(
       setChatCollapsed: (chatCollapsed) => set({ chatCollapsed }),
       setTopbarCollapsed: (topbarCollapsed) => set({ topbarCollapsed }),
       setIncludeSelection: (includeSelection) => set({ includeSelection }),
+      setSendSelectionOnly: (sendSelectionOnly) =>
+        set((s) => ({
+          sendSelectionOnly,
+          // Selection-only implies sending the highlight.
+          includeSelection: sendSelectionOnly ? true : s.includeSelection,
+        })),
+      setPersistApiKey: (persistApiKey) =>
+        set((s) => {
+          if (persistApiKey) clearSessionApiKey();
+          else writeSessionApiKey(s.api.apiKey);
+          return { persistApiKey };
+        }),
       setDebugMode: (debugMode) => set({ debugMode }),
       toggleTheme: () =>
         set((s) => {
@@ -572,7 +618,13 @@ export const useStore = create<StoreState>()(
           applyThemeClass(next);
           return { theme: next };
         }),
-      setApi: (patch) => set((s) => ({ api: { ...s.api, ...patch } })),
+      setApi: (patch) =>
+        set((s) => {
+          const api = { ...s.api, ...patch };
+          if (s.persistApiKey) clearSessionApiKey();
+          else writeSessionApiKey(api.apiKey);
+          return { api };
+        }),
       setLayout: (patch) =>
         set((s) => ({ layout: { ...s.layout, ...patch } })),
       setPreviewSize: (key, patch) =>
@@ -928,6 +980,59 @@ export const useStore = create<StoreState>()(
             }),
           };
         }),
+      dismissOutdatedComments: (documentId) => {
+        let removed = 0;
+        set((s) => {
+          const list = s.comments[documentId] ?? [];
+          const outdated = list.filter((c) => c.outdated);
+          if (outdated.length === 0) return s;
+          removed = outdated.length;
+          let stack = s.commentUndoStack;
+          for (const c of outdated) {
+            stack = pushUndoOp(stack, { kind: 'delete', comment: c });
+          }
+          return {
+            comments: {
+              ...s.comments,
+              [documentId]: list.filter((c) => !c.outdated),
+            },
+            commentUndoStack: stack,
+          };
+        });
+        return removed;
+      },
+      reattachComment: (id, range) => {
+        let ok = false;
+        set((s) => {
+          const entry = findCommentEntry(s.comments, id);
+          if (!entry) return s;
+          const doc = s.documents.find((d) => d.id === entry.comment.documentId);
+          if (!doc) return s;
+          const next = reattachCommentToRange(
+            doc.content,
+            ensureRoundsShape(entry.comment),
+            range.start,
+            range.end
+          );
+          if (!next) return s;
+          ok = true;
+          const list = s.comments[entry.comment.documentId] ?? [];
+          return {
+            comments: {
+              ...s.comments,
+              [entry.comment.documentId]: list.map((c) =>
+                c.id === id ? next : c
+              ),
+            },
+            commentUndoStack: pushUndoOp(s.commentUndoStack, {
+              kind: 'update-body',
+              before: entry.comment,
+              after: next,
+            }),
+          };
+        });
+        return ok;
+      },
       replaceCommentsForDocument: (documentId, next) =>
         set((s) => ({
           comments: { ...s.comments, [documentId]: next },
@@ -1017,9 +1122,11 @@ export const useStore = create<StoreState>()(
         chatCollapsed: s.chatCollapsed,
         topbarCollapsed: s.topbarCollapsed,
         includeSelection: s.includeSelection,
+        sendSelectionOnly: s.sendSelectionOnly,
+        persistApiKey: s.persistApiKey,
         debugMode: s.debugMode,
         theme: s.theme,
-        api: s.api,
+        api: s.persistApiKey ? s.api : { ...s.api, apiKey: '' },
         layout: s.layout,
         comments: s.comments,
         // commentUndoStack is intentionally NOT persisted — see the
@@ -1167,6 +1274,19 @@ export const useStore = create<StoreState>()(
             repairs.uiFontSize = 14;
           } else if (state.uiFontSize < 12 || state.uiFontSize > 20) {
             repairs.uiFontSize = clamp(state.uiFontSize, 12, 20);
+          }
+          if (typeof state.persistApiKey !== 'boolean') {
+            repairs.persistApiKey = true;
+          }
+          if (typeof state.sendSelectionOnly !== 'boolean') {
+            repairs.sendSelectionOnly = false;
+          }
+          if (state.persistApiKey === false) {
+            const sessionKey = readSessionApiKey();
+            if (sessionKey) {
+              const liveApi = (repairs.api ?? state.api) as ApiConfig;
+              repairs.api = { ...liveApi, apiKey: sessionKey };
+            }
           }
         }
       },

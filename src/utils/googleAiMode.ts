@@ -11,7 +11,12 @@
 // search params can be updated in one place if Google changes the
 // public AI Mode deep-link in the future.
 import type { ChatMessage, DocumentRecord, MentionToken } from '@/types';
-import { buildReferencedDocMessage, DEFAULT_SYSTEM_MESSAGE } from '@/api/chat';
+import {
+  buildReferencedDocMessage,
+  DEFAULT_SYSTEM_MESSAGE,
+  formatSelectionBlock,
+} from '@/api/chat';
+import { redactSecrets } from '@/utils/secrets';
 
 // Base URL for Google's AI Mode deep-link. `udm=50` selects the
 // generative-AI tab on google.com/search. The query string is appended
@@ -68,11 +73,22 @@ export function buildGoogleAiModeUrl(
   const effectiveSystem =
     (systemMessage && systemMessage.trim()) || DEFAULT_SYSTEM_MESSAGE;
   const parts: string[] = [];
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  const selection = lastUser?.selection?.trim() ?? '';
+  const selectionOnly = Boolean(lastUser?.selectionOnly && selection);
 
   // Current doc first (parallel to `sys-current-doc` in the OpenAI
   // path). The AI Mode tab does not have a doc-outline view, so we
   // emit a short truncated preview bracketed by `[Context — …]`.
-  if (currentDocument && currentDocument.content.trim()) {
+  // Selection-only turns skip the document body so the URL does not
+  // leak the rest of the draft.
+  if (selectionOnly) {
+    parts.push(
+      `[Context — editor selection only; the rest of the document was not sent]\n` +
+        formatSelectionBlock(selection) +
+        `\n[End context]\n\n`
+    );
+  } else if (currentDocument && currentDocument.content.trim()) {
     const title = currentDocument.title?.trim() || 'Untitled';
     const preview =
       currentDocument.content.length > MAX_CURRENT_DOC_PREVIEW_CHARS
@@ -84,6 +100,13 @@ export function buildGoogleAiModeUrl(
         `${preview}\n` +
         `[End context]\n\n`
     );
+    if (selection) {
+      parts.push(
+        `[Context — editor selection]\n` +
+          formatSelectionBlock(selection) +
+          `\n[End context]\n\n`
+      );
+    }
   }
 
   // Append @-referenced docs by reusing the shared builder so the
@@ -149,7 +172,7 @@ export function buildGoogleAiModeUrl(
     parts.push(`${role}: ${m.content.trim()}\n\n`);
   }
 
-  let prompt = parts.join('').trim();
+  let prompt = redactSecrets(parts.join('').trim()).text;
 
   // Trim the trailing "Assistant:" that appears when the chat history
   // ends on a user turn — we don't want the page to interpret the URL
