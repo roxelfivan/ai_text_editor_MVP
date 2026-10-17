@@ -1,3 +1,35 @@
+## v0.5.1 — Phase 1 polish + Phase 2 daily friction
+
+Patch on [v0.5.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0). Completes UX **Phase 1** (docs, gated-state tooltips, ⌘Z teaching toast) and **Phase 2** (selection-only send, outbound secret redaction, outdated-comment dismiss/re-attach, session-only API key). Export Markdown, import caps, and best-effort Apply stay as in v0.5.0.
+
+### Added
+
+- **Selection only** in Chat — send the highlight instead of the document outline, with `BEGIN/END EDITOR SELECTION` delimiters.
+- **Outbound secret redaction** (`src/utils/secrets.ts`) — common key/token shapes replaced with `[redacted]` on send only.
+- **Dismiss outdated** on the comment tray; **Re-attach** on the outdated popover to the current editor selection.
+- **Forget API key when this tab closes** — key in `sessionStorage`; documents/chat stay in `localStorage`.
+
+### Changed
+
+- Predict tooltip + `aria-disabled` for Google AI Mode; `@` gated until ≥2 sidebar documents; Import popover API-key hint.
+- First ⌘/Ctrl+Z that is not a comment-op shows a one-shot toast (native text undo still runs).
+- `docs/workspace.md` documents editor font size in the **Format** menu.
+- Apply All skip line points at Apply anyway / Force-apply on leftover cards.
+
+### Removed
+
+- No-op mentions chip-layout `useLayoutEffect`.
+
+### Internal
+
+- `src/utils/secrets.ts`, `formatSelectionBlock` in `src/api/chat.ts`, `reattachCommentToRange` in `src/utils/comments.ts`, `sendSelectionOnly` / `persistApiKey` on the store, `API_KEY_SESSION_KEY` in `src/utils/storage.ts`.
+
+### Verification
+
+- `npm run typecheck` — clean.
+
+---
+
 ## v0.5.0 — Export Markdown, import size caps, best-effort Apply, file-actions alignment
 
 Feature release on top of [v0.4.9](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9). Three user-visible wins from the UX roadmap ([ux-enhancement-plan-fba2](https://github.com/roxelfivan/apeditor/blob/cursor/ux-enhancement-plan-fba2/tmp/ux-enhancement-phases.md)) — Export Markdown, import size / page caps with friendly errors, and a one-click best-effort Apply for mismatched AI quotes — plus a follow-up alignment pass on the new Import / Export popover and a rename of the toolbar component from `ImportMediaButton` to `FileActionsButton`. One new doc (`docs/UX_SLICE_1.md`) captures the slice design rationale.

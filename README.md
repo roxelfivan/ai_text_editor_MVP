@@ -12,69 +12,58 @@
 > See [Credits](#credits) for details.
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/darrylschaefer/ai-text-editor/blob/main/LICENSE)
-[![v0.5.0](https://img.shields.io/badge/version-0.5.0-blueviolet.svg)](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0)
+[![v0.5.1](https://img.shields.io/badge/version-0.5.1-blueviolet.svg)](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.1)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **Using the app?** Start with the [user guide](./docs/README.md), or click **?** in the top bar (in-app Help renders the same pages and follows Light / Dark mode).
 
 ---
 
-## What's new in v0.5.0
+## What's new in v0.5.1
 
-> A UX-focused release on top of v0.4.9: you can now **Export**
-> the current document as Markdown (the only durable off-tab
-> backup of your writing today), importing a multi-hundred-page
-> PDF or a 50+ MB file refuses with a friendly error instead of
-> freezing the tab, and clicking **Apply** on a proposed edit
-> whose original quote is gone now offers an inline approximate-
-> match prompt instead of silently failing. The toolbar button
-> that handles both Import and Export was renamed from
-> `ImportMediaButton` to `FileActionsButton` and its icon was
-> redrawn so it reads as both directions instead of just one.
+> Completes **Phase 1 polish** and **Phase 2 daily friction** from
+> the UX roadmap, on top of [v0.5.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0)
+> (Export Markdown, import size caps, best-effort Apply).
 
-Highlights:
+**Phase 1 — polish**
 
-1. **Export Markdown.** A new **Export .md** button in the
-   file-actions popover downloads the current document as a
-   Markdown file. Filename is the document title (sanitised);
-   defaults to `untitled.md`. `localStorage` can be wiped by the
-   browser at any time without warning, so this is the only
-   reliable way to keep a copy of your writing off-tab. A
-   future slice will add a JSON backup that includes comments,
-   chat, and revisions.
-2. **Import size and page caps.** Imports now refuse with a
-   friendly inline error before doing any work if any file is
-   over 50 MB, the batch is over 200 MB total, or a PDF has more
-   than 500 pages. The existing OCR pipeline read the entire PDF
-   into memory and rasterised every page; the cap protects the
-   tab on large scans.
-3. **Inline confirmation for best-effort Apply.** When the AI's
-   quote can't be matched in the current document (you edited
-   the paragraph, the model paraphrased, a sibling edit shifted
-   the wording, …), Apply now offers an inline confirmation
-   prompt with the matched passage and a confidence percentage
-   instead of silently doing nothing. You confirm or cancel
-   before any text changes. The Force-apply escape hatch is
-   preserved for when there's truly no anchor at all.
-4. **File-actions popover alignment.** The Export and Import
-   sections inside the popover now share the same visual
-   rhythm: section header → two-sentence description → primary
-   CTA button (both `btn-fire-sm`) aligned right. Popover is
-   reordered so Import sits on top (the button's primary
-   identity) and Export sits below the divider. The toolbar
-   icon is redrawn as a page with up + down arrows instead of
-   the old down-arrow-into-tray glyph, so it doesn't suggest
-   one direction over the other.
-5. **Renamed `ImportMediaButton` → `FileActionsButton`.** The
-   component and file were renamed because the toolbar button
-   now exposes both directions, not just Import. Pure name
-   correction — no behaviour change. All docs are updated;
-   the old name stays grep-fable via
-   `(formerly ImportMediaButton)` breadcrumbs.
+1. **Editor font size lives in Format.** Help now matches the
+   shipped UI: **Size +** / **Size −** are in the **Format**
+   menu (10–24 px), not as standalone toolbar buttons.
+2. **Gated-state tooltips.** Hovering **Predict** in Google AI
+   Mode explains that completion is off — type in Chat instead.
+   `@` explains that you need a second sidebar document.
+   Import shows a quiet **Needs API key** hint before you pick
+   files (Markdown rewrite needs a key).
+3. **⌘Z teaching toast.** With the editor focused, the first
+   ⌘/Ctrl+Z that is not a comment-op shows a one-shot toast:
+   undo in ApEditor is comment-ops only. Native textarea undo
+   still runs.
+4. **Dead chip-layout hook removed.** Mention overlay rects
+   still recompute; the unused no-op `useLayoutEffect` is gone.
 
-See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.5.0
-changelog and the v0.4.9 entry below for prior Format-dropdown
-work.
+**Phase 2 — daily friction**
+
+5. **Selection only.** Chat can send the highlight *instead of*
+   the document outline, wrapped in `BEGIN/END EDITOR SELECTION`
+   markers, so a small question does not leak the rest of the
+   draft. **include selection** still attaches the highlight on
+   top of the outline.
+6. **Outbound secret redaction.** Common API-key / Bearer
+   shapes in the prompt are replaced with `[redacted]` on send.
+   The document is not rewritten.
+7. **Outdated comments.** **Dismiss outdated** on the tray
+   deletes every stale badge. **Re-attach** on the popover
+   anchors a comment to the current editor selection.
+8. **Forget API key when this tab closes.** Settings can keep
+   the key in `sessionStorage` so closing the tab forgets it;
+   documents and chat stay in `localStorage`.
+
+Export Markdown, import size/page caps, and best-effort Apply
+shipped in v0.5.0 and stay as they were.
+
+See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the full v0.5.1
+and v0.5.0 changelogs.
 
 ---
 
@@ -92,9 +81,10 @@ work.
 │  + New   │                                      │   │             │ │
 │          │   Select a passage → **Comment** →   │   │ [▢ include  │ │
 │          │   write your note. When you're       │   │  selection] │ │
-│          │   ready, click **Send to AI** to     │   │             │ │
-│          │   batch every comment into one       │   │ [Type here…]│ │
-│          │   chat turn.                         │   │      [Send] │ │
+│          │   ready, click **Send to AI** to     │   │ [▢ selection│ │
+│          │   batch every comment into one       │   │    only]    │ │
+│          │   chat turn.                         │   │ [Type here…]│ │
+│          │                                      │   │      [Send] │ │
 │          │                                      │   └─────────────┘ │
 │          │   ┌─ comment ─────────────────────┐  │                   │
 │          │   │ 1│ tighten this paragraph     │  │   Assistant       │
@@ -119,9 +109,9 @@ toggles in the topbar.
 - **Documents** — sidebar with create / rename / delete / switch.
 - **Markdown editor** — plain `<textarea>` in **Write**, live
   `react-markdown` **Preview**, or side-by-side **Split**.
-- **B / I / U toolbar** — toggle bold (`**…**`), italic (`*…*`),
-  and underline (`<u>…</u>`); also `⌘/Ctrl + B/I/U`.
-- **Per-document font size** — independent of the global UI font size.
+- **Format menu** — **Bold** / **Italic** / **Underline** plus
+  **Size +** / **Size −** (10–24 px, document text only). Also
+  `⌘/Ctrl + B/I/U` while the editor is focused.
 - **Revision history** — **Save** a snapshot from the toolbar, or
   let Chat **Send** / **Apply N changes** auto-snapshot
   (`Before AI send` / `Before Apply All`). Open **History** (top-bar
@@ -133,8 +123,10 @@ toggles in the topbar.
 ### AI
 
 - **Streaming chat** — right-side panel with system prompt, model
-  picker, **include selection** checkbox, and `⌘/Ctrl + Enter` to
-  send.
+  picker, **include selection** and **selection only** checkboxes,
+  and `⌘/Ctrl + Enter` to send. Selection-only omits the document
+  outline. Secret-looking strings in the outbound prompt are
+  redacted.
 - **Three providers** — MiniMax (OpenAI-compatible, default), OpenAI,
   and **Google AI Mode (no key)**. Switch in **Settings** (⚙).
 - **Proposed-edit cards** — when the model emits a `proposed-edit`
@@ -144,7 +136,8 @@ toggles in the topbar.
   **Apply N changes**. See [How AI edits work](#how-ai-edits-work).
 - **Predict** — inline sentence completion (**off by default**).
   Click **Predict** or press `⌘/Ctrl + \\` to turn it on and
-  request a suggestion; `Tab` accepts, `Esc` rejects.
+  request a suggestion; `Tab` accepts, `Esc` rejects. Disabled
+  in **Google AI Mode** (tooltip explains why).
 - **Customizable System Message + Rationale Rules** — set the
   assistant voice and the per-edit rationale format in **Settings**
   (each has **Reset** to the built-in default).
@@ -156,28 +149,32 @@ toggles in the topbar.
   margin badge.
 - **Edit / Delete anytime** — open a badge for **Edit** / **Delete**,
   including after the comment has been sent. `⌘/Ctrl + Z` undoes
-  the last comment op. Editing the body after a send starts a
+  the last comment op (a one-shot toast explains that this undo
+  is comment-ops only). Editing the body after a send starts a
   **new round** (history is preserved).
 - **Rationale history** — after you **Apply** a proposed edit, open
   the badge to read the AI's rationale under **Rationale**, with
   one collapsible card per round.
 - **Outdated** — when edits move or delete the anchored text and
-  re-anchoring fails, the badge flips to **Outdated** so you can
-  clean it up.
+  re-anchoring fails, the badge flips to **Outdated**. **Re-attach**
+  to the current selection, or **Dismiss outdated** on the tray.
 - **Send to AI** — the tray under the editor batches the document
   and every comment into one chat turn. The reply comes back as
   the same proposed-edit cards, one per comment. See
   [Comment + Send to AI](#comment--send-to-ai) for the full flow.
 - **`@`-document references (v0.4.7+ / v0.4.8 headings)** — type
   `@` while writing a comment to attach another document, then
-  narrow by heading section (or whole doc). See
+  narrow by heading section (or whole doc). Needs at least two
+  documents in the sidebar. See
   [@-document references](#-document-references-chat--comments) for
   the full flow, including the popover's re-edit mode.
 
 ### Persistence + privacy
 
 - **Everything in `localStorage`** — documents, chats, revisions,
-  prompts, and settings. No backend, no account.
+  prompts, and settings. No backend, no account. Optional
+  **Forget API key when this tab closes** keeps the key in
+  `sessionStorage` only.
 - **Privacy-respecting OCR** — recognition runs entirely in the
   browser. No upload, no telemetry.
 - **Security hardening** — see [SECURITY.md](./SECURITY.md) for the
@@ -222,8 +219,10 @@ in a new tab.
 | **OpenAI** | Required | `https://api.openai.com/v1` | `gpt-4o-mini`, `gpt-4o`, `gpt-4-turbo`, `o1-mini`, `o1`, `gpt-3.5-turbo` | Same wire format as MiniMax. |
 | **Google AI Mode (no key)** | None | `https://www.google.com/search?udm=50` | — | Chat opens a new tab pre-filled with your prompt; you copy the answer back. **Predict** is disabled for this provider. |
 
-API keys are stored only in this browser's `localStorage` and sent as
-`Authorization: Bearer <key>` directly to your chosen endpoint.
+API keys are stored only in this browser's `localStorage` by default
+and sent as `Authorization: Bearer <key>` directly to your chosen
+endpoint. Check **Forget API key when this tab closes** in Settings
+to keep the key for this tab only.
 
 ### Environment overrides
 
@@ -348,7 +347,8 @@ the turn starts.
 ### Example
 
 1. Open a document and highlight a paragraph you want to improve.
-2. In the chat panel, check **include selection**.
+2. In the chat panel, check **include selection** (or **selection
+   only** if you do not want the rest of the document sent).
 3. Type: `Make this more concise.` and press `⌘/Ctrl + Enter`.
 4. The AI streams back a `proposed-edit` card.
 5. Read Original / Proposed in **Split**, then click **Apply**. The
@@ -368,8 +368,8 @@ Headline flow from v0.4.0, prompt efficiency from v0.4.1, and
 2. Click **Comment** in the editor toolbar and write your note.
 3. The passage is highlighted; a numbered badge appears in the margin.
 4. Open a badge to **Edit** or **Delete**. **Outdated** means the
-   anchored text could not be re-found after edits — fix it from the
-   popover.
+   anchored text could not be re-found after edits — **Re-attach**
+   to a new selection, or **Dismiss outdated** from the tray.
 5. Click **Send to AI** under the editor when you want the model to
    address every comment in one chat turn.
 6. **Apply** a proposed-edit card. Open the badge again: **Rationale**
@@ -501,7 +501,8 @@ the result at your caret.
 5. When recognition finishes, the extracted text is sent to your
    configured chat model and rewritten as reader-friendly
    Markdown. Only that Markdown is inserted at the caret. An
-   API key is required.
+   API key is required (the Import popover shows a hint when
+   none is set).
 
 ### Privacy
 
@@ -661,6 +662,7 @@ per-release notes also ship on the GitHub release pages.
 
 | Version | Highlights |
 | --- | --- |
+| [v0.5.1](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.1) | **Phase 1 + 2 UX.** Format-menu font-size docs, gated-state tooltips, ⌘Z comment-ops toast; Chat **selection only**, outbound secret redaction, outdated **Dismiss** / **Re-attach**, session-only API key. |
 | [v0.5.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0) | **Export Markdown** from the file-actions popover, import size and page caps with friendly errors, inline confirmation prompt for best-effort Apply when the AI quote is gone. **Popover alignment pass** + component rename `ImportMediaButton` → `FileActionsButton`. |
 | [v0.4.9](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.9) | Unified **Format** dropdown (B/I/U + font size), draggable Chat panel messages/input split, draggable Original / Proposed columns in every **ProposedEditCard**. |
 | [v0.4.8](https://github.com/roxelfivan/apeditor/releases/tag/v0.4.8) | Heading-grouped `@` section picker, parent→child cascade, Cancel, inline `§…` captions in the textarea. Section sends stay scoped to picked paragraphs only. |
@@ -748,8 +750,9 @@ OpenAI-compatible `/chat/completions` streaming protocol. MiniMax
 ships as the default preset; OpenAI and Google AI Mode are
 selectable from **Settings** → **Provider**.
 
-API keys are stored only in this browser's `localStorage` and sent
-as `Authorization: Bearer <key>` directly to your chosen endpoint.
+API keys are stored only in this browser's `localStorage` by default
+(or `sessionStorage` if you chose forget-on-close) and sent as
+`Authorization: Bearer <key>` directly to your chosen endpoint.
 
 ### Logo
 
