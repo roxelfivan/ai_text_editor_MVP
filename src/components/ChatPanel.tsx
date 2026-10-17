@@ -1035,6 +1035,16 @@ export function ChatPanel() {
             <label className="block text-xs font-medium text-cyber-clay dark:text-cyber-cyan uppercase tracking-wide">
               Paste the AI Mode answer
             </label>
+            {/* Slice C: spell out the two-step flow so a first-time
+                user doesn't paste the original question here by
+                mistake. The numbered list mirrors the Save / Cancel
+                copy in the message footer so the same vocabulary
+                shows up in both places. */}
+            <ol className="text-[11px] text-paper-inkSoft dark:text-cyber-muted leading-snug list-decimal pl-4 space-y-0.5">
+              <li>Google AI Mode opened in a new tab with your prompt.</li>
+              <li>Copy the answer out of that tab.</li>
+              <li>Paste it below — ⌘/Ctrl+Enter to commit.</li>
+            </ol>
             <textarea
               value={pasteDraft}
               onChange={(e) => setPasteDraft(e.target.value)}

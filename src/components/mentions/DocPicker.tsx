@@ -36,6 +36,23 @@ export function DocPicker({
     return list.slice(0, 50);
   }, [documents, currentDocumentId, query]);
 
+  // Slice C: empty / gated-state copy. The picker excludes the
+  // current document by design (it's already passed to the AI via
+  // `sys-current-doc`), so a workspace with a single open doc sees
+  // "no matches" even though every other surface looks fine.
+  // Surface the *reason* in plain prose so the user knows what to
+  // do instead of wondering why their `@` is dead.
+  const othersCount = useMemo(
+    () => documents.filter((d) => d.id !== currentDocumentId).length,
+    [documents, currentDocumentId]
+  );
+  const emptyReason: 'no-workspace' | 'only-current' | 'no-match' = useMemo(() => {
+    if (candidates.length > 0) return 'no-match';
+    if (documents.length === 0) return 'no-workspace';
+    if (othersCount === 0) return 'only-current';
+    return 'no-match';
+  }, [candidates.length, documents.length, othersCount]);
+
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -83,7 +100,13 @@ export function DocPicker({
       onMouseDown={(e) => e.preventDefault()}
     >
       {candidates.length === 0 ? (
-        <div className="mention-popover__empty">No matching documents.</div>
+        <div className="mention-popover__empty" data-empty-reason={emptyReason}>
+          {emptyReason === 'no-workspace'
+            ? 'No documents yet. Create one in the sidebar, then reference it with @.'
+            : emptyReason === 'only-current'
+              ? "Only the current document is open. Create another in the sidebar to reference it with @."
+              : 'No matching documents.'}
+        </div>
       ) : (
         candidates.map((d, i) => (
           <button

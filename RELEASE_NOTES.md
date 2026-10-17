@@ -1,32 +1,41 @@
-## v0.5.1 — Phase 1 polish + Phase 2 daily friction
+## v0.5.2 — Full JSON backup, clearer empty / gated states
 
-Patch on [v0.5.0](https://github.com/roxelfivan/apeditor/releases/tag/v0.5.0). Completes UX **Phase 1** (docs, gated-state tooltips, ⌘Z teaching toast) and **Phase 2** (selection-only send, outbound secret redaction, outdated-comment dismiss/re-attach, session-only API key). Export Markdown, import caps, and best-effort Apply stay as in v0.5.0.
+Adoption slice B from the UX-roadmap adoption plan ([tmp/ux-enhancement-adoption.md](https://github.com/roxelfivan/apeditor/blob/main/tmp/ux-enhancement-adoption.md)). Two user-visible wins: a JSON backup export that captures comments / chat / revisions alongside the document, and a broader empty-state / gated-state copy pass on the Import popover, the `@` doc picker, and the Google AI Mode paste flow. No prompt / store / LLM-facing contract changes.
 
 ### Added
 
-- **Selection only** in Chat — send the highlight instead of the document outline, with `BEGIN/END EDITOR SELECTION` delimiters.
-- **Outbound secret redaction** (`src/utils/secrets.ts`) — common key/token shapes replaced with `[redacted]` on send only.
-- **Dismiss outdated** on the comment tray; **Re-attach** on the outdated popover to the current editor selection.
-- **Forget API key when this tab closes** — key in `sessionStorage`; documents/chat stay in `localStorage`.
+- **Export full backup (JSON).** A new **Export .json** button at the bottom of the Import / Export popover (sibling to **Export .md**) downloads the current document, its comments, its chat history, and its revisions as a single file. Filename matches the existing `${title}.md` pattern with a `.json` extension. The payload is versioned (`schema: 'apeditor-document-backup'`, `version: 1`) so a future re-importer can detect and upgrade older backups; v0.5.2 ships write-only.
+- **OCR-vs-key gate copy.** The Import popover now shows a contextual paragraph under the language checker explaining what runs locally versus what needs an API key: "OCR works without an API key. Adding one in Settings lets the recognised text be rewritten as Markdown before insertion. Without a key, raw text is inserted as-is." When a key is configured the paragraph changes to a confirmation ("Key configured. Files are OCR'd locally and rewritten as Markdown via your model before insertion.") so the user always knows which path they're on.
+- **Two-step Google AI Mode paste hint.** When the provider is `google-ai-mode` and a paste is awaiting, a numbered list now sits between the section header and the paste textarea spelling out: (1) Google AI Mode opened in a new tab with your prompt, (2) copy the answer out of that tab, (3) paste it below — ⌘/Ctrl+Enter to commit. First-time users no longer paste their original question here by mistake.
 
 ### Changed
 
-- Predict tooltip + `aria-disabled` for Google AI Mode; `@` gated until ≥2 sidebar documents; Import popover API-key hint.
-- First ⌘/Ctrl+Z that is not a comment-op shows a one-shot toast (native text undo still runs).
-- `docs/workspace.md` documents editor font size in the **Format** menu.
-- Apply All skip line points at Apply anyway / Force-apply on leftover cards.
+- **Empty-state copy in the `@` doc picker.** When there are no other documents to mention, the picker now spells out the reason instead of showing "No matching documents" across the board. Three states are distinguished by a `data-empty-reason` attribute (no-workspace / only-current / no-match) so the empty-state copy stays useful whether the user has zero docs, only the current doc, or just typed a query with no matches.
 
-### Removed
+### Behaviour that did NOT change
 
-- No-op mentions chip-layout `useLayoutEffect`.
+- The Markdown export flow.
+- OCR pipeline, language picker, import size / page caps.
+- Google AI Mode URL generation — only the in-app paste affordance copy changed.
+- The `Comment`-system, the `Document` model, and the entire chat pipeline.
+- All prompt, store, and LLM-facing contracts.
 
 ### Internal
 
-- `src/utils/secrets.ts`, `formatSelectionBlock` in `src/api/chat.ts`, `reattachCommentToRange` in `src/utils/comments.ts`, `sendSelectionOnly` / `persistApiKey` on the store, `API_KEY_SESSION_KEY` in `src/utils/storage.ts`.
+- `src/utils/backup.ts` — new module. `buildDocumentBackup({documentId, documents, comments, chats, revisions, appVersion})` returns a `DocumentBackup` (or `null` for unknown ids); `serialiseDocumentBackup` emits pretty-printed JSON. `BACKUP_SCHEMA` and `BACKUP_VERSION` are exported so a future importer can match. No React / DOM imports.
+- `src/components/FileActionsButton.tsx` — added four store selectors (`documents`, `commentsByDoc`, `chatsByDoc`, `revisionsByDoc`), `onBackupClick` mirroring the existing `onExportClick` error / UX shape, a third popover section ("Export full backup (JSON)") with the same structural template as the two previous sections, and the contextual OCR-vs-key paragraph under the language checker. The new button carries `data-backup-toggle` for future keyboard wiring.
+- `src/components/mentions/DocPicker.tsx` — added an `emptyReason` derivation (no-workspace / only-current / no-match) from a memoised `othersCount` plus the existing `candidates` list, and replaced the one-size-fits-all "No matching documents." with the three context-appropriate strings. Carries `data-empty-reason={reason}` for any future analytics / testing selector.
+- `src/components/ChatPanel.tsx` — added a three-step `<ol>` between the "Paste the AI Mode answer" `<label>` and the existing `<textarea>` placeholder. Rendered only when `isKeyless && awaitingPaste`, so it never affects users on a keyed provider.
 
 ### Verification
 
-- `npm run typecheck` — clean.
+- `npx tsc --noEmit -p tsconfig.app.json` — clean.
+- `npm run build` — clean.
+- Manual:
+  - File actions popover, with a document that has comments and chat history → **Export .json** → file downloads as `<title>.json` (correctly sanitised). Opening the file shows `schema`, `version`, `exportedAt`, `appVersion`, `document`, `comments`, `chats`, `revisions`. Open with no document → button disabled.
+  - File actions popover with no API key configured → paragraph shows the warn-coloured "OCR works without an API key" message. Add a key in Settings → paragraph switches to the cyan "Key configured" confirmation.
+  - Mention picker: type `@` in the chat input with only the current document open → "Only the current document is open. Create another in the sidebar to reference it with @." Delete all docs → "No documents yet. Create one in the sidebar, then reference it with @." Type a query that matches nothing → "No matching documents."
+  - Settings → Provider → Google AI Mode, then send a chat with ⌘+Enter → Google opens in a new tab. Switch back → the three numbered steps appear above the paste textarea; ⌘+Enter commits as before.
 
 ---
 
